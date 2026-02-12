@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { GraduationCap, Loader2 } from "lucide-react";
+import { GraduationCap, Loader2, ShieldCheck, UserRound } from "lucide-react";
 
 export default function Auth() {
   const { user, loading } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [loginTab, setLoginTab] = useState<"student" | "admin">("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -63,35 +65,76 @@ export default function Auth() {
           </div>
           <CardTitle className="text-2xl font-bold">CBT Portal</CardTitle>
           <CardDescription>
-            {isLogin ? "Sign in to access your exams" : "Create your student account"}
+            {isLogin ? "Sign in to access your account" : "Create your student account"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="className">Class / Grade</Label>
-                  <Input id="className" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="e.g. SS3, Grade 12" />
-                </div>
-              </>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@school.com" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-            </div>
-            <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : isLogin ? "Sign In" : "Create Account"}
-            </Button>
-          </form>
+          {isLogin ? (
+            <Tabs value={loginTab} onValueChange={(v) => setLoginTab(v as "student" | "admin")} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="student" className="flex items-center gap-2">
+                  <UserRound className="h-4 w-4" />
+                  Student
+                </TabsTrigger>
+                <TabsTrigger value="admin" className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Admin
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="student">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="student-email">Email</Label>
+                    <Input id="student-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@school.com" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="student-password">Password</Label>
+                    <Input id="student-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+                  </div>
+                  <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In as Student"}
+                  </Button>
+                </form>
+              </TabsContent>
+              <TabsContent value="admin">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-email">Admin Email</Label>
+                    <Input id="admin-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@school.com" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-password">Password</Label>
+                    <Input id="admin-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+                  </div>
+                  <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In as Admin"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="className">Class / Grade</Label>
+                <Input id="className" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="e.g. SS3, Grade 12" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@school.com" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+              </div>
+              <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
+              </Button>
+            </form>
+          )}
           <div className="mt-4 text-center text-sm text-muted-foreground">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
             <button onClick={() => setIsLogin(!isLogin)} className="text-primary font-medium hover:underline">
