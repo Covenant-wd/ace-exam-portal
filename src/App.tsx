@@ -13,6 +13,7 @@ import Subjects from "./pages/admin/Subjects";
 import Exams from "./pages/admin/Exams";
 import Questions from "./pages/admin/Questions";
 import Results from "./pages/admin/Results";
+import Students from "./pages/admin/Students";
 import StudentExams from "./pages/student/StudentExams";
 import TakeExam from "./pages/student/TakeExam";
 import StudentResults from "./pages/student/StudentResults";
@@ -36,6 +37,7 @@ function AppRoutes() {
 
       {/* Admin routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/students" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/subjects" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
