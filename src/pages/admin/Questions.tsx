@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import RichTextEditor from "@/components/RichTextEditor";
+import RichContentRenderer from "@/components/RichContentRenderer";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, ArrowLeft } from "lucide-react";
@@ -87,11 +88,11 @@ export default function Questions() {
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editing ? "Edit Question" : "New Question"}</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
-                <div className="space-y-2"><Label>Question</Label><Textarea value={form.question_text} onChange={(e) => setForm({ ...form, question_text: e.target.value })} rows={3} /></div>
+                <div className="space-y-2"><Label>Question</Label><RichTextEditor value={form.question_text} onChange={(v) => setForm({ ...form, question_text: v })} rows={3} placeholder="Enter question text..." /></div>
                 {optionLabels.map((l) => (
                   <div key={l} className="space-y-2">
                     <Label>Option {l}</Label>
-                    <Input value={(form as any)[`option_${l.toLowerCase()}`]} onChange={(e) => setForm({ ...form, [`option_${l.toLowerCase()}`]: e.target.value })} />
+                    <RichTextEditor value={(form as any)[`option_${l.toLowerCase()}`]} onChange={(v) => setForm({ ...form, [`option_${l.toLowerCase()}`]: v })} rows={1} placeholder={`Option ${l}`} />
                   </div>
                 ))}
                 <div className="space-y-2">
@@ -123,7 +124,7 @@ export default function Questions() {
               <CardHeader className="flex flex-row items-start justify-between pb-2">
                 <CardTitle className="text-base font-medium">
                   <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">{i + 1}</span>
-                  {q.question_text}
+                  <RichContentRenderer content={q.question_text} />
                 </CardTitle>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(q)}><Pencil className="h-4 w-4" /></Button>
@@ -134,7 +135,7 @@ export default function Questions() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {optionLabels.map((l) => (
                     <div key={l} className={`rounded-lg border p-2 text-sm ${q.correct_option === l ? "border-primary bg-primary/10 font-medium" : ""}`}>
-                      <span className="mr-2 font-semibold">{l}.</span>{(q as any)[`option_${l.toLowerCase()}`]}
+                      <span className="mr-2 font-semibold">{l}.</span><RichContentRenderer content={(q as any)[`option_${l.toLowerCase()}`]} />
                     </div>
                   ))}
                 </div>
