@@ -53,13 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Ongoing auth changes (sign in / sign out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (_event, newSession) => {
         if (!isMounted) return;
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        if (newSession?.user) {
+          setLoading(true);
           // Use setTimeout to avoid deadlock inside the callback
-          setTimeout(() => fetchRole(session.user.id), 0);
+          setTimeout(async () => {
+            await fetchRole(newSession.user.id);
+            if (isMounted) setLoading(false);
+          }, 0);
         } else {
           setRole(null);
         }
