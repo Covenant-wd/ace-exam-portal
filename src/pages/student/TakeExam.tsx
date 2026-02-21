@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Clock, Flag, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import RichContentRenderer from "@/components/RichContentRenderer";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -202,7 +203,7 @@ export default function TakeExam() {
               </Button>
             </CardHeader>
             <CardContent>
-              <p className="mb-6 text-lg font-medium">{currentQ.question_text}</p>
+              <div className="mb-6 text-lg font-medium"><RichContentRenderer content={currentQ.question_text} /></div>
               <div className="space-y-3">
                 {optionLabels.map((l) => {
                   const selected = answers[currentQ.id] === l;
@@ -218,7 +219,7 @@ export default function TakeExam() {
                       <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold", selected ? "bg-primary text-primary-foreground" : "bg-muted")}>
                         {l}
                       </span>
-                      {(currentQ as any)[`option_${l.toLowerCase()}`]}
+                      <RichContentRenderer content={(currentQ as any)[`option_${l.toLowerCase()}`]} />
                     </button>
                   );
                 })}
