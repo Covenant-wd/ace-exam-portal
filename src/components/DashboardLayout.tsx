@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/students", label: "Students", icon: Users },
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },
   { to: "/admin/results", label: "Results", icon: BarChart3 },

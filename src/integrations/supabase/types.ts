@@ -107,28 +107,55 @@ export type Database = {
       }
       profiles: {
         Row: {
+          address: string | null
           class_name: string | null
           created_at: string
+          date_of_birth: string | null
+          first_name: string
           full_name: string
           id: string
+          last_name: string
+          middle_name: string | null
+          nationality: string | null
+          parent_name: string | null
+          subjects_offered: string[] | null
           updated_at: string
           user_id: string
+          username: string | null
         }
         Insert: {
+          address?: string | null
           class_name?: string | null
           created_at?: string
+          date_of_birth?: string | null
+          first_name?: string
           full_name?: string
           id?: string
+          last_name?: string
+          middle_name?: string | null
+          nationality?: string | null
+          parent_name?: string | null
+          subjects_offered?: string[] | null
           updated_at?: string
           user_id: string
+          username?: string | null
         }
         Update: {
+          address?: string | null
           class_name?: string | null
           created_at?: string
+          date_of_birth?: string | null
+          first_name?: string
           full_name?: string
           id?: string
+          last_name?: string
+          middle_name?: string | null
+          nationality?: string | null
+          parent_name?: string | null
+          subjects_offered?: string[] | null
           updated_at?: string
           user_id?: string
+          username?: string | null
         }
         Relationships: []
       }
