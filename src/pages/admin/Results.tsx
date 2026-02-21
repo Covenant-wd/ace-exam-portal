@@ -23,9 +23,17 @@ export default function Results() {
   useEffect(() => {
     if (!selectedExam) { setResults([]); return; }
     setLoadingResults(true);
-    supabase.from("exam_attempts").select("*, profiles!exam_attempts_student_id_fkey(full_name, class_name)")
-      .eq("exam_id", selectedExam).eq("is_submitted", true).order("score", { ascending: false })
-      .then(({ data }) => { setResults(data ?? []); setLoadingResults(false); });
+    (async () => {
+      const { data: attempts } = await supabase.from("exam_attempts").select("*")
+        .eq("exam_id", selectedExam).eq("is_submitted", true).order("score", { ascending: false });
+      if (!attempts || attempts.length === 0) { setResults([]); setLoadingResults(false); return; }
+      const studentIds = [...new Set(attempts.map(a => a.student_id))];
+      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, class_name")
+        .in("user_id", studentIds);
+      const profileMap = new Map((profiles ?? []).map(p => [p.user_id, p]));
+      setResults(attempts.map(a => ({ ...a, profile: profileMap.get(a.student_id) ?? null })));
+      setLoadingResults(false);
+    })();
   }, [selectedExam]);
 
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -56,8 +64,8 @@ export default function Results() {
                     return (
                       <TableRow key={r.id}>
                         <TableCell>{i + 1}</TableCell>
-                        <TableCell className="font-medium">{(r as any).profiles?.full_name || "—"}</TableCell>
-                        <TableCell>{(r as any).profiles?.class_name || "—"}</TableCell>
+                        <TableCell className="font-medium">{r.profile?.full_name || "—"}</TableCell>
+                        <TableCell>{r.profile?.class_name || "—"}</TableCell>
                         <TableCell>{r.score}/{r.total_questions}</TableCell>
                         <TableCell>{pct}%</TableCell>
                         <TableCell><Badge variant={pct >= 50 ? "default" : "destructive"}>{pct >= 50 ? "Pass" : "Fail"}</Badge></TableCell>
