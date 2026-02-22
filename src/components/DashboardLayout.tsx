@@ -4,9 +4,10 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
-  LogOut, Menu, X, ClipboardList
+  LogOut, Menu, X, ClipboardList, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -14,6 +15,7 @@ const adminLinks = [
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },
   { to: "/admin/results", label: "Results", icon: BarChart3 },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 const studentLinks = [
@@ -23,6 +25,7 @@ const studentLinks = [
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user } = useAuth();
+  const { schoolName } = useSchoolName();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,7 +56,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <GraduationCap className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-tight">CBT Portal</h1>
+            <h1 className="font-bold text-lg leading-tight truncate">{schoolName}</h1>
             <p className="text-xs opacity-80 capitalize">{role} Panel</p>
           </div>
         </div>
