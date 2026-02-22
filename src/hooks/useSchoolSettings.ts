@@ -19,7 +19,6 @@ export function useSchoolName() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Update document title
   useEffect(() => {
     document.title = schoolName;
   }, [schoolName]);
@@ -27,9 +26,37 @@ export function useSchoolName() {
   return { schoolName, isLoading };
 }
 
+export function useSchoolLogo() {
+  const { data: logoUrl = "", isLoading } = useQuery({
+    queryKey: ["school_settings", "school_logo_url"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("school_settings")
+        .select("value")
+        .eq("key", "school_logo_url")
+        .single();
+      if (error || !data) return "";
+      return data.value || "";
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Update favicon when logo changes
+  useEffect(() => {
+    if (logoUrl) {
+      const link = document.querySelector("link[rel='icon']") as HTMLLinkElement
+        || document.createElement("link");
+      link.rel = "icon";
+      link.href = logoUrl;
+      document.head.appendChild(link);
+    }
+  }, [logoUrl]);
+
+  return { logoUrl, isLoading };
+}
+
 export function useUpdateSchoolName() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (newName: string) => {
       const { error } = await supabase
@@ -37,6 +64,41 @@ export function useUpdateSchoolName() {
         .update({ value: newName })
         .eq("key", "school_name");
       if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school_settings"] });
+    },
+  });
+}
+
+export function useUpdateSchoolLogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const ext = file.name.split(".").pop();
+      const fileName = `logo.${ext}`;
+
+      // Upload to storage (overwrite existing)
+      const { error: uploadError } = await supabase.storage
+        .from("school-logo")
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("school-logo")
+        .getPublicUrl(fileName);
+
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      // Save URL to settings
+      const { error: settingsError } = await supabase
+        .from("school_settings")
+        .update({ value: publicUrl })
+        .eq("key", "school_logo_url");
+      if (settingsError) throw settingsError;
+
+      return publicUrl;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["school_settings"] });
