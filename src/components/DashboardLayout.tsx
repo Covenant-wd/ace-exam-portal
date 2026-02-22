@@ -7,7 +7,7 @@ import {
   LogOut, Menu, X, ClipboardList, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +26,7 @@ const studentLinks = [
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user } = useAuth();
   const { schoolName } = useSchoolName();
+  const { logoUrl } = useSchoolLogo();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -52,8 +53,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         )}
       >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
-            <GraduationCap className="h-5 w-5" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt="School logo" className="h-full w-full object-contain" />
+            ) : (
+              <GraduationCap className="h-5 w-5" />
+            )}
           </div>
           <div>
             <h1 className="font-bold text-lg leading-tight truncate">{schoolName}</h1>

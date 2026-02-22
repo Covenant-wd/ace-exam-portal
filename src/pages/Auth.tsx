@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { GraduationCap, Loader2, ShieldCheck, UserRound } from "lucide-react";
-import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 
 export default function Auth() {
   const { user, loading } = useAuth();
@@ -21,6 +21,7 @@ export default function Auth() {
   const [submitting, setSubmitting] = useState(false);
   const { signIn, signUp } = useAuth();
   const { schoolName } = useSchoolName();
+  const { logoUrl } = useSchoolLogo();
 
   if (loading) {
     return (
@@ -62,8 +63,12 @@ export default function Auth() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10 p-4">
       <Card className="w-full max-w-md shadow-xl border-0">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-            <GraduationCap className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt="School logo" className="h-full w-full object-contain" />
+            ) : (
+              <GraduationCap className="h-8 w-8" />
+            )}
           </div>
           <CardTitle className="text-2xl font-bold">{schoolName}</CardTitle>
           <CardDescription>
