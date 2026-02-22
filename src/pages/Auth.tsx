@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { GraduationCap, Loader2, ShieldCheck, UserRound } from "lucide-react";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 export default function Auth() {
   const { user, loading } = useAuth();
@@ -19,6 +20,7 @@ export default function Auth() {
   const [className, setClassName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { signIn, signUp } = useAuth();
+  const { schoolName } = useSchoolName();
 
   if (loading) {
     return (
@@ -63,7 +65,7 @@ export default function Auth() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
             <GraduationCap className="h-8 w-8" />
           </div>
-          <CardTitle className="text-2xl font-bold">CBT Portal</CardTitle>
+          <CardTitle className="text-2xl font-bold">{schoolName}</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to access your account" : "Create your student account"}
           </CardDescription>
