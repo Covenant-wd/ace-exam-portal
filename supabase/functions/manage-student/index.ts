@@ -27,22 +27,19 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "create") {
-      const { email, password, first_name, middle_name, last_name, username, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
+      const { email, password, first_name, middle_name, last_name, username, class_id, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
 
-      // Create auth user
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
+        email, password, email_confirm: true,
         user_metadata: { full_name: `${first_name} ${last_name}` },
       });
       if (createError) throw createError;
 
-      // Update profile with full details
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
         first_name, middle_name: middle_name || "", last_name, username,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_name: class_name || "", date_of_birth, address: address || "",
+        class_name: class_name || "", class_id: class_id || null,
+        date_of_birth, address: address || "",
         parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [],
       }).eq("user_id", newUser.user!.id);
@@ -54,9 +51,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, email, password, first_name, middle_name, last_name, username, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
+      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
 
-      // Update auth user if email/password changed
       const authUpdate: Record<string, any> = {};
       if (email) authUpdate.email = email;
       if (password) authUpdate.password = password;
@@ -65,11 +61,11 @@ Deno.serve(async (req) => {
         if (error) throw error;
       }
 
-      // Update profile
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
         first_name, middle_name: middle_name || "", last_name, username,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_name: class_name || "", date_of_birth, address: address || "",
+        class_name: class_name || "", class_id: class_id || null,
+        date_of_birth, address: address || "",
         parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [],
       }).eq("user_id", user_id);
@@ -81,14 +77,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list") {
-      // Get all student user_ids
       const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "student");
       if (!roles || roles.length === 0) return new Response(JSON.stringify({ students: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
       const userIds = roles.map(r => r.user_id);
       const { data: profiles } = await supabaseAdmin.from("profiles").select("*").in("user_id", userIds);
 
-      // Get emails from auth
       const students = await Promise.all((profiles || []).map(async (p) => {
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(p.user_id);
         return { ...p, email: user?.email || "" };

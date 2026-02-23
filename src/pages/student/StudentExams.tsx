@@ -14,18 +14,57 @@ export default function StudentExams() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const [examsRes, attemptsRes] = await Promise.all([
-        supabase.from("exams").select("*, subjects(name)").eq("is_published", true).order("created_at", { ascending: false }),
-        supabase.from("exam_attempts").select("*").eq("student_id", user!.id),
-      ]);
-      setExams(examsRes.data ?? []);
+    const fetchExams = async () => {
+      // Get student's class_id and class subjects
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("class_id")
+        .eq("user_id", user!.id)
+        .single();
+
+      const classId = profile?.class_id;
+
+      // Get subjects for the student's class
+      let classSubjectIds: string[] = [];
+      if (classId) {
+        const { data: cs } = await supabase
+          .from("class_subjects")
+          .select("subject_id")
+          .eq("class_id", classId);
+        classSubjectIds = (cs ?? []).map((r: any) => r.subject_id);
+      }
+
+      // Get published exams, filtered by class
+      let query = supabase
+        .from("exams")
+        .select("*, subjects(name)")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      const { data: allExams } = await query;
+
+      // Filter: show exams that match student's class OR have no class set,
+      // AND whose subject is in the student's class subjects (if class assigned)
+      const filtered = (allExams ?? []).filter((e: any) => {
+        // Class filter: exam is for student's class or for all classes
+        const classMatch = !e.class_id || e.class_id === classId;
+        // Subject filter: if student has a class, only show class subjects
+        const subjectMatch = classSubjectIds.length === 0 || classSubjectIds.includes(e.subject_id);
+        return classMatch && subjectMatch;
+      });
+
+      const { data: attemptsData } = await supabase
+        .from("exam_attempts")
+        .select("*")
+        .eq("student_id", user!.id);
+
+      setExams(filtered);
       const map: Record<string, any> = {};
-      (attemptsRes.data ?? []).forEach((a: any) => { map[a.exam_id] = a; });
+      (attemptsData ?? []).forEach((a: any) => { map[a.exam_id] = a; });
       setAttempts(map);
       setLoading(false);
     };
-    fetch();
+    fetchExams();
   }, [user]);
 
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;

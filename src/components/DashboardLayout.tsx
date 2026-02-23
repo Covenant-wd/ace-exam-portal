@@ -4,13 +4,15 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
-  LogOut, Menu, X, ClipboardList, Settings
+  LogOut, Menu, X, ClipboardList, Settings, Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/sessions", label: "Sessions", icon: Calendar },
+  { to: "/admin/classes", label: "Classes", icon: GraduationCap },
   { to: "/admin/students", label: "Students", icon: Users },
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },

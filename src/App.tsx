@@ -15,6 +15,8 @@ import Questions from "./pages/admin/Questions";
 import Results from "./pages/admin/Results";
 import Students from "./pages/admin/Students";
 import Settings from "./pages/admin/Settings";
+import Sessions from "./pages/admin/Sessions";
+import Classes from "./pages/admin/Classes";
 import StudentExams from "./pages/student/StudentExams";
 import TakeExam from "./pages/student/TakeExam";
 import StudentResults from "./pages/student/StudentResults";
@@ -38,6 +40,8 @@ function AppRoutes() {
 
       {/* Admin routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/sessions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Sessions /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/classes" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Classes /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/students" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/subjects" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
