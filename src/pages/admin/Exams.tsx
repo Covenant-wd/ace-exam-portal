@@ -22,18 +22,25 @@ interface Exam {
   duration_minutes: number;
   is_published: boolean;
   subject_id: string;
+  term_id: string | null;
+  class_id: string | null;
   subjects?: { name: string };
+  terms?: { name: string } | null;
+  classes?: { name: string } | null;
 }
 
-interface Subject {
-  id: string;
-  name: string;
-}
+interface Subject { id: string; name: string; }
+interface Term { id: string; name: string; session_id: string; }
+interface Session { id: string; name: string; is_active: boolean; }
+interface ClassItem { id: string; name: string; }
 
 export default function Exams() {
   const { user } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Exam | null>(null);
@@ -42,15 +49,23 @@ export default function Exams() {
   const [subjectId, setSubjectId] = useState("");
   const [duration, setDuration] = useState("30");
   const [isPublished, setIsPublished] = useState(false);
+  const [termId, setTermId] = useState("");
+  const [classId, setClassId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
-    const [examsRes, subjectsRes] = await Promise.all([
-      supabase.from("exams").select("*, subjects(name)").order("created_at", { ascending: false }),
+    const [examsRes, subjectsRes, termsRes, sessionsRes, classesRes] = await Promise.all([
+      supabase.from("exams").select("*, subjects(name), terms(name), classes(name)").order("created_at", { ascending: false }),
       supabase.from("subjects").select("id, name").order("name"),
+      supabase.from("terms").select("id, name, session_id").order("created_at"),
+      supabase.from("sessions").select("id, name, is_active").order("created_at", { ascending: false }),
+      supabase.from("classes").select("id, name").order("name"),
     ]);
     setExams((examsRes.data as any[]) ?? []);
     setSubjects((subjectsRes.data as Subject[]) ?? []);
+    setTerms((termsRes.data as Term[]) ?? []);
+    setSessions((sessionsRes.data as Session[]) ?? []);
+    setClasses((classesRes.data as ClassItem[]) ?? []);
     setLoading(false);
   };
 
@@ -59,7 +74,13 @@ export default function Exams() {
   const handleSave = async () => {
     if (!title.trim() || !subjectId) { toast.error("Title and subject are required"); return; }
     setSaving(true);
-    const payload = { title, description, subject_id: subjectId, duration_minutes: parseInt(duration) || 30, is_published: isPublished, created_by: user?.id };
+    const payload: any = {
+      title, description, subject_id: subjectId,
+      duration_minutes: parseInt(duration) || 30,
+      is_published: isPublished, created_by: user?.id,
+      term_id: termId || null,
+      class_id: classId || null,
+    };
     if (editing) {
       const { error } = await supabase.from("exams").update(payload).eq("id", editing.id);
       if (error) toast.error(error.message); else toast.success("Exam updated");
@@ -81,10 +102,20 @@ export default function Exams() {
     fetchData();
   };
 
-  const reset = () => { setEditing(null); setTitle(""); setDescription(""); setSubjectId(""); setDuration("30"); setIsPublished(false); };
+  const reset = () => { setEditing(null); setTitle(""); setDescription(""); setSubjectId(""); setDuration("30"); setIsPublished(false); setTermId(""); setClassId(""); };
 
   const openEdit = (e: Exam) => {
-    setEditing(e); setTitle(e.title); setDescription(e.description || ""); setSubjectId(e.subject_id); setDuration(String(e.duration_minutes)); setIsPublished(e.is_published); setOpen(true);
+    setEditing(e); setTitle(e.title); setDescription(e.description || ""); setSubjectId(e.subject_id);
+    setDuration(String(e.duration_minutes)); setIsPublished(e.is_published);
+    setTermId(e.term_id || ""); setClassId(e.class_id || ""); setOpen(true);
+  };
+
+  const getTermLabel = (termId: string | null) => {
+    if (!termId) return "—";
+    const term = terms.find((t) => t.id === termId);
+    if (!term) return "—";
+    const session = sessions.find((s) => s.id === term.session_id);
+    return `${session?.name || ""} / ${term.name}`;
   };
 
   return (
@@ -93,13 +124,34 @@ export default function Exams() {
         <h1 className="text-3xl font-bold">Exams</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button onClick={reset}><Plus className="mr-2 h-4 w-4" />Create Exam</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle>{editing ? "Edit Exam" : "New Exam"}</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2"><Label>Subject</Label>
                 <Select value={subjectId} onValueChange={setSubjectId}>
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
                   <SelectContent>{subjects.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Class</Label>
+                <Select value={classId} onValueChange={setClassId}>
+                  <SelectTrigger><SelectValue placeholder="All classes (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Session / Term</Label>
+                <Select value={termId} onValueChange={setTermId}>
+                  <SelectTrigger><SelectValue placeholder="Select term (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    {sessions.map((s) => {
+                      const sTerms = terms.filter((t) => t.session_id === s.id);
+                      return sTerms.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{s.name} / {t.name}</SelectItem>
+                      ));
+                    })}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mid-term Exam" /></div>
@@ -120,12 +172,16 @@ export default function Exams() {
             <p className="p-8 text-center text-muted-foreground">No exams yet. Create one to get started!</p>
           ) : (
             <Table>
-              <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Subject</TableHead><TableHead>Duration</TableHead><TableHead>Status</TableHead><TableHead className="w-32">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow>
+                <TableHead>Title</TableHead><TableHead>Subject</TableHead><TableHead>Class</TableHead><TableHead>Term</TableHead><TableHead>Duration</TableHead><TableHead>Status</TableHead><TableHead className="w-32">Actions</TableHead>
+              </TableRow></TableHeader>
               <TableBody>
                 {exams.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell className="font-medium">{e.title}</TableCell>
                     <TableCell>{(e as any).subjects?.name || "—"}</TableCell>
+                    <TableCell>{(e as any).classes?.name || "All"}</TableCell>
+                    <TableCell className="text-sm">{getTermLabel(e.term_id)}</TableCell>
                     <TableCell>{e.duration_minutes} min</TableCell>
                     <TableCell>
                       <Badge variant={e.is_published ? "default" : "secondary"} className="cursor-pointer" onClick={() => togglePublish(e)}>

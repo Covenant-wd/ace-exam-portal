@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      class_subjects: {
+        Row: {
+          class_id: string
+          id: string
+          subject_id: string
+        }
+        Insert: {
+          class_id: string
+          id?: string
+          subject_id: string
+        }
+        Update: {
+          class_id?: string
+          id?: string
+          subject_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_subjects_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_subjects_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       exam_attempts: {
         Row: {
           exam_id: string
@@ -57,6 +111,7 @@ export type Database = {
       }
       exams: {
         Row: {
+          class_id: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -66,10 +121,12 @@ export type Database = {
           is_published: boolean
           start_date: string | null
           subject_id: string
+          term_id: string | null
           title: string
           updated_at: string
         }
         Insert: {
+          class_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -79,10 +136,12 @@ export type Database = {
           is_published?: boolean
           start_date?: string | null
           subject_id: string
+          term_id?: string | null
           title: string
           updated_at?: string
         }
         Update: {
+          class_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -92,10 +151,18 @@ export type Database = {
           is_published?: boolean
           start_date?: string | null
           subject_id?: string
+          term_id?: string | null
           title?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exams_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exams_subject_id_fkey"
             columns: ["subject_id"]
@@ -103,11 +170,19 @@ export type Database = {
             referencedRelation: "subjects"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "exams_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "terms"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
         Row: {
           address: string | null
+          class_id: string | null
           class_name: string | null
           created_at: string
           date_of_birth: string | null
@@ -125,6 +200,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          class_id?: string | null
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -142,6 +218,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          class_id?: string | null
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
@@ -157,7 +234,15 @@ export type Database = {
           user_id?: string
           username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       questions: {
         Row: {
@@ -227,6 +312,27 @@ export type Database = {
         }
         Relationships: []
       }
+      sessions: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       student_answers: {
         Row: {
           attempt_id: string
@@ -292,6 +398,38 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      terms: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "terms_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

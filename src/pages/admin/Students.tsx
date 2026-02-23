@@ -6,9 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
 
 interface Student {
   user_id: string;
@@ -18,6 +20,7 @@ interface Student {
   last_name: string;
   username: string | null;
   class_name: string | null;
+  class_id: string | null;
   date_of_birth: string | null;
   address: string;
   parent_name: string;
@@ -26,14 +29,17 @@ interface Student {
   full_name: string;
 }
 
+interface ClassItem { id: string; name: string; }
+
 const emptyForm = {
   email: "", password: "", first_name: "", middle_name: "", last_name: "",
-  username: "", class_name: "", date_of_birth: "", address: "",
+  username: "", class_id: "", date_of_birth: "", address: "",
   parent_name: "", nationality: "", subjects_offered: "",
 };
 
 export default function Students() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
@@ -41,38 +47,45 @@ export default function Students() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
+  // Promotion state
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoFrom, setPromoFrom] = useState("");
+  const [promoTo, setPromoTo] = useState("");
+  const [promoSaving, setPromoSaving] = useState(false);
+
+  // Individual move state
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [moveToClass, setMoveToClass] = useState("");
+
   const fetchStudents = async () => {
     setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await supabase.functions.invoke("manage-student", {
-      body: { action: "list" },
-    });
+    const [res, classesRes] = await Promise.all([
+      supabase.functions.invoke("manage-student", { body: { action: "list" } }),
+      supabase.from("classes").select("id, name").order("name"),
+    ]);
     if (res.error) { toast.error("Failed to load students"); setLoading(false); return; }
     setStudents(res.data.students || []);
+    setClasses(classesRes.data ?? []);
     setLoading(false);
   };
 
   useEffect(() => { fetchStudents(); }, []);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm(emptyForm);
-    setDialogOpen(true);
+  const getClassName = (classId: string | null) => {
+    if (!classId) return "—";
+    return classes.find((c) => c.id === classId)?.name || "—";
   };
 
+  const openCreate = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (s: Student) => {
     setEditing(s);
     setForm({
-      email: s.email,
-      password: "",
-      first_name: s.first_name || "",
-      middle_name: s.middle_name || "",
-      last_name: s.last_name || "",
-      username: s.username || "",
-      class_name: s.class_name || "",
-      date_of_birth: s.date_of_birth || "",
-      address: s.address || "",
-      parent_name: s.parent_name || "",
+      email: s.email, password: "",
+      first_name: s.first_name || "", middle_name: s.middle_name || "",
+      last_name: s.last_name || "", username: s.username || "",
+      class_id: s.class_id || "", date_of_birth: s.date_of_birth || "",
+      address: s.address || "", parent_name: s.parent_name || "",
       nationality: s.nationality || "",
       subjects_offered: (s.subjects_offered || []).join(", "),
     });
@@ -81,35 +94,53 @@ export default function Students() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.first_name || !form.last_name || !form.email) {
-      toast.error("First name, last name and email are required");
-      return;
-    }
-    if (!editing && !form.password) {
-      toast.error("Password is required for new students");
-      return;
-    }
+    if (!form.first_name || !form.last_name || !form.email) { toast.error("First name, last name and email are required"); return; }
+    if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
     const subjects = form.subjects_offered.split(",").map(s => s.trim()).filter(Boolean);
     const payload: any = {
       action: editing ? "update" : "create",
       ...form,
+      class_id: form.class_id || null,
       subjects_offered: subjects,
     };
     if (editing) {
       payload.user_id = editing.user_id;
       if (!form.password) delete payload.password;
     }
-
     const res = await supabase.functions.invoke("manage-student", { body: payload });
     setSaving(false);
-    if (res.error || res.data?.error) {
-      toast.error(res.data?.error || "Operation failed");
-      return;
-    }
+    if (res.error || res.data?.error) { toast.error(res.data?.error || "Operation failed"); return; }
     toast.success(editing ? "Student updated" : "Student created");
     setDialogOpen(false);
     fetchStudents();
+  };
+
+  const handleBulkPromote = async () => {
+    if (!promoFrom || !promoTo) { toast.error("Select both classes"); return; }
+    if (promoFrom === promoTo) { toast.error("Source and destination must differ"); return; }
+    setPromoSaving(true);
+    const { error } = await supabase.from("profiles").update({ class_id: promoTo }).eq("class_id", promoFrom);
+    setPromoSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Students promoted successfully");
+    setPromoOpen(false);
+    fetchStudents();
+  };
+
+  const handleMoveStudents = async () => {
+    if (!moveToClass || selectedStudents.length === 0) { toast.error("Select students and target class"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${selectedStudents.length} student(s) moved`);
+    setMoveOpen(false); setSelectedStudents([]);
+    fetchStudents();
+  };
+
+  const toggleStudentSelect = (userId: string) => {
+    setSelectedStudents((prev) => prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]);
   };
 
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -117,7 +148,7 @@ export default function Students() {
 
   const filtered = students.filter(s => {
     const q = search.toLowerCase();
-    return !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q) || s.class_name?.toLowerCase().includes(q);
+    return !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
   });
 
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -129,7 +160,15 @@ export default function Students() {
           <h1 className="text-3xl font-bold">Students</h1>
           <p className="text-muted-foreground">{students.length} student{students.length !== 1 ? "s" : ""} registered</p>
         </div>
-        <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }}>
+            <ArrowRightLeft className="mr-2 h-4 w-4" />Move Students
+          </Button>
+          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }}>
+            Bulk Promote
+          </Button>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button>
+        </div>
       </div>
 
       <Card className="border-0 shadow-md">
@@ -164,7 +203,7 @@ export default function Students() {
                     <TableCell className="font-medium">{s.full_name || "—"}</TableCell>
                     <TableCell>{s.username || "—"}</TableCell>
                     <TableCell>{s.email}</TableCell>
-                    <TableCell><Badge variant="secondary">{s.class_name || "—"}</Badge></TableCell>
+                    <TableCell><Badge variant="secondary">{getClassName(s.class_id)}</Badge></TableCell>
                     <TableCell>{s.nationality || "—"}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
@@ -179,68 +218,94 @@ export default function Students() {
         </CardContent>
       </Card>
 
+      {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Student" : "Add New Student"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Edit Student" : "Add New Student"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>First Name *</Label>
-              <Input value={form.first_name} onChange={set("first_name")} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Middle Name</Label>
-              <Input value={form.middle_name} onChange={set("middle_name")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Last Name *</Label>
-              <Input value={form.last_name} onChange={set("last_name")} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Username</Label>
-              <Input value={form.username} onChange={set("username")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Email *</Label>
-              <Input type="email" value={form.email} onChange={set("email")} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label>
-              <Input type="password" value={form.password} onChange={set("password")} required={!editing} />
-            </div>
+            <div className="space-y-1.5"><Label>First Name *</Label><Input value={form.first_name} onChange={set("first_name")} required /></div>
+            <div className="space-y-1.5"><Label>Middle Name</Label><Input value={form.middle_name} onChange={set("middle_name")} /></div>
+            <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.last_name} onChange={set("last_name")} required /></div>
+            <div className="space-y-1.5"><Label>Username</Label><Input value={form.username} onChange={set("username")} /></div>
+            <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
+            <div className="space-y-1.5"><Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={form.password} onChange={set("password")} required={!editing} /></div>
             <div className="space-y-1.5">
               <Label>Class</Label>
-              <Input value={form.class_name} onChange={set("class_name")} placeholder="e.g. SS1A" />
+              <Select value={form.class_id} onValueChange={(v) => setForm((p) => ({ ...p, class_id: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
+                <SelectContent>
+                  {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Date of Birth</Label>
-              <Input type="date" value={form.date_of_birth} onChange={set("date_of_birth")} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Address</Label>
-              <Input value={form.address} onChange={set("address")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Parent's Name</Label>
-              <Input value={form.parent_name} onChange={set("parent_name")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Nationality</Label>
-              <Input value={form.nationality} onChange={set("nationality")} />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Subjects Offered (comma-separated)</Label>
-              <Input value={form.subjects_offered} onChange={set("subjects_offered")} placeholder="e.g. Mathematics, English, Physics" />
-            </div>
+            <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.date_of_birth} onChange={set("date_of_birth")} /></div>
+            <div className="space-y-1.5 sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={set("address")} /></div>
+            <div className="space-y-1.5"><Label>Parent's Name</Label><Input value={form.parent_name} onChange={set("parent_name")} /></div>
+            <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={set("nationality")} /></div>
+            <div className="space-y-1.5 sm:col-span-2"><Label>Subjects Offered (comma-separated)</Label><Input value={form.subjects_offered} onChange={set("subjects_offered")} placeholder="e.g. Mathematics, English, Physics" /></div>
             <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editing ? "Update" : "Create"} Student
-              </Button>
+              <Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? "Update" : "Create"} Student</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Promote Dialog */}
+      <Dialog open={promoOpen} onOpenChange={setPromoOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Bulk Promote Students</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Move all students from one class to another (e.g. at end of session).</p>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>From Class</Label>
+              <Select value={promoFrom} onValueChange={setPromoFrom}>
+                <SelectTrigger><SelectValue placeholder="Source class" /></SelectTrigger>
+                <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>To Class</Label>
+              <Select value={promoTo} onValueChange={setPromoTo}>
+                <SelectTrigger><SelectValue placeholder="Destination class" /></SelectTrigger>
+                <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleBulkPromote} className="w-full" disabled={promoSaving}>
+              {promoSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Promote All
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Individual Move Dialog */}
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Move Students to Class</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Target Class</Label>
+              <Select value={moveToClass} onValueChange={setMoveToClass}>
+                <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
+                <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Select Students ({selectedStudents.length} selected)</Label>
+              <div className="max-h-60 overflow-y-auto rounded-md border p-2 space-y-1">
+                {students.map((s) => (
+                  <label key={s.user_id} className="flex items-center gap-2 text-sm cursor-pointer p-1 rounded hover:bg-muted">
+                    <Checkbox checked={selectedStudents.includes(s.user_id)} onCheckedChange={() => toggleStudentSelect(s.user_id)} />
+                    <span>{s.full_name}</span>
+                    <Badge variant="outline" className="ml-auto text-xs">{getClassName(s.class_id)}</Badge>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleMoveStudents} className="w-full" disabled={saving || selectedStudents.length === 0}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Move {selectedStudents.length} Student(s)
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
