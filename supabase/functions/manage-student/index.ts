@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "create") {
-      const { email, password, first_name, middle_name, last_name, username, class_id, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
+      const { email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender } = body;
 
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email, password, email_confirm: true,
@@ -36,12 +36,14 @@ Deno.serve(async (req) => {
       if (createError) throw createError;
 
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
-        first_name, middle_name: middle_name || "", last_name, username,
+        first_name, middle_name: middle_name || "", last_name, username: username || null,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_name: class_name || "", class_id: class_id || null,
-        date_of_birth, address: address || "",
+        class_id: class_id || null,
+        date_of_birth: date_of_birth || null,
+        address: address || "",
         parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [],
+        gender: gender || "",
       }).eq("user_id", newUser.user!.id);
       if (profileError) throw profileError;
 
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, class_name, date_of_birth, address, parent_name, nationality, subjects_offered } = body;
+      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender } = body;
 
       const authUpdate: Record<string, any> = {};
       if (email) authUpdate.email = email;
@@ -62,12 +64,14 @@ Deno.serve(async (req) => {
       }
 
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
-        first_name, middle_name: middle_name || "", last_name, username,
+        first_name, middle_name: middle_name || "", last_name, username: username || null,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_name: class_name || "", class_id: class_id || null,
-        date_of_birth, address: address || "",
+        class_id: class_id || null,
+        date_of_birth: date_of_birth || null,
+        address: address || "",
         parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [],
+        gender: gender || "",
       }).eq("user_id", user_id);
       if (profileError) throw profileError;
 
