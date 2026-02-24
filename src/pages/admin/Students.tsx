@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +25,7 @@ interface Student {
   address: string;
   parent_name: string;
   nationality: string;
+  gender: string;
   subjects_offered: string[];
   full_name: string;
 }
@@ -34,7 +35,7 @@ interface ClassItem { id: string; name: string; }
 const emptyForm = {
   email: "", password: "", first_name: "", middle_name: "", last_name: "",
   username: "", class_id: "", date_of_birth: "", address: "",
-  parent_name: "", nationality: "", subjects_offered: "",
+  parent_name: "", nationality: "", subjects_offered: "", gender: "",
 };
 
 export default function Students() {
@@ -86,7 +87,7 @@ export default function Students() {
       last_name: s.last_name || "", username: s.username || "",
       class_id: s.class_id || "", date_of_birth: s.date_of_birth || "",
       address: s.address || "", parent_name: s.parent_name || "",
-      nationality: s.nationality || "",
+      nationality: s.nationality || "", gender: s.gender || "",
       subjects_offered: (s.subjects_offered || []).join(", "),
     });
     setDialogOpen(true);
@@ -102,6 +103,7 @@ export default function Students() {
       action: editing ? "update" : "create",
       ...form,
       class_id: form.class_id || null,
+      date_of_birth: form.date_of_birth || null,
       subjects_offered: subjects,
     };
     if (editing) {
@@ -187,6 +189,7 @@ export default function Students() {
                   <TableHead>Name</TableHead>
                   <TableHead>Username</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Gender</TableHead>
                   <TableHead>Class</TableHead>
                   <TableHead>Nationality</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -194,7 +197,7 @@ export default function Students() {
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />No students found
                   </TableCell></TableRow>
                 ) : filtered.map((s, i) => (
@@ -203,6 +206,7 @@ export default function Students() {
                     <TableCell className="font-medium">{s.full_name || "—"}</TableCell>
                     <TableCell>{s.username || "—"}</TableCell>
                     <TableCell>{s.email}</TableCell>
+                    <TableCell>{s.gender || "—"}</TableCell>
                     <TableCell><Badge variant="secondary">{getClassName(s.class_id)}</Badge></TableCell>
                     <TableCell>{s.nationality || "—"}</TableCell>
                     <TableCell className="text-right">
@@ -230,6 +234,16 @@ export default function Students() {
             <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
             <div className="space-y-1.5"><Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={form.password} onChange={set("password")} required={!editing} /></div>
             <div className="space-y-1.5">
+              <Label>Gender</Label>
+              <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label>Class</Label>
               <Select value={form.class_id} onValueChange={(v) => setForm((p) => ({ ...p, class_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
@@ -239,9 +253,9 @@ export default function Students() {
               </Select>
             </div>
             <div className="space-y-1.5"><Label>Date of Birth</Label><Input type="date" value={form.date_of_birth} onChange={set("date_of_birth")} /></div>
+            <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={set("nationality")} /></div>
             <div className="space-y-1.5 sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={set("address")} /></div>
             <div className="space-y-1.5"><Label>Parent's Name</Label><Input value={form.parent_name} onChange={set("parent_name")} /></div>
-            <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={set("nationality")} /></div>
             <div className="space-y-1.5 sm:col-span-2"><Label>Subjects Offered (comma-separated)</Label><Input value={form.subjects_offered} onChange={set("subjects_offered")} placeholder="e.g. Mathematics, English, Physics" /></div>
             <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
