@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
+import AdminLogin from "./pages/auth/AdminLogin";
+import StudentLogin from "./pages/auth/StudentLogin";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/DashboardLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -27,7 +28,7 @@ const queryClient = new QueryClient();
 function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" }) {
   const { user, role, loading } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-  if (!user) return <Navigate to="/auth" replace />;
+  if (!user) return <Navigate to={requiredRole === "admin" ? "/auth/admin" : "/auth/student"} replace />;
   if (role !== requiredRole) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -36,7 +37,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Index />} />
-      <Route path="/auth" element={<Auth />} />
+      <Route path="/auth" element={<Navigate to="/auth/student" replace />} />
+      <Route path="/auth/admin" element={<AdminLogin />} />
+      <Route path="/auth/student" element={<StudentLogin />} />
 
       {/* Admin routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></ProtectedRoute>} />
