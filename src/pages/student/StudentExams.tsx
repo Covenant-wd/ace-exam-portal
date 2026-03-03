@@ -5,16 +5,26 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Clock, BookOpen } from "lucide-react";
+import { Loader2, Clock, BookOpen, Calendar, GraduationCap } from "lucide-react";
 
 export default function StudentExams() {
   const { user } = useAuth();
   const [exams, setExams] = useState<any[]>([]);
   const [attempts, setAttempts] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [activeTerm, setActiveTerm] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchExams = async () => {
+      // Fetch active session & term
+      const [sessionRes, termRes] = await Promise.all([
+        supabase.from("sessions").select("name").eq("is_active", true).single(),
+        supabase.from("terms").select("name").eq("is_active", true).limit(1).single(),
+      ]);
+      setActiveSession(sessionRes.data?.name ?? null);
+      setActiveTerm(termRes.data?.name ?? null);
+
       // Get student's class_id and class subjects
       const { data: profile } = await supabase
         .from("profiles")
@@ -24,7 +34,6 @@ export default function StudentExams() {
 
       const classId = profile?.class_id;
 
-      // Get subjects for the student's class
       let classSubjectIds: string[] = [];
       if (classId) {
         const { data: cs } = await supabase
@@ -34,7 +43,6 @@ export default function StudentExams() {
         classSubjectIds = (cs ?? []).map((r: any) => r.subject_id);
       }
 
-      // Get published exams, filtered by class
       let query = supabase
         .from("exams")
         .select("*, subjects(name)")
@@ -43,12 +51,8 @@ export default function StudentExams() {
 
       const { data: allExams } = await query;
 
-      // Filter: show exams that match student's class OR have no class set,
-      // AND whose subject is in the student's class subjects (if class assigned)
       const filtered = (allExams ?? []).filter((e: any) => {
-        // Class filter: exam is for student's class or for all classes
         const classMatch = !e.class_id || e.class_id === classId;
-        // Subject filter: if student has a class, only show class subjects
         const subjectMatch = classSubjectIds.length === 0 || classSubjectIds.includes(e.subject_id);
         return classMatch && subjectMatch;
       });
@@ -79,6 +83,28 @@ export default function StudentExams() {
 
   return (
     <div>
+      {/* Active Session & Term Banner */}
+      {(activeSession || activeTerm) && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          {activeSession && (
+            <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+              <Calendar className="h-4 w-4 text-primary" />
+              <span className="text-sm text-muted-foreground">Session:</span>
+              <span className="text-sm font-semibold">{activeSession}</span>
+              <Badge variant="default" className="ml-1 text-xs">Active</Badge>
+            </div>
+          )}
+          {activeTerm && (
+            <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
+              <GraduationCap className="h-4 w-4 text-primary" />
+              <span className="text-sm text-muted-foreground">Term:</span>
+              <span className="text-sm font-semibold">{activeTerm}</span>
+              <Badge variant="default" className="ml-1 text-xs">Active</Badge>
+            </div>
+          )}
+        </div>
+      )}
+
       <h1 className="mb-6 text-3xl font-bold">Available Exams</h1>
       {Object.keys(grouped).length === 0 ? (
         <p className="text-muted-foreground">No exams are currently available.</p>
