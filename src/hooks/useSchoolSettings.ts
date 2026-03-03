@@ -16,7 +16,7 @@ export function useSchoolName() {
       if (error || !data) return DEFAULT_SCHOOL_NAME;
       return data.value || DEFAULT_SCHOOL_NAME;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function useSchoolLogo() {
       if (error || !data) return "";
       return data.value || "";
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   // Update favicon when logo changes
