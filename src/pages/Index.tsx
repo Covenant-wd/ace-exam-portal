@@ -15,5 +15,6 @@ export default function Index() {
 
   if (!user) return <Navigate to="/auth" replace />;
   if (role === "admin") return <Navigate to="/admin" replace />;
+  if (role === "instructor") return <Navigate to="/instructor" replace />;
   return <Navigate to="/student" replace />;
 }

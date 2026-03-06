@@ -1,19 +1,21 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
-  LogOut, Menu, X, ClipboardList, Settings, Calendar
+  LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
+import { supabase } from "@/integrations/supabase/client";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/sessions", label: "Sessions", icon: Calendar },
   { to: "/admin/classes", label: "Classes", icon: GraduationCap },
   { to: "/admin/students", label: "Students", icon: Users },
+  { to: "/admin/instructors", label: "Instructors", icon: UserCheck },
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },
   { to: "/admin/results", label: "Results", icon: BarChart3 },
@@ -25,6 +27,12 @@ const studentLinks = [
   { to: "/student/results", label: "My Results", icon: BarChart3 },
 ];
 
+interface NavItem {
+  to: string;
+  label: string;
+  icon: any;
+}
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user } = useAuth();
   const { schoolName } = useSchoolName();
@@ -32,12 +40,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [instructorLinks, setInstructorLinks] = useState<NavItem[]>([]);
 
-  const links = role === "admin" ? adminLinks : studentLinks;
+  useEffect(() => {
+    if (role !== "instructor" || !user) return;
+    const loadPerms = async () => {
+      const { data } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
+      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard }];
+      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen });
+      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText });
+      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3 });
+      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users });
+      setInstructorLinks(links);
+    };
+    loadPerms();
+  }, [role, user]);
+
+  const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : studentLinks;
 
   const handleSignOut = async () => {
+    const currentRole = role;
     await signOut();
-    navigate(role === "admin" ? "/auth/admin" : "/auth/student");
+    navigate(currentRole === "student" ? "/auth/student" : "/auth/admin");
   };
 
   return (
