@@ -49,7 +49,7 @@ export default function AdminLogin() {
           <CardTitle className="text-2xl font-bold">{schoolName}</CardTitle>
           <CardDescription className="flex items-center justify-center gap-2">
             <ShieldCheck className="h-4 w-4" />
-            Admin Sign In
+            Admin / Instructor Sign In
           </CardDescription>
         </CardHeader>
         <CardContent>
