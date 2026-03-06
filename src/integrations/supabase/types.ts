@@ -179,6 +179,68 @@ export type Database = {
           },
         ]
       }
+      instructor_classes: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          instructor_id: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          instructor_id: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          instructor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instructor_classes_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instructor_permissions: {
+        Row: {
+          can_manage_exams: boolean
+          can_manage_students: boolean
+          can_manage_subjects: boolean
+          can_view_results: boolean
+          created_at: string
+          id: string
+          instructor_id: string
+          updated_at: string
+        }
+        Insert: {
+          can_manage_exams?: boolean
+          can_manage_students?: boolean
+          can_manage_subjects?: boolean
+          can_view_results?: boolean
+          created_at?: string
+          id?: string
+          instructor_id: string
+          updated_at?: string
+        }
+        Update: {
+          can_manage_exams?: boolean
+          can_manage_students?: boolean
+          can_manage_subjects?: boolean
+          can_view_results?: boolean
+          created_at?: string
+          id?: string
+          instructor_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           address: string | null
@@ -466,7 +528,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "student"
+      app_role: "admin" | "student" | "instructor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -594,7 +656,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "student"],
+      app_role: ["admin", "student", "instructor"],
     },
   },
 } as const
