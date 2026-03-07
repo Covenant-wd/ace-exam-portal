@@ -20,7 +20,15 @@ Deno.serve(async (req) => {
   if (!caller) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const { data: isAdmin } = await supabaseAdmin.rpc("has_role", { _user_id: caller.id, _role: "admin" });
-  if (!isAdmin) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  let isAuthorized = !!isAdmin;
+  if (!isAuthorized) {
+    const { data: isInstructor } = await supabaseAdmin.rpc("has_role", { _user_id: caller.id, _role: "instructor" });
+    if (isInstructor) {
+      const { data: perms } = await supabaseAdmin.from("instructor_permissions").select("can_manage_students").eq("instructor_id", caller.id).maybeSingle();
+      if (perms?.can_manage_students) isAuthorized = true;
+    }
+  }
+  if (!isAuthorized) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const body = await req.json();
   const { action } = body;
