@@ -173,11 +173,25 @@ export default function TakeExam() {
       {/* Top bar */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3 shadow-sm">
         <h1 className="text-lg font-bold truncate">{exam?.title}</h1>
-        <div className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-mono font-bold", isLowTime ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-muted")}>
-          <Clock className="h-4 w-4" />
-          {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+        <div className="flex items-center gap-3">
+          {allowCalculator && (
+            <Button variant={showCalculator ? "default" : "outline"} size="sm" onClick={() => setShowCalculator(!showCalculator)}>
+              <CalcIcon className="mr-1 h-4 w-4" />Calculator
+            </Button>
+          )}
+          <div className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-mono font-bold", isLowTime ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-muted")}>
+            <Clock className="h-4 w-4" />
+            {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+          </div>
         </div>
       </div>
+
+      {/* Floating calculator */}
+      {showCalculator && allowCalculator && (
+        <div className="fixed right-4 top-16 z-20">
+          <Calculator onClose={() => setShowCalculator(false)} />
+        </div>
+      )}
 
       <div className="mx-auto flex max-w-4xl gap-4 p-4">
         {/* Question navigator (desktop) */}
