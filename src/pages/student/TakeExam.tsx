@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Clock, Flag, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { Loader2, Clock, Flag, ChevronLeft, ChevronRight, AlertTriangle, Calculator as CalcIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Calculator from "@/components/Calculator";
 import RichContentRenderer from "@/components/RichContentRenderer";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
