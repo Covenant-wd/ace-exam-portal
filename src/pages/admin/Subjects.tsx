@@ -70,7 +70,7 @@ export default function Subjects() {
   };
 
   const openNew = () => {
-    setEditing(null); setName(""); setDescription(""); setOpen(true);
+    setEditing(null); setName(""); setDescription(""); setAllowCalculator(false); setOpen(true);
   };
 
   return (
