@@ -54,6 +54,8 @@ export default function Subjects() {
     setEditing(null);
     setName("");
     setDescription("");
+    setAllowCalculator(false);
+    fetchSubjects();
     fetchSubjects();
   };
 
