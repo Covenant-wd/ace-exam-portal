@@ -442,6 +442,7 @@ export type Database = {
       }
       subjects: {
         Row: {
+          allow_calculator: boolean
           created_at: string
           created_by: string | null
           description: string | null
@@ -449,6 +450,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          allow_calculator?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -456,6 +458,7 @@ export type Database = {
           name: string
         }
         Update: {
+          allow_calculator?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
