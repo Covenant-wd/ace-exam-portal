@@ -1,0 +1,1 @@
+ALTER TABLE public.subjects ADD COLUMN allow_calculator boolean NOT NULL DEFAULT false;

@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Clock, Flag, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { Loader2, Clock, Flag, ChevronLeft, ChevronRight, AlertTriangle, Calculator as CalcIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Calculator from "@/components/Calculator";
 import RichContentRenderer from "@/components/RichContentRenderer";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -37,6 +38,8 @@ export default function TakeExam() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [allowCalculator, setAllowCalculator] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
   const submittedRef = useRef(false);
 
   useEffect(() => {
@@ -60,6 +63,12 @@ export default function TakeExam() {
       if (!examRes.data) { navigate("/student"); return; }
       setExam(examRes.data);
       setQuestions(qRes.data ?? []);
+
+      // Check if subject allows calculator
+      const { data: subjectData } = await supabase.from("subjects").select("allow_calculator" as any).eq("id", examRes.data.subject_id).single();
+      if (subjectData && (subjectData as any).allow_calculator) {
+        setAllowCalculator(true);
+      }
 
       if (existing) {
         setAttemptId(existing.id);
@@ -164,11 +173,25 @@ export default function TakeExam() {
       {/* Top bar */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3 shadow-sm">
         <h1 className="text-lg font-bold truncate">{exam?.title}</h1>
-        <div className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-mono font-bold", isLowTime ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-muted")}>
-          <Clock className="h-4 w-4" />
-          {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+        <div className="flex items-center gap-3">
+          {allowCalculator && (
+            <Button variant={showCalculator ? "default" : "outline"} size="sm" onClick={() => setShowCalculator(!showCalculator)}>
+              <CalcIcon className="mr-1 h-4 w-4" />Calculator
+            </Button>
+          )}
+          <div className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-mono font-bold", isLowTime ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-muted")}>
+            <Clock className="h-4 w-4" />
+            {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+          </div>
         </div>
       </div>
+
+      {/* Floating calculator */}
+      {showCalculator && allowCalculator && (
+        <div className="fixed right-4 top-16 z-20">
+          <Calculator onClose={() => setShowCalculator(false)} />
+        </div>
+      )}
 
       <div className="mx-auto flex max-w-4xl gap-4 p-4">
         {/* Question navigator (desktop) */}

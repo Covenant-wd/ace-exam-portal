@@ -8,13 +8,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Calculator } from "lucide-react";
 
 interface Subject {
   id: string;
   name: string;
   description: string;
+  allow_calculator: boolean;
 }
 
 export default function Subjects() {
@@ -26,6 +29,7 @@ export default function Subjects() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [allowCalculator, setAllowCalculator] = useState(false);
 
   const fetchSubjects = async () => {
     const { data } = await supabase.from("subjects").select("*").order("created_at", { ascending: false });
@@ -39,10 +43,10 @@ export default function Subjects() {
     if (!name.trim()) { toast.error("Subject name is required"); return; }
     setSaving(true);
     if (editing) {
-      const { error } = await supabase.from("subjects").update({ name, description }).eq("id", editing.id);
+      const { error } = await supabase.from("subjects").update({ name, description, allow_calculator: allowCalculator } as any).eq("id", editing.id);
       if (error) toast.error(error.message); else toast.success("Subject updated");
     } else {
-      const { error } = await supabase.from("subjects").insert({ name, description, created_by: user?.id });
+      const { error } = await supabase.from("subjects").insert({ name, description, created_by: user?.id, allow_calculator: allowCalculator } as any);
       if (error) toast.error(error.message); else toast.success("Subject created");
     }
     setSaving(false);
@@ -50,6 +54,8 @@ export default function Subjects() {
     setEditing(null);
     setName("");
     setDescription("");
+    setAllowCalculator(false);
+    fetchSubjects();
     fetchSubjects();
   };
 
@@ -60,11 +66,11 @@ export default function Subjects() {
   };
 
   const openEdit = (s: Subject) => {
-    setEditing(s); setName(s.name); setDescription(s.description || ""); setOpen(true);
+    setEditing(s); setName(s.name); setDescription(s.description || ""); setAllowCalculator((s as any).allow_calculator ?? false); setOpen(true);
   };
 
   const openNew = () => {
-    setEditing(null); setName(""); setDescription(""); setOpen(true);
+    setEditing(null); setName(""); setDescription(""); setAllowCalculator(false); setOpen(true);
   };
 
   return (
@@ -80,6 +86,10 @@ export default function Subjects() {
             <div className="space-y-4 pt-2">
               <div className="space-y-2"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" /></div>
               <div className="space-y-2"><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" /></div>
+              <div className="flex items-center gap-3">
+                <Switch checked={allowCalculator} onCheckedChange={setAllowCalculator} />
+                <Label className="flex items-center gap-2"><Calculator className="h-4 w-4" />Allow Calculator in Exams</Label>
+              </div>
               <Button onClick={handleSave} className="w-full" disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Update" : "Create"}
               </Button>
@@ -96,12 +106,19 @@ export default function Subjects() {
             <p className="p-8 text-center text-muted-foreground">No subjects yet. Create your first one!</p>
           ) : (
             <Table>
-              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead className="w-24">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Calculator</TableHead><TableHead className="w-24">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {subjects.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell className="text-muted-foreground">{s.description || "—"}</TableCell>
+                    <TableCell>
+                      {(s as any).allow_calculator ? (
+                        <Badge variant="default" className="gap-1"><Calculator className="h-3 w-3" />Enabled</Badge>
+                      ) : (
+                        <Badge variant="secondary">Disabled</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
