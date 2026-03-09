@@ -86,6 +86,10 @@ export default function Subjects() {
             <div className="space-y-4 pt-2">
               <div className="space-y-2"><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mathematics" /></div>
               <div className="space-y-2"><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" /></div>
+              <div className="flex items-center gap-3">
+                <Switch checked={allowCalculator} onCheckedChange={setAllowCalculator} />
+                <Label className="flex items-center gap-2"><Calculator className="h-4 w-4" />Allow Calculator in Exams</Label>
+              </div>
               <Button onClick={handleSave} className="w-full" disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Update" : "Create"}
               </Button>
