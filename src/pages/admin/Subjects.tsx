@@ -15,6 +15,7 @@ interface Subject {
   id: string;
   name: string;
   description: string;
+  allow_calculator: boolean;
 }
 
 export default function Subjects() {
