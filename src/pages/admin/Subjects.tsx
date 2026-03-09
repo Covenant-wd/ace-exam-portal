@@ -66,7 +66,7 @@ export default function Subjects() {
   };
 
   const openEdit = (s: Subject) => {
-    setEditing(s); setName(s.name); setDescription(s.description || ""); setOpen(true);
+    setEditing(s); setName(s.name); setDescription(s.description || ""); setAllowCalculator((s as any).allow_calculator ?? false); setOpen(true);
   };
 
   const openNew = () => {
