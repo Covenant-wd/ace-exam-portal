@@ -106,12 +106,19 @@ export default function Subjects() {
             <p className="p-8 text-center text-muted-foreground">No subjects yet. Create your first one!</p>
           ) : (
             <Table>
-              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead className="w-24">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Description</TableHead><TableHead>Calculator</TableHead><TableHead className="w-24">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {subjects.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell className="text-muted-foreground">{s.description || "—"}</TableCell>
+                    <TableCell>
+                      {(s as any).allow_calculator ? (
+                        <Badge variant="default" className="gap-1"><Calculator className="h-3 w-3" />Enabled</Badge>
+                      ) : (
+                        <Badge variant="secondary">Disabled</Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
