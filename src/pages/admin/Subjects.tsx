@@ -43,7 +43,7 @@ export default function Subjects() {
     if (!name.trim()) { toast.error("Subject name is required"); return; }
     setSaving(true);
     if (editing) {
-      const { error } = await supabase.from("subjects").update({ name, description }).eq("id", editing.id);
+      const { error } = await supabase.from("subjects").update({ name, description, allow_calculator: allowCalculator } as any).eq("id", editing.id);
       if (error) toast.error(error.message); else toast.success("Subject updated");
     } else {
       const { error } = await supabase.from("subjects").insert({ name, description, created_by: user?.id });
