@@ -64,6 +64,12 @@ export default function TakeExam() {
       setExam(examRes.data);
       setQuestions(qRes.data ?? []);
 
+      // Check if subject allows calculator
+      const { data: subjectData } = await supabase.from("subjects").select("allow_calculator" as any).eq("id", examRes.data.subject_id).single();
+      if (subjectData && (subjectData as any).allow_calculator) {
+        setAllowCalculator(true);
+      }
+
       if (existing) {
         setAttemptId(existing.id);
         // Calculate remaining time
