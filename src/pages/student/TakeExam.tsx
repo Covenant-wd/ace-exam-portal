@@ -38,6 +38,8 @@ export default function TakeExam() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [allowCalculator, setAllowCalculator] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
   const submittedRef = useRef(false);
 
   useEffect(() => {
