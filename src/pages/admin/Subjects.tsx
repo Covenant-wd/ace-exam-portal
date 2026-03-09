@@ -29,6 +29,7 @@ export default function Subjects() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [allowCalculator, setAllowCalculator] = useState(false);
 
   const fetchSubjects = async () => {
     const { data } = await supabase.from("subjects").select("*").order("created_at", { ascending: false });
