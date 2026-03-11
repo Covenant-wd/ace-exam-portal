@@ -2,14 +2,15 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
-type AppRole = "admin" | "student" | "instructor";
+type AppRole = "admin" | "student" | "instructor" | "super_admin";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
+  schoolId: string | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, className?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, schoolId?: string, className?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -20,21 +21,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [schoolId, setSchoolId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchRole = async (userId: string) => {
     const { data } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role, school_id")
       .eq("user_id", userId)
       .single();
     setRole((data?.role as AppRole) ?? null);
+    setSchoolId(data?.school_id ?? null);
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    // Initial load: await role before clearing loading state
     const initializeAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -51,7 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initializeAuth();
 
-    // Ongoing auth changes (sign in / sign out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         if (!isMounted) return;
@@ -59,13 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(newSession?.user ?? null);
         if (newSession?.user) {
           setLoading(true);
-          // Use setTimeout to avoid deadlock inside the callback
           setTimeout(async () => {
             await fetchRole(newSession.user.id);
             if (isMounted) setLoading(false);
           }, 0);
         } else {
           setRole(null);
+          setSchoolId(null);
         }
       }
     );
@@ -76,13 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, className?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, schoolIdParam?: string, className?: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { full_name: fullName, class_name: className || "" },
+        data: {
+          full_name: fullName,
+          class_name: className || "",
+          school_id: schoolIdParam || "",
+        },
       },
     });
     return { error };
@@ -98,10 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setRole(null);
+    setSchoolId(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, schoolId, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
