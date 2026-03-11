@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Navigate } from "react-router-dom";
-import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
-import { Loader2, GraduationCap, BookOpen, Clock, BarChart3, Shield, Users, Zap, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, GraduationCap, BookOpen, Clock, BarChart3, Shield, Users, Zap, ArrowRight, CheckCircle2, Search, School } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -16,42 +18,12 @@ const fadeUp = {
 };
 
 const features = [
-  {
-    icon: BookOpen,
-    title: "Smart Exam Builder",
-    description: "Create rich, multimedia exams with multiple question types in minutes — not hours.",
-    color: "bg-primary/10 text-primary",
-  },
-  {
-    icon: Clock,
-    title: "Timed Assessments",
-    description: "Auto-timed exams with countdowns ensure fair, consistent testing for every student.",
-    color: "bg-secondary/10 text-secondary",
-  },
-  {
-    icon: BarChart3,
-    title: "Instant Results",
-    description: "Automatic grading and analytics give students and teachers immediate insights.",
-    color: "bg-accent/10 text-accent",
-  },
-  {
-    icon: Shield,
-    title: "Secure & Reliable",
-    description: "Role-based access, encrypted data, and anti-cheat measures protect exam integrity.",
-    color: "bg-destructive/10 text-destructive",
-  },
-  {
-    icon: Users,
-    title: "Multi-Role System",
-    description: "Dedicated dashboards for admins, instructors, and students — everyone gets what they need.",
-    color: "bg-info/10 text-info",
-  },
-  {
-    icon: Zap,
-    title: "Lightning Fast",
-    description: "Optimized for speed so exams load instantly, even on slower connections.",
-    color: "bg-warning/10 text-warning",
-  },
+  { icon: BookOpen, title: "Smart Exam Builder", description: "Create rich, multimedia exams with multiple question types in minutes.", color: "bg-primary/10 text-primary" },
+  { icon: Clock, title: "Timed Assessments", description: "Auto-timed exams with countdowns ensure fair, consistent testing.", color: "bg-secondary/10 text-secondary" },
+  { icon: BarChart3, title: "Instant Results", description: "Automatic grading and analytics give immediate insights.", color: "bg-accent/10 text-accent" },
+  { icon: Shield, title: "Secure & Reliable", description: "Role-based access and encrypted data protect exam integrity.", color: "bg-destructive/10 text-destructive" },
+  { icon: Users, title: "Multi-Tenant", description: "Each school gets their own space with separate data, branding, and login.", color: "bg-primary/10 text-primary" },
+  { icon: Zap, title: "Lightning Fast", description: "Optimized for speed so exams load instantly, even on slower connections.", color: "bg-secondary/10 text-secondary" },
 ];
 
 const stats = [
@@ -61,12 +33,29 @@ const stats = [
   { value: "24/7", label: "Availability" },
 ];
 
+interface SchoolItem {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string;
+}
+
 export default function Index() {
   const { user, role, loading } = useAuth();
-  const { schoolName, isLoading: nameLoading } = useSchoolName();
-  const { logoUrl, isLoading: logoLoading } = useSchoolLogo();
+  const [schools, setSchools] = useState<SchoolItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loadingSchools, setLoadingSchools] = useState(true);
 
-  if (loading || nameLoading || logoLoading) {
+  useEffect(() => {
+    const fetchSchools = async () => {
+      const { data } = await supabase.from("schools").select("id, name, slug, logo_url").order("name");
+      setSchools((data as SchoolItem[]) || []);
+      setLoadingSchools(false);
+    };
+    fetchSchools();
+  }, []);
+
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -75,10 +64,15 @@ export default function Index() {
   }
 
   if (user) {
+    if (role === "super_admin") return <Navigate to="/super-admin" replace />;
     if (role === "admin") return <Navigate to="/admin" replace />;
     if (role === "instructor") return <Navigate to="/instructor" replace />;
     return <Navigate to="/student" replace />;
   }
+
+  const filteredSchools = schools.filter((s) =>
+    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
@@ -86,33 +80,22 @@ export default function Index() {
       <nav className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md overflow-hidden">
-              {logoUrl ? (
-                <img src={logoUrl} alt="School logo" className="h-full w-full object-contain" />
-              ) : (
-                <GraduationCap className="h-5 w-5" />
-              )}
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
+              <GraduationCap className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold tracking-tight">{schoolName}</span>
+            <span className="text-lg font-bold tracking-tight">Academia</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link to="/auth/admin">Staff Login</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/auth/student">Student Portal</Link>
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/super-admin/login">Platform Admin</Link>
+          </Button>
         </div>
       </nav>
 
       {/* Hero Section */}
       <section className="relative">
-        {/* Background decoration */}
         <div className="absolute inset-0 -z-10">
           <div className="absolute top-0 left-1/4 h-[500px] w-[500px] rounded-full bg-primary/5 blur-3xl" />
           <div className="absolute top-20 right-1/4 h-[400px] w-[400px] rounded-full bg-secondary/5 blur-3xl" />
-          <div className="absolute bottom-0 left-1/2 h-[300px] w-[300px] rounded-full bg-accent/5 blur-3xl" />
         </div>
 
         <div className="mx-auto max-w-7xl px-6 py-24 md:py-32 lg:py-40">
@@ -124,7 +107,7 @@ export default function Index() {
               className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground shadow-sm"
             >
               <Zap className="h-3.5 w-3.5 text-accent" />
-              Powered by <span className="font-semibold text-foreground">Academia</span>
+              Multi-School CBT Platform
             </motion.div>
 
             <motion.h1
@@ -145,32 +128,83 @@ export default function Index() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl"
             >
-              <span className="font-semibold text-foreground">{schoolName}</span> uses Academia to deliver seamless,
-              secure, and intelligent online examinations for students and educators.
+              Academia powers seamless, secure, and intelligent online examinations for schools worldwide.
+              Find your school below to get started.
             </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
-            >
-              <Button size="lg" className="h-12 px-8 text-base shadow-lg shadow-primary/25" asChild>
-                <Link to="/auth/student">
-                  Get Started <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base" asChild>
-                <Link to="/auth/admin">Staff Access</Link>
-              </Button>
-            </motion.div>
           </div>
         </div>
       </section>
 
+      {/* School Finder */}
+      <section className="border-y border-border bg-card/50 py-16">
+        <div className="mx-auto max-w-4xl px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-8"
+          >
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Find Your School</h2>
+            <p className="mt-3 text-muted-foreground">Select your school to access the student or staff portal.</p>
+          </motion.div>
+
+          <div className="relative max-w-md mx-auto mb-8">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search schools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {loadingSchools ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : filteredSchools.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <School className="h-12 w-12 mx-auto mb-3 opacity-40" />
+              <p>{searchQuery ? "No schools match your search." : "No schools registered yet."}</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredSchools.map((school, i) => (
+                <motion.div
+                  key={school.id}
+                  custom={i}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true }}
+                  variants={fadeUp}
+                >
+                  <Link
+                    to={`/school/${school.slug}`}
+                    className="group flex items-center gap-4 rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 hover:border-primary/30"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 overflow-hidden">
+                      {school.logo_url ? (
+                        <img src={school.logo_url} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <School className="h-6 w-6 text-primary" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{school.name}</h3>
+                      <p className="text-xs text-muted-foreground">Click to login</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Stats Bar */}
-      <section className="border-y border-border bg-card/50">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-6 py-10 md:grid-cols-4">
+      <section className="py-10">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-6 md:grid-cols-4">
           {stats.map((stat, i) => (
             <motion.div
               key={stat.label}
@@ -181,9 +215,7 @@ export default function Index() {
               variants={fadeUp}
               className="text-center"
             >
-              <div className="text-3xl font-extrabold tracking-tight text-primary md:text-4xl">
-                {stat.value}
-              </div>
+              <div className="text-3xl font-extrabold tracking-tight text-primary md:text-4xl">{stat.value}</div>
               <div className="mt-1 text-sm text-muted-foreground">{stat.label}</div>
             </motion.div>
           ))}
@@ -196,11 +228,10 @@ export default function Index() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
           className="mx-auto max-w-2xl text-center"
         >
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Everything You Need for Modern Assessments
+            Everything Schools Need
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
             Built for schools that want reliable, efficient, and fair examination systems.
@@ -235,44 +266,19 @@ export default function Index() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
             className="mx-auto max-w-2xl text-center"
           >
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              How It Works
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              From setup to results in three simple steps.
-            </p>
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">How It Works</h2>
+            <p className="mt-4 text-lg text-muted-foreground">From setup to results in three simple steps.</p>
           </motion.div>
 
           <div className="mt-16 grid gap-10 md:grid-cols-3">
             {[
-              {
-                step: "01",
-                title: "Admin Sets Up",
-                description: "Create classes, add subjects, assign instructors, and configure your school profile.",
-              },
-              {
-                step: "02",
-                title: "Instructors Create Exams",
-                description: "Build exams with rich questions, set time limits, schedule dates, and publish when ready.",
-              },
-              {
-                step: "03",
-                title: "Students Take Exams",
-                description: "Students log in, take timed exams, and get instant results with detailed performance analytics.",
-              },
+              { step: "01", title: "Super Admin Adds School", description: "Create a school, assign an admin, and share the unique login URL." },
+              { step: "02", title: "School Admin Configures", description: "Add classes, subjects, instructors, and students. Create and publish exams." },
+              { step: "03", title: "Students Take Exams", description: "Students log in via their school's portal, take timed exams, and get instant results." },
             ].map((item, i) => (
-              <motion.div
-                key={item.step}
-                custom={i}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={fadeUp}
-                className="relative text-center"
-              >
+              <motion.div key={item.step} custom={i} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="relative text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-xl font-extrabold shadow-lg shadow-primary/20">
                   {item.step}
                 </div>
@@ -284,33 +290,21 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Trust / Collaboration Section */}
+      {/* CTA */}
       <section className="mx-auto max-w-7xl px-6 py-24">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
           className="overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-primary/80 p-10 text-primary-foreground shadow-2xl shadow-primary/20 md:p-16"
         >
           <div className="mx-auto max-w-3xl text-center">
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary-foreground/20 backdrop-blur-sm overflow-hidden">
-              {logoUrl ? (
-                <img src={logoUrl} alt="School logo" className="h-full w-full object-contain p-2" />
-              ) : (
-                <GraduationCap className="h-10 w-10" />
-              )}
-            </div>
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Trusted by {schoolName}
-            </h2>
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Ready to Get Started?</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-primary-foreground/80">
-              This platform is proudly deployed and customized for{" "}
-              <span className="font-semibold text-primary-foreground">{schoolName}</span>,
-              delivering a world-class examination experience powered by Academia technology.
+              Join schools using Academia for seamless computer-based testing.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-6">
-              {["Automated Grading", "Secure Environment", "24/7 Access", "Real-time Analytics"].map((item) => (
+              {["Multi-School Support", "Secure Environment", "24/7 Access", "Real-time Analytics"].map((item) => (
                 <div key={item} className="flex items-center gap-2 text-sm font-medium text-primary-foreground/90">
                   <CheckCircle2 className="h-4 w-4" />
                   {item}
@@ -321,55 +315,20 @@ export default function Index() {
         </motion.div>
       </section>
 
-      {/* CTA Section */}
-      <section className="border-t border-border bg-card/50 py-20">
-        <div className="mx-auto max-w-3xl px-6 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Ready to Begin?
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              Access your exams, track your progress, and achieve your best — all in one place.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <Button size="lg" className="h-12 px-8 text-base shadow-lg shadow-primary/25" asChild>
-                <Link to="/auth/student">
-                  Student Login <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 text-base" asChild>
-                <Link to="/auth/admin">Staff Login</Link>
-              </Button>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="border-t border-border bg-background py-10">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
-                {logoUrl ? (
-                  <img src={logoUrl} alt="School logo" className="h-full w-full object-contain" />
-                ) : (
-                  <GraduationCap className="h-4 w-4" />
-                )}
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <GraduationCap className="h-4 w-4" />
               </div>
-              <span className="text-sm font-semibold">{schoolName}</span>
+              <span className="text-sm font-semibold">Academia</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Powered by <span className="font-semibold text-foreground">Academia</span> — Modern Computer-Based Testing Platform
+              Modern Multi-School Computer-Based Testing Platform
             </p>
-            <p className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} All rights reserved.
-            </p>
+            <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} All rights reserved.</p>
           </div>
         </div>
       </footer>
