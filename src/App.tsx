@@ -5,10 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import Index from "./pages/Index";
-import AdminLogin from "./pages/auth/AdminLogin";
-import StudentLogin from "./pages/auth/StudentLogin";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/DashboardLayout";
+import SuperAdminLayout from "./components/SuperAdminLayout";
+import SuperAdminLogin from "./pages/super-admin/SuperAdminLogin";
+import SuperAdminDashboard from "./pages/super-admin/SuperAdminDashboard";
+import SchoolLogin from "./pages/school/SchoolLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Subjects from "./pages/admin/Subjects";
 import Exams from "./pages/admin/Exams";
@@ -27,12 +29,13 @@ import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" }) {
+function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" }) {
   const { user, role, loading } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) {
-    if (requiredRole === "student") return <Navigate to="/auth/student" replace />;
-    return <Navigate to="/auth/admin" replace />;
+    if (requiredRole === "super_admin") return <Navigate to="/super-admin/login" replace />;
+    if (requiredRole === "student") return <Navigate to="/" replace />;
+    return <Navigate to="/" replace />;
   }
   if (role !== requiredRole) return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -42,9 +45,18 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Index />} />
-      <Route path="/auth" element={<Navigate to="/auth/student" replace />} />
-      <Route path="/auth/admin" element={<AdminLogin />} />
-      <Route path="/auth/student" element={<StudentLogin />} />
+
+      {/* School-specific login */}
+      <Route path="/school/:slug" element={<SchoolLogin />} />
+
+      {/* Super Admin */}
+      <Route path="/super-admin/login" element={<SuperAdminLogin />} />
+      <Route path="/super-admin" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
+
+      {/* Legacy auth routes - redirect to home */}
+      <Route path="/auth" element={<Navigate to="/" replace />} />
+      <Route path="/auth/admin" element={<Navigate to="/" replace />} />
+      <Route path="/auth/student" element={<Navigate to="/" replace />} />
 
       {/* Admin routes */}
       <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><AdminDashboard /></DashboardLayout></ProtectedRoute>} />
