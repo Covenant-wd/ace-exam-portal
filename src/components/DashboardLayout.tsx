@@ -59,9 +59,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : studentLinks;
 
   const handleSignOut = async () => {
-    const currentRole = role;
     await signOut();
-    navigate(currentRole === "student" ? "/auth/student" : "/auth/admin");
+    navigate("/");
   };
 
   return (
