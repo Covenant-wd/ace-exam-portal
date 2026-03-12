@@ -4,8 +4,10 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
-  LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck
+  LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
+  CheckSquare, Clock, Award, DollarSign, Megaphone
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,11 +21,17 @@ const adminLinks = [
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },
   { to: "/admin/results", label: "Results", icon: BarChart3 },
+  { to: "/admin/attendance", label: "Attendance", icon: CheckSquare },
+  { to: "/admin/timetable", label: "Timetable", icon: Clock },
+  { to: "/admin/grades", label: "Grades", icon: Award },
+  { to: "/admin/fees", label: "Fees", icon: DollarSign },
+  { to: "/admin/announcements", label: "Announcements", icon: Megaphone },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 const studentLinks = [
-  { to: "/student", label: "Exams", icon: ClipboardList },
+  { to: "/student", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/student/exams", label: "Exams", icon: ClipboardList },
   { to: "/student/results", label: "My Results", icon: BarChart3 },
 ];
 
