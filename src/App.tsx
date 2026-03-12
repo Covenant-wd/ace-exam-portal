@@ -75,6 +75,11 @@ function AppRoutes() {
       <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/results" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/attendance" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/timetable" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/grades" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/fees" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Fees /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/announcements" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Announcements /></DashboardLayout></ProtectedRoute>} />
 
       {/* Instructor routes */}
       <Route path="/instructor" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><InstructorDashboard /></DashboardLayout></ProtectedRoute>} />
@@ -85,7 +90,8 @@ function AppRoutes() {
       <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
 
       {/* Student routes */}
-      <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentDashboard /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><TakeExam /></ProtectedRoute>} />
       <Route path="/student/results" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentResults /></DashboardLayout></ProtectedRoute>} />
 
