@@ -4,8 +4,10 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
-  LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck
+  LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
+  CheckSquare, Clock, Award, DollarSign, Megaphone
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import { supabase } from "@/integrations/supabase/client";
