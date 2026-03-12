@@ -44,7 +44,11 @@ Deno.serve(async (req) => {
         email, password, email_confirm: true,
         user_metadata: { full_name, school_id },
       });
-      if (createError) throw createError;
+      if (createError) {
+        return new Response(JSON.stringify({ error: createError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       // Update profile with school_id
       await supabaseAdmin.from("profiles").update({
