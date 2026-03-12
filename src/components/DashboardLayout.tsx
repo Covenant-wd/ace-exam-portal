@@ -19,11 +19,17 @@ const adminLinks = [
   { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
   { to: "/admin/exams", label: "Exams", icon: FileText },
   { to: "/admin/results", label: "Results", icon: BarChart3 },
+  { to: "/admin/attendance", label: "Attendance", icon: CheckSquare },
+  { to: "/admin/timetable", label: "Timetable", icon: Clock },
+  { to: "/admin/grades", label: "Grades", icon: Award },
+  { to: "/admin/fees", label: "Fees", icon: DollarSign },
+  { to: "/admin/announcements", label: "Announcements", icon: Megaphone },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 const studentLinks = [
-  { to: "/student", label: "Exams", icon: ClipboardList },
+  { to: "/student", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/student/exams", label: "Exams", icon: ClipboardList },
   { to: "/student/results", label: "My Results", icon: BarChart3 },
 ];
 
