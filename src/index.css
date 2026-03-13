@@ -114,3 +114,8 @@
     font-family: 'Space Grotesk', sans-serif;
   }
 }
+
+/* Hide Lovable badge */
+a[href*="lovable.dev"] {
+  display: none !important;
+}
