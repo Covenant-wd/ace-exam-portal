@@ -35,7 +35,7 @@ interface Session { id: string; name: string; is_active: boolean; }
 interface ClassItem { id: string; name: string; }
 
 export default function Exams() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
@@ -54,12 +54,13 @@ export default function Exams() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
+    if (!schoolId) return;
     const [examsRes, subjectsRes, termsRes, sessionsRes, classesRes] = await Promise.all([
-      supabase.from("exams").select("*, subjects(name), terms(name), classes(name)").order("created_at", { ascending: false }),
-      supabase.from("subjects").select("id, name").order("name"),
-      supabase.from("terms").select("id, name, session_id").order("created_at"),
-      supabase.from("sessions").select("id, name, is_active").order("created_at", { ascending: false }),
-      supabase.from("classes").select("id, name").order("name"),
+      supabase.from("exams").select("*, subjects(name), terms(name), classes(name)").eq("school_id", schoolId).order("created_at", { ascending: false }),
+      supabase.from("subjects").select("id, name").eq("school_id", schoolId).order("name"),
+      supabase.from("terms").select("id, name, session_id").eq("school_id", schoolId).order("created_at"),
+      supabase.from("sessions").select("id, name, is_active").eq("school_id", schoolId).order("created_at", { ascending: false }),
+      supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
     ]);
     setExams((examsRes.data as any[]) ?? []);
     setSubjects((subjectsRes.data as Subject[]) ?? []);
@@ -69,10 +70,10 @@ export default function Exams() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const handleSave = async () => {
-    if (!title.trim() || !subjectId) { toast.error("Title and subject are required"); return; }
+    if (!title.trim() || !subjectId || !schoolId) { toast.error("Title and subject are required"); return; }
     setSaving(true);
     const payload: any = {
       title, description, subject_id: subjectId,
@@ -80,6 +81,7 @@ export default function Exams() {
       is_published: isPublished, created_by: user?.id,
       term_id: termId || null,
       class_id: classId || null,
+      school_id: schoolId,
     };
     if (editing) {
       const { error } = await supabase.from("exams").update(payload).eq("id", editing.id);

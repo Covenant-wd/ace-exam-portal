@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,59 +12,45 @@ import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-interface Session {
-  id: string;
-  name: string;
-  is_active: boolean;
-}
-
-interface Term {
-  id: string;
-  session_id: string;
-  name: string;
-  is_active: boolean;
-}
+interface Session { id: string; name: string; is_active: boolean; }
+interface Term { id: string; session_id: string; name: string; is_active: boolean; }
 
 export default function Sessions() {
+  const { schoolId } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Session dialog
   const [sessionOpen, setSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [sessionName, setSessionName] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // Term dialog
   const [termOpen, setTermOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<Term | null>(null);
   const [termName, setTermName] = useState("");
   const [termSessionId, setTermSessionId] = useState("");
-
-  // Track expanded sessions
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const fetchData = async () => {
+    if (!schoolId) return;
     const [sessRes, termsRes] = await Promise.all([
-      supabase.from("sessions").select("*").order("created_at", { ascending: false }),
-      supabase.from("terms").select("*").order("created_at"),
+      supabase.from("sessions").select("*").eq("school_id", schoolId).order("created_at", { ascending: false }),
+      supabase.from("terms").select("*").eq("school_id", schoolId).order("created_at"),
     ]);
     setSessions(sessRes.data ?? []);
     setTerms(termsRes.data ?? []);
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const handleSaveSession = async () => {
-    if (!sessionName.trim()) { toast.error("Session name is required"); return; }
+    if (!sessionName.trim() || !schoolId) { toast.error("Session name is required"); return; }
     setSaving(true);
     if (editingSession) {
       const { error } = await supabase.from("sessions").update({ name: sessionName }).eq("id", editingSession.id);
       if (error) toast.error(error.message); else toast.success("Session updated");
     } else {
-      const { error } = await supabase.from("sessions").insert({ name: sessionName });
+      const { error } = await supabase.from("sessions").insert({ name: sessionName, school_id: schoolId });
       if (error) toast.error(error.message); else toast.success("Session created");
     }
     setSaving(false); setSessionOpen(false); fetchData();
@@ -76,22 +63,21 @@ export default function Sessions() {
   };
 
   const toggleActiveSession = async (s: Session) => {
-    // Deactivate all, then activate selected
-    if (!s.is_active) {
-      await supabase.from("sessions").update({ is_active: false }).neq("id", "");
+    if (!s.is_active && schoolId) {
+      await supabase.from("sessions").update({ is_active: false }).eq("school_id", schoolId);
     }
     await supabase.from("sessions").update({ is_active: !s.is_active }).eq("id", s.id);
     fetchData();
   };
 
   const handleSaveTerm = async () => {
-    if (!termName.trim()) { toast.error("Term name is required"); return; }
+    if (!termName.trim() || !schoolId) { toast.error("Term name is required"); return; }
     setSaving(true);
     if (editingTerm) {
       const { error } = await supabase.from("terms").update({ name: termName }).eq("id", editingTerm.id);
       if (error) toast.error(error.message); else toast.success("Term updated");
     } else {
-      const { error } = await supabase.from("terms").insert({ name: termName, session_id: termSessionId });
+      const { error } = await supabase.from("terms").insert({ name: termName, session_id: termSessionId, school_id: schoolId });
       if (error) toast.error(error.message); else toast.success("Term created");
     }
     setSaving(false); setTermOpen(false); fetchData();
@@ -105,7 +91,6 @@ export default function Sessions() {
 
   const toggleActiveTerm = async (t: Term) => {
     if (!t.is_active) {
-      // Deactivate all terms in the same session
       await supabase.from("terms").update({ is_active: false }).eq("session_id", t.session_id);
     }
     await supabase.from("terms").update({ is_active: !t.is_active }).eq("id", t.id);
@@ -197,7 +182,6 @@ export default function Sessions() {
         </div>
       )}
 
-      {/* Session dialog */}
       <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingSession ? "Edit Session" : "New Session"}</DialogTitle></DialogHeader>
@@ -211,7 +195,6 @@ export default function Sessions() {
         </DialogContent>
       </Dialog>
 
-      {/* Term dialog */}
       <Dialog open={termOpen} onOpenChange={setTermOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingTerm ? "Edit Term" : "New Term"}</DialogTitle></DialogHeader>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ interface ClassSubject {
 }
 
 export default function Classes() {
+  const { schoolId } = useAuth();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
@@ -40,9 +42,10 @@ export default function Classes() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
+    if (!schoolId) return;
     const [classesRes, subjectsRes, csRes] = await Promise.all([
-      supabase.from("classes").select("*").order("name"),
-      supabase.from("subjects").select("id, name").order("name"),
+      supabase.from("classes").select("*").eq("school_id", schoolId).order("name"),
+      supabase.from("subjects").select("id, name").eq("school_id", schoolId).order("name"),
       supabase.from("class_subjects").select("class_id, subject_id"),
     ]);
     setClasses(classesRes.data ?? []);
@@ -51,10 +54,10 @@ export default function Classes() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const handleSave = async () => {
-    if (!name.trim()) { toast.error("Class name is required"); return; }
+    if (!name.trim() || !schoolId) { toast.error("Class name is required"); return; }
     setSaving(true);
 
     let classId: string;
@@ -63,12 +66,11 @@ export default function Classes() {
       if (error) { toast.error(error.message); setSaving(false); return; }
       classId = editing.id;
     } else {
-      const { data, error } = await supabase.from("classes").insert({ name, description }).select("id").single();
+      const { data, error } = await supabase.from("classes").insert({ name, description, school_id: schoolId }).select("id").single();
       if (error) { toast.error(error.message); setSaving(false); return; }
       classId = data.id;
     }
 
-    // Sync class subjects: delete all, re-insert
     await supabase.from("class_subjects").delete().eq("class_id", classId);
     if (selectedSubjects.length > 0) {
       await supabase.from("class_subjects").insert(
