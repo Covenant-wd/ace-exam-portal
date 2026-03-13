@@ -12,24 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Plus, Megaphone, Trash2, Edit } from "lucide-react";
 
-interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-  target_role: string;
-  target_class_id: string | null;
-  is_active: boolean;
-  created_at: string;
-}
-
+interface Announcement { id: string; title: string; content: string; target_role: string; target_class_id: string | null; is_active: boolean; created_at: string; }
 interface ClassItem { id: string; name: string; }
 
 export default function Announcements() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [items, setItems] = useState<Announcement[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [schoolId, setSchoolId] = useState<string | null>(null);
 
   const [dialog, setDialog] = useState(false);
   const [editing, setEditing] = useState<Announcement | null>(null);
@@ -40,21 +30,15 @@ export default function Announcements() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!schoolId) return;
     const init = async () => {
-      const { data: classData } = await supabase.from("classes").select("id, name").order("name");
+      const { data: classData } = await supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name");
       setClasses((classData as ClassItem[]) || []);
-
-      if (user) {
-        const { data: profile } = await supabase.from("profiles").select("school_id").eq("user_id", user.id).single();
-        if (profile?.school_id) {
-          setSchoolId(profile.school_id);
-          await loadAnnouncements(profile.school_id);
-        }
-      }
+      await loadAnnouncements(schoolId);
       setLoading(false);
     };
     init();
-  }, [user]);
+  }, [schoolId]);
 
   const loadAnnouncements = async (sid: string) => {
     const { data } = await supabase.from("announcements").select("*").eq("school_id", sid).order("created_at", { ascending: false });
@@ -66,8 +50,7 @@ export default function Announcements() {
     setSaving(true);
     try {
       const payload: any = {
-        title, content, target_role: targetRole,
-        target_class_id: targetClass || null,
+        title, content, target_role: targetRole, target_class_id: targetClass || null,
         school_id: schoolId, created_by: user.id,
       };
       if (editing) {
@@ -105,10 +88,7 @@ export default function Announcements() {
           <h1 className="text-3xl font-bold">Announcements</h1>
           <p className="text-muted-foreground">Publish announcements for students and staff</p>
         </div>
-        <Button onClick={() => {
-          setEditing(null); setTitle(""); setContent(""); setTargetRole("all"); setTargetClass("");
-          setDialog(true);
-        }}><Plus className="mr-2 h-4 w-4" /> New Announcement</Button>
+        <Button onClick={() => { setEditing(null); setTitle(""); setContent(""); setTargetRole("all"); setTargetClass(""); setDialog(true); }}><Plus className="mr-2 h-4 w-4" /> New Announcement</Button>
       </div>
 
       {items.length === 0 ? (
@@ -127,14 +107,8 @@ export default function Announcements() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => toggleActive(item)}>
-                    {item.is_active ? "Deactivate" : "Activate"}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setEditing(item); setTitle(item.title); setContent(item.content);
-                    setTargetRole(item.target_role); setTargetClass(item.target_class_id || "");
-                    setDialog(true);
-                  }}><Edit className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setEditing(item); setTitle(item.title); setContent(item.content); setTargetRole(item.target_role); setTargetClass(item.target_class_id || ""); setDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
                   <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
               </CardHeader>

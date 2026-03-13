@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 
 export default function Results() {
+  const { schoolId } = useAuth();
   const [exams, setExams] = useState<any[]>([]);
   const [selectedExam, setSelectedExam] = useState<string>("");
   const [results, setResults] = useState<any[]>([]);
@@ -14,11 +16,12 @@ export default function Results() {
   const [loadingResults, setLoadingResults] = useState(false);
 
   useEffect(() => {
-    supabase.from("exams").select("id, title, subjects(name)").order("created_at", { ascending: false }).then(({ data }) => {
+    if (!schoolId) return;
+    supabase.from("exams").select("id, title, subjects(name)").eq("school_id", schoolId).order("created_at", { ascending: false }).then(({ data }) => {
       setExams(data ?? []);
       setLoading(false);
     });
-  }, []);
+  }, [schoolId]);
 
   useEffect(() => {
     if (!selectedExam) { setResults([]); return; }

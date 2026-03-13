@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,7 @@ interface Subject {
 }
 
 export default function Subjects() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -32,21 +32,22 @@ export default function Subjects() {
   const [allowCalculator, setAllowCalculator] = useState(false);
 
   const fetchSubjects = async () => {
-    const { data } = await supabase.from("subjects").select("*").order("created_at", { ascending: false });
+    if (!schoolId) return;
+    const { data } = await supabase.from("subjects").select("*").eq("school_id", schoolId).order("created_at", { ascending: false });
     setSubjects((data as Subject[]) ?? []);
     setLoading(false);
   };
 
-  useEffect(() => { fetchSubjects(); }, []);
+  useEffect(() => { fetchSubjects(); }, [schoolId]);
 
   const handleSave = async () => {
-    if (!name.trim()) { toast.error("Subject name is required"); return; }
+    if (!name.trim() || !schoolId) { toast.error("Subject name is required"); return; }
     setSaving(true);
     if (editing) {
       const { error } = await supabase.from("subjects").update({ name, description, allow_calculator: allowCalculator } as any).eq("id", editing.id);
       if (error) toast.error(error.message); else toast.success("Subject updated");
     } else {
-      const { error } = await supabase.from("subjects").insert({ name, description, created_by: user?.id, allow_calculator: allowCalculator } as any);
+      const { error } = await supabase.from("subjects").insert({ name, description, created_by: user?.id, allow_calculator: allowCalculator, school_id: schoolId } as any);
       if (error) toast.error(error.message); else toast.success("Subject created");
     }
     setSaving(false);
@@ -55,7 +56,6 @@ export default function Subjects() {
     setName("");
     setDescription("");
     setAllowCalculator(false);
-    fetchSubjects();
     fetchSubjects();
   };
 

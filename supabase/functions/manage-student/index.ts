@@ -13,11 +13,16 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Verify caller is admin
   const authHeader = req.headers.get("Authorization")!;
   const token = authHeader.replace("Bearer ", "");
   const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
   if (!caller) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  // Get caller's school_id
+  const { data: callerRole } = await supabaseAdmin.from("user_roles").select("role, school_id").eq("user_id", caller.id).single();
+  if (!callerRole) return new Response(JSON.stringify({ error: "No role found" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  const callerSchoolId = callerRole.school_id;
 
   const { data: isAdmin } = await supabaseAdmin.rpc("has_role", { _user_id: caller.id, _role: "admin" });
   let isAuthorized = !!isAdmin;
@@ -39,21 +44,22 @@ Deno.serve(async (req) => {
 
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email, password, email_confirm: true,
-        user_metadata: { full_name: `${first_name} ${last_name}` },
+        user_metadata: { full_name: `${first_name} ${last_name}`, school_id: callerSchoolId },
       });
       if (createError) throw createError;
 
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
         first_name, middle_name: middle_name || "", last_name, username: username || null,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_id: class_id || null,
-        date_of_birth: date_of_birth || null,
-        address: address || "",
-        parent_name: parent_name || "", nationality: nationality || "",
-        subjects_offered: subjects_offered || [],
-        gender: gender || "",
+        class_id: class_id || null, date_of_birth: date_of_birth || null,
+        address: address || "", parent_name: parent_name || "", nationality: nationality || "",
+        subjects_offered: subjects_offered || [], gender: gender || "",
+        school_id: callerSchoolId,
       }).eq("user_id", newUser.user!.id);
       if (profileError) throw profileError;
+
+      // Ensure user_roles has correct school_id
+      await supabaseAdmin.from("user_roles").update({ school_id: callerSchoolId }).eq("user_id", newUser.user!.id);
 
       return new Response(JSON.stringify({ success: true, user_id: newUser.user!.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -62,6 +68,12 @@ Deno.serve(async (req) => {
 
     if (action === "update") {
       const { user_id, email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender } = body;
+
+      // Verify student belongs to caller's school
+      const { data: studentRole } = await supabaseAdmin.from("user_roles").select("school_id").eq("user_id", user_id).single();
+      if (studentRole?.school_id !== callerSchoolId) {
+        return new Response(JSON.stringify({ error: "Student does not belong to your school" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       const authUpdate: Record<string, any> = {};
       if (email) authUpdate.email = email;
@@ -74,12 +86,9 @@ Deno.serve(async (req) => {
       const { error: profileError } = await supabaseAdmin.from("profiles").update({
         first_name, middle_name: middle_name || "", last_name, username: username || null,
         full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
-        class_id: class_id || null,
-        date_of_birth: date_of_birth || null,
-        address: address || "",
-        parent_name: parent_name || "", nationality: nationality || "",
-        subjects_offered: subjects_offered || [],
-        gender: gender || "",
+        class_id: class_id || null, date_of_birth: date_of_birth || null,
+        address: address || "", parent_name: parent_name || "", nationality: nationality || "",
+        subjects_offered: subjects_offered || [], gender: gender || "",
       }).eq("user_id", user_id);
       if (profileError) throw profileError;
 
@@ -89,7 +98,8 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list") {
-      const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "student");
+      // Only list students from caller's school
+      const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "student").eq("school_id", callerSchoolId);
       if (!roles || roles.length === 0) return new Response(JSON.stringify({ students: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
       const userIds = roles.map(r => r.user_id);

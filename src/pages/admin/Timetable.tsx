@@ -13,28 +13,13 @@ import { Loader2, Plus, Clock, Trash2, Edit } from "lucide-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-interface Period {
-  id: string;
-  name: string;
-  start_time: string;
-  end_time: string;
-  period_order: number;
-}
-
-interface TimetableEntry {
-  id: string;
-  class_id: string;
-  subject_id: string;
-  instructor_id: string | null;
-  period_id: string;
-  day_of_week: number;
-}
-
+interface Period { id: string; name: string; start_time: string; end_time: string; period_order: number; }
+interface TimetableEntry { id: string; class_id: string; subject_id: string; instructor_id: string | null; period_id: string; day_of_week: number; }
 interface ClassItem { id: string; name: string; }
 interface Subject { id: string; name: string; }
 
 export default function Timetable() {
-  const { user } = useAuth();
+  const { schoolId } = useAuth();
   const [periods, setPeriods] = useState<Period[]>([]);
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -42,7 +27,6 @@ export default function Timetable() {
   const [selectedClass, setSelectedClass] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Period dialog
   const [periodDialog, setPeriodDialog] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<Period | null>(null);
   const [periodName, setPeriodName] = useState("");
@@ -50,42 +34,33 @@ export default function Timetable() {
   const [endTime, setEndTime] = useState("09:00");
   const [saving, setSaving] = useState(false);
 
-  // Entry dialog
   const [entryDialog, setEntryDialog] = useState(false);
   const [entryDay, setEntryDay] = useState(0);
   const [entryPeriod, setEntryPeriod] = useState("");
   const [entrySubject, setEntrySubject] = useState("");
 
-  const [schoolId, setSchoolId] = useState<string | null>(null);
-
   useEffect(() => {
+    if (!schoolId) return;
     const init = async () => {
-      const [classRes, subjectRes] = await Promise.all([
-        supabase.from("classes").select("id, name").order("name"),
-        supabase.from("subjects").select("id, name").order("name"),
+      const [classRes, subjectRes, periodRes] = await Promise.all([
+        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
+        supabase.from("subjects").select("id, name").eq("school_id", schoolId).order("name"),
+        supabase.from("timetable_periods").select("*").eq("school_id", schoolId).order("period_order"),
       ]);
       setClasses((classRes.data as ClassItem[]) || []);
       setSubjects((subjectRes.data as Subject[]) || []);
-
-      if (user) {
-        const { data: profile } = await supabase.from("profiles").select("school_id").eq("user_id", user.id).single();
-        if (profile?.school_id) {
-          setSchoolId(profile.school_id);
-          const { data: periodData } = await supabase.from("timetable_periods").select("*").eq("school_id", profile.school_id).order("period_order");
-          setPeriods((periodData as Period[]) || []);
-        }
-      }
+      setPeriods((periodRes.data as Period[]) || []);
       setLoading(false);
     };
     init();
-  }, [user]);
+  }, [schoolId]);
 
   useEffect(() => {
-    if (!selectedClass) return;
-    supabase.from("timetable_entries").select("*").eq("class_id", selectedClass).then(({ data }) => {
+    if (!selectedClass || !schoolId) return;
+    supabase.from("timetable_entries").select("*").eq("class_id", selectedClass).eq("school_id", schoolId).then(({ data }) => {
       setEntries((data as TimetableEntry[]) || []);
     });
-  }, [selectedClass]);
+  }, [selectedClass, schoolId]);
 
   const handleSavePeriod = async () => {
     if (!periodName || !schoolId) return;
@@ -103,7 +78,6 @@ export default function Timetable() {
       }
       toast.success("Period saved");
       setPeriodDialog(false);
-      // Reload periods
       const { data } = await supabase.from("timetable_periods").select("*").eq("school_id", schoolId).order("period_order");
       setPeriods((data as Period[]) || []);
     } catch (err: any) { toast.error(err.message); }
@@ -128,7 +102,7 @@ export default function Timetable() {
       if (error) throw error;
       toast.success("Entry added");
       setEntryDialog(false);
-      const { data } = await supabase.from("timetable_entries").select("*").eq("class_id", selectedClass);
+      const { data } = await supabase.from("timetable_entries").select("*").eq("class_id", selectedClass).eq("school_id", schoolId);
       setEntries((data as TimetableEntry[]) || []);
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
@@ -141,10 +115,6 @@ export default function Timetable() {
   };
 
   const getSubjectName = (id: string) => subjects.find((s) => s.id === id)?.name || "—";
-  const getPeriodName = (id: string) => {
-    const p = periods.find((p) => p.id === id);
-    return p ? `${p.name} (${p.start_time.slice(0, 5)} - ${p.end_time.slice(0, 5)})` : "—";
-  };
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
@@ -155,7 +125,6 @@ export default function Timetable() {
         <p className="text-muted-foreground">Manage periods and class schedules</p>
       </div>
 
-      {/* Periods Section */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Periods</CardTitle>
@@ -165,14 +134,7 @@ export default function Timetable() {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Period</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Period</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {periods.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No periods configured</TableCell></TableRow>
@@ -194,16 +156,13 @@ export default function Timetable() {
         </CardContent>
       </Card>
 
-      {/* Schedule */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Class Schedule</CardTitle>
           <div className="flex gap-2">
             <Select value={selectedClass} onValueChange={setSelectedClass}>
               <SelectTrigger className="w-48"><SelectValue placeholder="Select Class" /></SelectTrigger>
-              <SelectContent>
-                {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
+              <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
             </Select>
             {selectedClass && (
               <Button size="sm" onClick={() => { setEntryDay(0); setEntryPeriod(""); setEntrySubject(""); setEntryDialog(true); }}>
@@ -218,12 +177,7 @@ export default function Timetable() {
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Period</TableHead>
-                    {DAYS.slice(0, 5).map((d) => <TableHead key={d}>{d}</TableHead>)}
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Period</TableHead>{DAYS.slice(0, 5).map((d) => <TableHead key={d}>{d}</TableHead>)}</TableRow></TableHeader>
                 <TableBody>
                   {periods.length === 0 ? (
                     <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Add periods first</TableCell></TableRow>
@@ -231,8 +185,7 @@ export default function Timetable() {
                     periods.map((period) => (
                       <TableRow key={period.id}>
                         <TableCell className="font-medium whitespace-nowrap">
-                          {period.name}<br />
-                          <span className="text-xs text-muted-foreground">{period.start_time.slice(0, 5)} - {period.end_time.slice(0, 5)}</span>
+                          {period.name}<br /><span className="text-xs text-muted-foreground">{period.start_time.slice(0, 5)} - {period.end_time.slice(0, 5)}</span>
                         </TableCell>
                         {DAYS.slice(0, 5).map((_, dayIdx) => {
                           const entry = entries.find((e) => e.period_id === period.id && e.day_of_week === dayIdx);
@@ -241,13 +194,9 @@ export default function Timetable() {
                               {entry ? (
                                 <div className="flex items-center gap-1">
                                   <span className="text-sm font-medium">{getSubjectName(entry.subject_id)}</span>
-                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDeleteEntry(entry.id)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDeleteEntry(entry.id)}><Trash2 className="h-3 w-3" /></Button>
                                 </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">—</span>
-                              )}
+                              ) : <span className="text-xs text-muted-foreground">—</span>}
                             </TableCell>
                           );
                         })}
@@ -261,7 +210,6 @@ export default function Timetable() {
         </CardContent>
       </Card>
 
-      {/* Period Dialog */}
       <Dialog open={periodDialog} onOpenChange={setPeriodDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingPeriod ? "Edit Period" : "Add Period"}</DialogTitle></DialogHeader>
@@ -276,7 +224,6 @@ export default function Timetable() {
         </DialogContent>
       </Dialog>
 
-      {/* Entry Dialog */}
       <Dialog open={entryDialog} onOpenChange={setEntryDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Timetable Entry</DialogTitle></DialogHeader>

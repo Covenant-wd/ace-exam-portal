@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpen, FileText, Users, ClipboardList } from "lucide-react";
 
 export default function AdminDashboard() {
+  const { schoolId } = useAuth();
   const [stats, setStats] = useState({ students: 0, subjects: 0, exams: 0, attempts: 0 });
 
   useEffect(() => {
+    if (!schoolId) return;
     const fetchStats = async () => {
       const [students, subjects, exams, attempts] = await Promise.all([
-        supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student"),
-        supabase.from("subjects").select("id", { count: "exact", head: true }),
-        supabase.from("exams").select("id", { count: "exact", head: true }),
+        supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student").eq("school_id", schoolId),
+        supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
+        supabase.from("exams").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
         supabase.from("exam_attempts").select("id", { count: "exact", head: true }).eq("is_submitted", true),
       ]);
       setStats({
@@ -22,7 +25,7 @@ export default function AdminDashboard() {
       });
     };
     fetchStats();
-  }, []);
+  }, [schoolId]);
 
   const cards = [
     { label: "Students", value: stats.students, icon: Users, color: "bg-primary" },

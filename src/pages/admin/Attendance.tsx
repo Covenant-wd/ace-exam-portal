@@ -2,32 +2,17 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, XCircle, Clock, AlertCircle, Save } from "lucide-react";
 
-interface StudentProfile {
-  user_id: string;
-  full_name: string;
-  class_id: string | null;
-}
-
-interface ClassItem {
-  id: string;
-  name: string;
-}
-
+interface StudentProfile { user_id: string; full_name: string; class_id: string | null; }
+interface ClassItem { id: string; name: string; }
 type AttendanceStatus = "present" | "absent" | "late" | "excused";
-
-interface AttendanceRecord {
-  student_id: string;
-  status: AttendanceStatus;
-  notes: string;
-}
+interface AttendanceRecord { student_id: string; status: AttendanceStatus; notes: string; }
 
 const statusConfig: Record<AttendanceStatus, { label: string; icon: any; color: string }> = {
   present: { label: "Present", icon: CheckCircle2, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
@@ -37,7 +22,7 @@ const statusConfig: Record<AttendanceStatus, { label: string; icon: any; color: 
 };
 
 export default function Attendance() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
@@ -46,40 +31,32 @@ export default function Attendance() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingRecords, setExistingRecords] = useState(false);
-
-  // Summary stats
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0, excused: 0 });
 
   useEffect(() => {
-    supabase.from("classes").select("id, name").order("name").then(({ data }) => {
+    if (!schoolId) return;
+    supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name").then(({ data }) => {
       setClasses((data as ClassItem[]) || []);
       setLoading(false);
     });
-  }, []);
+  }, [schoolId]);
 
   useEffect(() => {
-    if (!selectedClass) return;
+    if (!selectedClass || !schoolId) return;
     loadStudentsAndAttendance();
   }, [selectedClass, selectedDate]);
 
   const loadStudentsAndAttendance = async () => {
     setLoading(true);
-    // Load students in class
     const { data: studentData } = await supabase
-      .from("profiles")
-      .select("user_id, full_name, class_id")
-      .eq("class_id", selectedClass)
-      .order("full_name");
-
+      .from("profiles").select("user_id, full_name, class_id")
+      .eq("class_id", selectedClass).eq("school_id", schoolId!).order("full_name");
     const studentList = (studentData as StudentProfile[]) || [];
     setStudents(studentList);
 
-    // Load existing attendance
     const { data: attendanceData } = await supabase
-      .from("attendance")
-      .select("*")
-      .eq("class_id", selectedClass)
-      .eq("date", selectedDate);
+      .from("attendance").select("*")
+      .eq("class_id", selectedClass).eq("date", selectedDate).eq("school_id", schoolId!);
 
     const recordMap = new Map<string, AttendanceRecord>();
     if (attendanceData && attendanceData.length > 0) {
@@ -89,7 +66,6 @@ export default function Attendance() {
       });
     } else {
       setExistingRecords(false);
-      // Default all to present
       studentList.forEach((s) => {
         recordMap.set(s.user_id, { student_id: s.user_id, status: "present", notes: "" });
       });
@@ -129,36 +105,19 @@ export default function Attendance() {
   };
 
   const handleSave = async () => {
-    if (!selectedClass || !user) return;
+    if (!selectedClass || !user || !schoolId) return;
     setSaving(true);
     try {
-      // Delete existing records for this date/class
-      await supabase.from("attendance").delete().eq("class_id", selectedClass).eq("date", selectedDate);
-
-      // Insert all records
+      await supabase.from("attendance").delete().eq("class_id", selectedClass).eq("date", selectedDate).eq("school_id", schoolId);
       const inserts = Array.from(records.values()).map((r) => ({
-        student_id: r.student_id,
-        class_id: selectedClass,
-        school_id: undefined as any, // Will be set by the school context
-        date: selectedDate,
-        status: r.status as any,
-        marked_by: user.id,
-        notes: r.notes,
+        student_id: r.student_id, class_id: selectedClass, school_id: schoolId,
+        date: selectedDate, status: r.status as any, marked_by: user.id, notes: r.notes,
       }));
-
-      // Get school_id from user's profile
-      const { data: profile } = await supabase.from("profiles").select("school_id").eq("user_id", user.id).single();
-      if (profile?.school_id) {
-        inserts.forEach((i) => (i.school_id = profile.school_id));
-      }
-
       const { error } = await supabase.from("attendance").insert(inserts as any);
       if (error) throw error;
       toast.success("Attendance saved successfully");
       setExistingRecords(true);
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };
 
@@ -173,14 +132,11 @@ export default function Attendance() {
         <p className="text-muted-foreground">Mark and track daily student attendance</p>
       </div>
 
-      {/* Controls */}
       <div className="flex flex-wrap gap-4">
         <div className="w-48">
           <Select value={selectedClass} onValueChange={setSelectedClass}>
             <SelectTrigger><SelectValue placeholder="Select Class" /></SelectTrigger>
-            <SelectContent>
-              {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
+            <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-48" />
@@ -188,7 +144,6 @@ export default function Attendance() {
 
       {selectedClass && !loading && (
         <>
-          {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{stats.total}</p><p className="text-xs text-muted-foreground">Total</p></CardContent></Card>
             <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-emerald-600">{stats.present}</p><p className="text-xs text-muted-foreground">Present</p></CardContent></Card>
@@ -197,7 +152,6 @@ export default function Attendance() {
             <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-blue-600">{stats.excused}</p><p className="text-xs text-muted-foreground">Excused</p></CardContent></Card>
           </div>
 
-          {/* Quick actions */}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => markAll("present")}>Mark All Present</Button>
             <Button variant="outline" size="sm" onClick={() => markAll("absent")}>Mark All Absent</Button>
@@ -207,7 +161,6 @@ export default function Attendance() {
             </Button>
           </div>
 
-          {/* Attendance Table */}
           <Card>
             <CardContent className="p-0">
               <Table>

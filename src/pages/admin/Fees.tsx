@@ -13,44 +13,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit } from "lucide-react";
 
-interface FeeType {
-  id: string;
-  name: string;
-  amount: number;
-  term_id: string | null;
-  class_id: string | null;
-  description: string;
-  is_active: boolean;
-}
-
-interface FeePayment {
-  id: string;
-  student_id: string;
-  fee_type_id: string;
-  amount_paid: number;
-  payment_date: string;
-  payment_method: string;
-  receipt_number: string;
-  notes: string;
-  student_name?: string;
-  fee_name?: string;
-}
-
+interface FeeType { id: string; name: string; amount: number; term_id: string | null; class_id: string | null; description: string; is_active: boolean; }
+interface FeePayment { id: string; student_id: string; fee_type_id: string; amount_paid: number; payment_date: string; payment_method: string; receipt_number: string; notes: string; }
 interface ClassItem { id: string; name: string; }
 interface Term { id: string; name: string; }
 interface StudentProfile { user_id: string; full_name: string; }
 
 export default function Fees() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [schoolId, setSchoolId] = useState<string | null>(null);
 
-  // Fee type dialog
   const [feeDialog, setFeeDialog] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeType | null>(null);
   const [feeName, setFeeName] = useState("");
@@ -60,7 +37,6 @@ export default function Fees() {
   const [feeDesc, setFeeDesc] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Payment dialog
   const [payDialog, setPayDialog] = useState(false);
   const [payStudent, setPayStudent] = useState("");
   const [payFeeType, setPayFeeType] = useState("");
@@ -71,31 +47,22 @@ export default function Fees() {
   const [paySaving, setPaySaving] = useState(false);
 
   useEffect(() => {
+    if (!schoolId) return;
     const init = async () => {
-      const [classRes, termRes] = await Promise.all([
-        supabase.from("classes").select("id, name").order("name"),
-        supabase.from("terms").select("id, name").order("name"),
+      const [classRes, termRes, studentRes] = await Promise.all([
+        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
+        supabase.from("terms").select("id, name").eq("school_id", schoolId).order("name"),
+        supabase.from("profiles").select("user_id, full_name").eq("school_id", schoolId).order("full_name"),
       ]);
       setClasses((classRes.data as ClassItem[]) || []);
       setTerms((termRes.data as Term[]) || []);
-
-      if (user) {
-        const { data: profile } = await supabase.from("profiles").select("school_id").eq("user_id", user.id).single();
-        if (profile?.school_id) {
-          setSchoolId(profile.school_id);
-          await loadFeeTypes(profile.school_id);
-          await loadPayments(profile.school_id);
-        }
-      }
-
-      // Load all student profiles
-      const { data: studentData } = await supabase.from("profiles").select("user_id, full_name").order("full_name");
-      setStudents((studentData as StudentProfile[]) || []);
-
+      setStudents((studentRes.data as StudentProfile[]) || []);
+      await loadFeeTypes(schoolId);
+      await loadPayments(schoolId);
       setLoading(false);
     };
     init();
-  }, [user]);
+  }, [schoolId]);
 
   const loadFeeTypes = async (sid: string) => {
     const { data } = await supabase.from("fee_types").select("*").eq("school_id", sid).order("name");
@@ -112,10 +79,8 @@ export default function Fees() {
     setSaving(true);
     try {
       const payload: any = {
-        name: feeName, amount: parseFloat(feeAmount), school_id: schoolId,
-        description: feeDesc,
-        term_id: feeTermId || null,
-        class_id: feeClassId || null,
+        name: feeName, amount: parseFloat(feeAmount), school_id: schoolId, description: feeDesc,
+        term_id: feeTermId || null, class_id: feeClassId || null,
       };
       if (editingFee) {
         const { error } = await supabase.from("fee_types").update(payload).eq("id", editingFee.id);
@@ -158,8 +123,6 @@ export default function Fees() {
 
   const getStudentName = (id: string) => students.find((s) => s.user_id === id)?.full_name || id.slice(0, 8);
   const getFeeName = (id: string) => feeTypes.find((f) => f.id === id)?.name || "—";
-
-  // Summary
   const totalCollected = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -171,62 +134,20 @@ export default function Fees() {
         <p className="text-muted-foreground">Manage school fees and track payments</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-              <DollarSign className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{feeTypes.length}</p>
-              <p className="text-sm text-muted-foreground">Fee Types</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-              <Receipt className="h-6 w-6 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{payments.length}</p>
-              <p className="text-sm text-muted-foreground">Payments</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-              <DollarSign className="h-6 w-6 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">₦{totalCollected.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground">Total Collected</p>
-            </div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="flex items-center gap-4 p-6"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"><DollarSign className="h-6 w-6 text-primary" /></div><div><p className="text-2xl font-bold">{feeTypes.length}</p><p className="text-sm text-muted-foreground">Fee Types</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-6"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30"><Receipt className="h-6 w-6 text-emerald-600" /></div><div><p className="text-2xl font-bold">{payments.length}</p><p className="text-sm text-muted-foreground">Payments</p></div></CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-6"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30"><DollarSign className="h-6 w-6 text-emerald-600" /></div><div><p className="text-2xl font-bold">₦{totalCollected.toLocaleString()}</p><p className="text-sm text-muted-foreground">Total Collected</p></div></CardContent></Card>
       </div>
 
-      {/* Fee Types */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Fee Types</CardTitle>
-          <Button size="sm" onClick={() => {
-            setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc("");
-            setFeeDialog(true);
-          }}><Plus className="mr-1 h-4 w-4" /> Add Fee Type</Button>
+          <Button size="sm" onClick={() => { setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc(""); setFeeDialog(true); }}><Plus className="mr-1 h-4 w-4" /> Add Fee Type</Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Amount</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {feeTypes.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No fee types configured</TableCell></TableRow>
@@ -237,11 +158,7 @@ export default function Fees() {
                     <TableCell>₦{Number(f.amount).toLocaleString()}</TableCell>
                     <TableCell className="text-muted-foreground">{f.description || "—"}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => {
-                        setEditingFee(f); setFeeName(f.name); setFeeAmount(String(f.amount));
-                        setFeeTermId(f.term_id || ""); setFeeClassId(f.class_id || ""); setFeeDesc(f.description);
-                        setFeeDialog(true);
-                      }}><Edit className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingFee(f); setFeeName(f.name); setFeeAmount(String(f.amount)); setFeeTermId(f.term_id || ""); setFeeClassId(f.class_id || ""); setFeeDesc(f.description); setFeeDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteFeeType(f.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </TableCell>
                   </TableRow>
@@ -252,7 +169,6 @@ export default function Fees() {
         </CardContent>
       </Card>
 
-      {/* Recent Payments */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Payments</CardTitle>
@@ -260,16 +176,7 @@ export default function Fees() {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Fee</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Receipt</TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Fee</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Date</TableHead><TableHead>Receipt</TableHead></TableRow></TableHeader>
             <TableBody>
               {payments.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No payments recorded</TableCell></TableRow>
@@ -290,7 +197,6 @@ export default function Fees() {
         </CardContent>
       </Card>
 
-      {/* Fee Type Dialog */}
       <Dialog open={feeDialog} onOpenChange={setFeeDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingFee ? "Edit Fee Type" : "Create Fee Type"}</DialogTitle></DialogHeader>
@@ -319,7 +225,6 @@ export default function Fees() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Dialog */}
       <Dialog open={payDialog} onOpenChange={setPayDialog}>
         <DialogContent>
           <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
@@ -333,11 +238,7 @@ export default function Fees() {
             </div>
             <div className="space-y-2">
               <Label>Fee Type</Label>
-              <Select value={payFeeType} onValueChange={(v) => {
-                setPayFeeType(v);
-                const fee = feeTypes.find((f) => f.id === v);
-                if (fee) setPayAmount(String(fee.amount));
-              }}>
+              <Select value={payFeeType} onValueChange={(v) => { setPayFeeType(v); const fee = feeTypes.find((f) => f.id === v); if (fee) setPayAmount(String(fee.amount)); }}>
                 <SelectTrigger><SelectValue placeholder="Select fee" /></SelectTrigger>
                 <SelectContent>{feeTypes.map((f) => <SelectItem key={f.id} value={f.id}>{f.name} (₦{Number(f.amount).toLocaleString()})</SelectItem>)}</SelectContent>
               </Select>
