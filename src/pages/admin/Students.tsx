@@ -67,11 +67,9 @@ export default function Students() {
     try {
       const [profilesRes, classesRes] = await Promise.all([
         supabase
-          .from("profiles")
-          .select("*, user_roles!inner(role, school_id)")
+          .from("student_list_view")
+          .select("*")
           .eq("school_id", schoolId)
-          .eq("user_roles.role", "student")
-          .eq("user_roles.school_id", schoolId)
           .order("full_name"),
         supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       ]);
