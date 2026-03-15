@@ -65,45 +65,15 @@ export default function Students() {
     if (!schoolId) return;
     setLoading(true);
     try {
-      // Step 1: get student user_ids for this school
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "student")
-        .eq("school_id", schoolId);
+      const [studentsRes, classesRes] = await Promise.all([
+        supabase.rpc("get_school_students", { _school_id: schoolId }),
+        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
+      ]);
 
-      if (rolesError) {
-        toast.error("Roles error: " + rolesError.message);
-        setLoading(false);
-        return;
-      }
+      if (studentsRes.error) throw studentsRes.error;
 
-      const { data: classesData } = await supabase
-        .from("classes").select("id, name").eq("school_id", schoolId).order("name");
-      setClasses(classesData ?? []);
-
-      if (!roles || roles.length === 0) {
-        toast.error("No students found for school: " + schoolId);
-        setStudents([]);
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: get profiles for those student user_ids
-      const userIds = roles.map((r: any) => r.user_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("*")
-        .in("user_id", userIds)
-        .order("full_name");
-
-      if (profilesError) {
-        toast.error("Profiles error: " + profilesError.message);
-        setLoading(false);
-        return;
-      }
-
-      setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
+      setStudents((studentsRes.data || []).map((p: any) => ({ ...p, email: p.email || "" })));
+      setClasses(classesRes.data ?? []);
     } catch (err: any) {
       toast.error(err.message || "Failed to load students");
     }
