@@ -22,6 +22,11 @@ interface Instructor {
     can_view_results: boolean;
     can_manage_students: boolean;
     can_manage_subjects: boolean;
+    can_mark_attendance: boolean;
+    can_manage_grades: boolean;
+    can_manage_timetable: boolean;
+    can_manage_fees: boolean;
+    can_post_announcements: boolean;
   } | null;
   assigned_classes: string[];
 }
@@ -48,7 +53,7 @@ export default function Instructors() {
   // Permissions dialog
   const [permsOpen, setPermsOpen] = useState(false);
   const [permsInstructor, setPermsInstructor] = useState<Instructor | null>(null);
-  const [perms, setPerms] = useState({ can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false });
+  const [perms, setPerms] = useState({ can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false, can_mark_attendance: false, can_manage_grades: false, can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false });
 
   // Classes dialog
   const [classesOpen, setClassesOpen] = useState(false);
@@ -144,7 +149,7 @@ export default function Instructors() {
   const openEdit = (i: Instructor) => { setEditing(i); setFullName(i.full_name); setEmail(i.email); setPassword(""); setDialogOpen(true); };
   const openPerms = (i: Instructor) => {
     setPermsInstructor(i);
-    setPerms(i.permissions || { can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false });
+    setPerms(i.permissions || { can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false, can_mark_attendance: false, can_manage_grades: false, can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false });
     setPermsOpen(true);
   };
   const openClasses = (i: Instructor) => {
@@ -190,7 +195,12 @@ export default function Instructors() {
                       {i.permissions?.can_view_results && <Badge variant="secondary" className="text-xs">Results</Badge>}
                       {i.permissions?.can_manage_students && <Badge variant="secondary" className="text-xs">Students</Badge>}
                       {i.permissions?.can_manage_subjects && <Badge variant="secondary" className="text-xs">Subjects</Badge>}
-                      {!i.permissions?.can_manage_exams && !i.permissions?.can_view_results && !i.permissions?.can_manage_students && !i.permissions?.can_manage_subjects && <span className="text-muted-foreground text-xs">None</span>}
+                      {i.permissions?.can_mark_attendance && <Badge variant="secondary" className="text-xs">Attendance</Badge>}
+                      {i.permissions?.can_manage_grades && <Badge variant="secondary" className="text-xs">Grades</Badge>}
+                      {i.permissions?.can_manage_timetable && <Badge variant="secondary" className="text-xs">Timetable</Badge>}
+                      {i.permissions?.can_manage_fees && <Badge variant="secondary" className="text-xs">Fees</Badge>}
+                      {i.permissions?.can_post_announcements && <Badge variant="secondary" className="text-xs">Announcements</Badge>}
+                      {!i.permissions?.can_manage_exams && !i.permissions?.can_view_results && !i.permissions?.can_manage_students && !i.permissions?.can_manage_subjects && !i.permissions?.can_mark_attendance && !i.permissions?.can_manage_grades && !i.permissions?.can_manage_timetable && !i.permissions?.can_manage_fees && !i.permissions?.can_post_announcements && <span className="text-muted-foreground text-xs">None</span>}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
@@ -232,6 +242,11 @@ export default function Instructors() {
               { key: "can_view_results" as const, label: "View student results" },
               { key: "can_manage_students" as const, label: "Manage students" },
               { key: "can_manage_subjects" as const, label: "Manage subjects" },
+              { key: "can_mark_attendance" as const, label: "Mark attendance" },
+              { key: "can_manage_grades" as const, label: "Manage grades" },
+              { key: "can_manage_timetable" as const, label: "Manage timetable" },
+              { key: "can_manage_fees" as const, label: "Manage fees" },
+              { key: "can_post_announcements" as const, label: "Post announcements" },
             ].map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between">
                 <Label>{label}</Label>
