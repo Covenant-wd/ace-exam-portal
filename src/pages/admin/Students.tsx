@@ -40,7 +40,7 @@ const emptyForm = {
 };
 
 export default function Students() {
-  const { schoolId } = useAuth();
+  const { schoolId, session } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ export default function Students() {
   const fetchStudents = async () => {
     setLoading(true);
     const [res, classesRes] = await Promise.all([
-      supabase.functions.invoke("manage-student", { body: { action: "list" } }),
+      supabase.functions.invoke("manage-student", { body: { action: "list" }, headers: { Authorization: `Bearer ${session?.access_token}` } }),
       supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
     ]);
     if (res.error) { toast.error("Failed to load students"); setLoading(false); return; }
@@ -112,7 +112,7 @@ export default function Students() {
       payload.user_id = editing.user_id;
       if (!form.password) delete payload.password;
     }
-    const res = await supabase.functions.invoke("manage-student", { body: payload });
+    const res = await supabase.functions.invoke("manage-student", { body: payload, headers: { Authorization: `Bearer ${session?.access_token}` } });
     setSaving(false);
     if (res.error || res.data?.error) { toast.error(res.data?.error || "Operation failed"); return; }
     toast.success(editing ? "Student updated" : "Student created");
