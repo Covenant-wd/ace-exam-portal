@@ -73,10 +73,11 @@ export default function Students() {
           .order("full_name"),
         supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       ]);
+      if (profilesRes.error) throw profilesRes.error;
       setStudents((profilesRes.data || []).map((p: any) => ({ ...p, email: p.email || "" })));
       setClasses(classesRes.data ?? []);
     } catch (err: any) {
-      toast.error("Failed to load students");
+      toast.error(err.message || "Failed to load students");
     }
     setLoading(false);
   };
