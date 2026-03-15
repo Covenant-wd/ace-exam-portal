@@ -89,7 +89,7 @@ export default function Students() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchStudents(); }, []);
+  useEffect(() => { if (schoolId) fetchStudents(); }, [schoolId]);
 
   const getClassName = (classId: string | null) => {
     if (!classId) return "—";
