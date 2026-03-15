@@ -88,6 +88,11 @@ function AppRoutes() {
       <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
       <Route path="/instructor/results" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
       <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/instructor/attendance" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/instructor/grades" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/instructor/timetable" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/instructor/fees" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Fees /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/instructor/announcements" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Announcements /></DashboardLayout></ProtectedRoute>} />
 
       {/* Student routes */}
       <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentDashboard /></DashboardLayout></ProtectedRoute>} />
