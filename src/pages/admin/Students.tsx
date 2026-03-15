@@ -65,16 +65,35 @@ export default function Students() {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const [profilesRes, classesRes] = await Promise.all([
-        supabase
-          .from("student_list_view")
-          .select("*")
-          .eq("school_id", schoolId)
-          .order("full_name"),
+      // Step 1: get student user_ids for this school
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "student")
+        .eq("school_id", schoolId);
+      if (rolesError) throw rolesError;
+
+      const [classesRes] = await Promise.all([
         supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       ]);
-      if (profilesRes.error) throw profilesRes.error;
-      setStudents((profilesRes.data || []).map((p: any) => ({ ...p, email: p.email || "" })));
+
+      if (!roles || roles.length === 0) {
+        setStudents([]);
+        setClasses(classesRes.data ?? []);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: get profiles for those student user_ids
+      const userIds = roles.map((r: any) => r.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("user_id", userIds)
+        .order("full_name");
+      if (profilesError) throw profilesError;
+
+      setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
       setClasses(classesRes.data ?? []);
     } catch (err: any) {
       toast.error(err.message || "Failed to load students");
