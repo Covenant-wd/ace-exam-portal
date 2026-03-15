@@ -196,6 +196,10 @@ export default function Students() {
 
   return (
     <div>
+      {/* DEBUG - remove after fix */}
+      <div className="mb-4 rounded border border-yellow-400 bg-yellow-50 p-3 text-sm text-yellow-900">
+        <strong>Debug:</strong> schoolId = <code>{schoolId || "NULL"}</code> | students loaded = <code>{students.length}</code>
+      </div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Students</h1>
