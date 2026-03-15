@@ -76,7 +76,12 @@ export default function InstructorDashboard() {
             {permissions?.can_view_results && <Badge>View Results</Badge>}
             {permissions?.can_manage_students && <Badge>Manage Students</Badge>}
             {permissions?.can_manage_subjects && <Badge>Manage Subjects</Badge>}
-            {!permissions?.can_manage_exams && !permissions?.can_view_results && !permissions?.can_manage_students && !permissions?.can_manage_subjects && (
+            {permissions?.can_mark_attendance && <Badge>Mark Attendance</Badge>}
+            {permissions?.can_manage_grades && <Badge>Manage Grades</Badge>}
+            {permissions?.can_manage_timetable && <Badge>Manage Timetable</Badge>}
+            {permissions?.can_manage_fees && <Badge>Manage Fees</Badge>}
+            {permissions?.can_post_announcements && <Badge>Post Announcements</Badge>}
+            {!permissions?.can_manage_exams && !permissions?.can_view_results && !permissions?.can_manage_students && !permissions?.can_manage_subjects && !permissions?.can_mark_attendance && !permissions?.can_manage_grades && !permissions?.can_manage_timetable && !permissions?.can_manage_fees && !permissions?.can_post_announcements && (
               <p className="text-muted-foreground text-sm">No permissions assigned yet. Contact your administrator.</p>
             )}
           </div>
