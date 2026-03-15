@@ -62,14 +62,30 @@ export default function Students() {
   const [moveToClass, setMoveToClass] = useState("");
 
   const fetchStudents = async () => {
+    if (!schoolId) return;
     setLoading(true);
-    const [res, classesRes] = await Promise.all([
-      supabase.functions.invoke("manage-student", { body: { action: "list" }, headers: { Authorization: `Bearer ${session?.access_token}` } }),
-      supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
-    ]);
-    if (res.error) { toast.error("Failed to load students"); setLoading(false); return; }
-    setStudents(res.data.students || []);
-    setClasses(classesRes.data ?? []);
+    try {
+      const [rolesRes, classesRes] = await Promise.all([
+        supabase.from("user_roles").select("user_id").eq("role", "student").eq("school_id", schoolId),
+        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
+      ]);
+      const userIds = (rolesRes.data || []).map((r: any) => r.user_id);
+      if (userIds.length === 0) {
+        setStudents([]);
+        setClasses(classesRes.data ?? []);
+        setLoading(false);
+        return;
+      }
+      const { data: profiles } = await supabase
+        .from("student_profiles_with_email")
+        .select("*")
+        .in("user_id", userIds)
+        .order("full_name");
+      setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
+      setClasses(classesRes.data ?? []);
+    } catch (err: any) {
+      toast.error("Failed to load students");
+    }
     setLoading(false);
   };
 
