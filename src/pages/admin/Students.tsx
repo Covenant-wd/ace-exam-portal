@@ -43,7 +43,7 @@ export default function Students() {
   const { schoolId, session } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -62,20 +62,35 @@ export default function Students() {
   const [moveToClass, setMoveToClass] = useState("");
 
   const fetchStudents = async () => {
-    if (!schoolId) return;
     setLoading(true);
     try {
-      const [studentsRes, classesRes] = await Promise.all([
-        supabase.rpc("get_school_students", { _school_id: schoolId }),
-        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
-      ]);
+      const sid = schoolId;
+      if (!sid) {
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
 
-      if (studentsRes.error) throw studentsRes.error;
+      // Fetch classes always
+      const { data: classesData } = await supabase
+        .from("classes").select("id, name").eq("school_id", sid).order("name");
+      setClasses(classesData ?? []);
 
-      setStudents((studentsRes.data || []).map((p: any) => ({ ...p, email: p.email || "" })));
-      setClasses(classesRes.data ?? []);
+      // Fetch students via profiles filtered by school_id
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("school_id", sid)
+        .order("full_name");
+
+      if (error) {
+        toast.error(error.message);
+        setStudents([]);
+      } else {
+        setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to load students");
+      toast.error("Failed to load: " + err.message);
     }
     setLoading(false);
   };
