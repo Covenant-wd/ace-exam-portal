@@ -59,6 +59,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText });
       if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3 });
       if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users });
+      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare });
+      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award });
+      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock });
+      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign });
+      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone });
       setInstructorLinks(links);
     };
     loadPerms();
