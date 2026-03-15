@@ -77,11 +77,25 @@ export default function Students() {
         .from("classes").select("id, name").eq("school_id", sid).order("name");
       setClasses(classesData ?? []);
 
-      // Fetch students via profiles filtered by school_id
+      // Step 1: get only student user_ids for this school
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "student")
+        .eq("school_id", sid);
+
+      if (rolesError || !roles || roles.length === 0) {
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: get profiles only for those student user_ids
+      const userIds = roles.map((r: any) => r.user_id);
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("school_id", sid)
+        .in("user_id", userIds)
         .order("full_name");
 
       if (error) {
