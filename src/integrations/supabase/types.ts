@@ -588,6 +588,11 @@ export type Database = {
           can_manage_students: boolean
           can_manage_subjects: boolean
           can_view_results: boolean
+          can_mark_attendance: boolean
+          can_manage_grades: boolean
+          can_manage_timetable: boolean
+          can_manage_fees: boolean
+          can_post_announcements: boolean
           created_at: string
           id: string
           instructor_id: string
@@ -599,6 +604,11 @@ export type Database = {
           can_manage_students?: boolean
           can_manage_subjects?: boolean
           can_view_results?: boolean
+          can_mark_attendance?: boolean
+          can_manage_grades?: boolean
+          can_manage_timetable?: boolean
+          can_manage_fees?: boolean
+          can_post_announcements?: boolean
           created_at?: string
           id?: string
           instructor_id: string
@@ -610,6 +620,11 @@ export type Database = {
           can_manage_students?: boolean
           can_manage_subjects?: boolean
           can_view_results?: boolean
+          can_mark_attendance?: boolean
+          can_manage_grades?: boolean
+          can_manage_timetable?: boolean
+          can_manage_fees?: boolean
+          can_post_announcements?: boolean
           created_at?: string
           id?: string
           instructor_id?: string
