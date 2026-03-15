@@ -71,15 +71,20 @@ export default function Students() {
         .select("user_id")
         .eq("role", "student")
         .eq("school_id", schoolId);
-      if (rolesError) throw rolesError;
 
-      const [classesRes] = await Promise.all([
-        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
-      ]);
+      if (rolesError) {
+        toast.error("Roles error: " + rolesError.message);
+        setLoading(false);
+        return;
+      }
+
+      const { data: classesData } = await supabase
+        .from("classes").select("id, name").eq("school_id", schoolId).order("name");
+      setClasses(classesData ?? []);
 
       if (!roles || roles.length === 0) {
+        toast.error("No students found for school: " + schoolId);
         setStudents([]);
-        setClasses(classesRes.data ?? []);
         setLoading(false);
         return;
       }
@@ -91,10 +96,14 @@ export default function Students() {
         .select("*")
         .in("user_id", userIds)
         .order("full_name");
-      if (profilesError) throw profilesError;
+
+      if (profilesError) {
+        toast.error("Profiles error: " + profilesError.message);
+        setLoading(false);
+        return;
+      }
 
       setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
-      setClasses(classesRes.data ?? []);
     } catch (err: any) {
       toast.error(err.message || "Failed to load students");
     }
