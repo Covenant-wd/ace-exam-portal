@@ -121,7 +121,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update_permissions") {
-      const { instructor_id, can_manage_exams, can_view_results, can_manage_students, can_manage_subjects } = body;
+      const {
+        instructor_id,
+        can_manage_exams, can_view_results, can_manage_students, can_manage_subjects,
+        can_mark_attendance, can_manage_grades, can_manage_timetable, can_manage_fees, can_post_announcements,
+      } = body;
 
       const { error } = await supabaseAdmin.from("instructor_permissions").upsert({
         instructor_id, school_id: callerSchoolId,
@@ -129,6 +133,11 @@ Deno.serve(async (req) => {
         can_view_results: can_view_results ?? false,
         can_manage_students: can_manage_students ?? false,
         can_manage_subjects: can_manage_subjects ?? false,
+        can_mark_attendance: can_mark_attendance ?? false,
+        can_manage_grades: can_manage_grades ?? false,
+        can_manage_timetable: can_manage_timetable ?? false,
+        can_manage_fees: can_manage_fees ?? false,
+        can_post_announcements: can_post_announcements ?? false,
         updated_at: new Date().toISOString(),
       }, { onConflict: "instructor_id" });
       if (error) throw error;
