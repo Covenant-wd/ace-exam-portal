@@ -15,7 +15,7 @@ export default function AdminDashboard() {
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student").eq("school_id", schoolId),
         supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
         supabase.from("exams").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
-        supabase.from("exam_attempts").select("id", { count: "exact", head: true }).eq("is_submitted", true),
+        supabase.from("exam_attempts").select("id, exams!inner(school_id)", { count: "exact", head: true }).eq("is_submitted", true).eq("exams.school_id", schoolId),
       ]);
       setStats({
         students: students.count ?? 0,
