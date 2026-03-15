@@ -76,7 +76,23 @@ export default function Instructors() {
         callFn({ action: "list" }),
         supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       ]);
-      setInstructors(instrData.instructors || []);
+      const rawInstructors = instrData.instructors || [];
+      // Fetch permissions directly from DB to avoid edge function cache issues
+      const userIds = rawInstructors.map((i: any) => i.user_id);
+      if (userIds.length > 0) {
+        const { data: permsData } = await supabase
+          .from("instructor_permissions")
+          .select("*")
+          .in("instructor_id", userIds);
+        const permsMap = new Map((permsData || []).map((p: any) => [p.instructor_id, p]));
+        const merged = rawInstructors.map((i: any) => ({
+          ...i,
+          permissions: permsMap.get(i.user_id) || i.permissions,
+        }));
+        setInstructors(merged);
+      } else {
+        setInstructors(rawInstructors);
+      }
       setClasses(classData.data || []);
     } catch (err: any) {
       toast.error(err.message);
@@ -121,7 +137,21 @@ export default function Instructors() {
     if (!permsInstructor) return;
     setSaving(true);
     try {
-      await callFn({ action: "update_permissions", instructor_id: permsInstructor.user_id, ...perms });
+      const { error } = await supabase.from("instructor_permissions").upsert({
+        instructor_id: permsInstructor.user_id,
+        school_id: schoolId,
+        can_manage_exams: perms.can_manage_exams,
+        can_view_results: perms.can_view_results,
+        can_manage_students: perms.can_manage_students,
+        can_manage_subjects: perms.can_manage_subjects,
+        can_mark_attendance: perms.can_mark_attendance,
+        can_manage_grades: perms.can_manage_grades,
+        can_manage_timetable: perms.can_manage_timetable,
+        can_manage_fees: perms.can_manage_fees,
+        can_post_announcements: perms.can_post_announcements,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "instructor_id" });
+      if (error) throw error;
       toast.success("Permissions updated");
       setPermsOpen(false);
       fetchData();
