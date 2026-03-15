@@ -7,6 +7,11 @@ export interface InstructorPermissions {
   can_view_results: boolean;
   can_manage_students: boolean;
   can_manage_subjects: boolean;
+  can_mark_attendance: boolean;
+  can_manage_grades: boolean;
+  can_manage_timetable: boolean;
+  can_manage_fees: boolean;
+  can_post_announcements: boolean;
 }
 
 export function useInstructorPermissions() {
