@@ -32,7 +32,7 @@ export default function Results() {
       if (!attempts || attempts.length === 0) { setResults([]); setLoadingResults(false); return; }
       const studentIds = [...new Set(attempts.map(a => a.student_id))];
       const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, class_name")
-        .in("user_id", studentIds);
+        .in("user_id", studentIds).eq("school_id", schoolId!);
       const profileMap = new Map((profiles ?? []).map(p => [p.user_id, p]));
       setResults(attempts.map(a => ({ ...a, profile: profileMap.get(a.student_id) ?? null })));
       setLoadingResults(false);

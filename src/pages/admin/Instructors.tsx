@@ -32,7 +32,7 @@ interface ClassItem {
 }
 
 export default function Instructors() {
-  const { session } = useAuth();
+  const { session, schoolId } = useAuth();
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +69,7 @@ export default function Instructors() {
     try {
       const [instrData, classData] = await Promise.all([
         callFn({ action: "list" }),
-        supabase.from("classes").select("id, name").order("name"),
+        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       ]);
       setInstructors(instrData.instructors || []);
       setClasses(classData.data || []);

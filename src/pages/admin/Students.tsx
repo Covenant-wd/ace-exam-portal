@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
 
+
 interface Student {
   user_id: string;
   email: string;
@@ -39,6 +40,7 @@ const emptyForm = {
 };
 
 export default function Students() {
+  const { schoolId } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ export default function Students() {
     setLoading(true);
     const [res, classesRes] = await Promise.all([
       supabase.functions.invoke("manage-student", { body: { action: "list" } }),
-      supabase.from("classes").select("id, name").order("name"),
+      supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
     ]);
     if (res.error) { toast.error("Failed to load students"); setLoading(false); return; }
     setStudents(res.data.students || []);
@@ -122,7 +124,7 @@ export default function Students() {
     if (!promoFrom || !promoTo) { toast.error("Select both classes"); return; }
     if (promoFrom === promoTo) { toast.error("Source and destination must differ"); return; }
     setPromoSaving(true);
-    const { error } = await supabase.from("profiles").update({ class_id: promoTo }).eq("class_id", promoFrom);
+    const { error } = await supabase.from("profiles").update({ class_id: promoTo }).eq("class_id", promoFrom).eq("school_id", schoolId!);
     setPromoSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Students promoted successfully");
@@ -133,7 +135,7 @@ export default function Students() {
   const handleMoveStudents = async () => {
     if (!moveToClass || selectedStudents.length === 0) { toast.error("Select students and target class"); return; }
     setSaving(true);
-    const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents);
+    const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents).eq("school_id", schoolId!);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`${selectedStudents.length} student(s) moved`);
