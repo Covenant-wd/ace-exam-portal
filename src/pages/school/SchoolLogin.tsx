@@ -80,21 +80,7 @@ export default function SchoolLogin() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      // Look up email from username in profiles, scoped to this school
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("username", username.trim())
-        .eq("school_id", school!.id)
-        .single();
-
-      if (profileError || !profile) {
-        toast.error("Username not found. Please check and try again.");
-        setSubmitting(false);
-        return;
-      }
-
-      // Get email using the get_email_by_username function
+      // Use SECURITY DEFINER function - works without authentication
       const { data: emailData, error: emailError } = await supabase
         .rpc("get_email_by_username", {
           _username: username.trim(),
@@ -102,7 +88,7 @@ export default function SchoolLogin() {
         });
 
       if (emailError || !emailData) {
-        toast.error("Account not found. Contact your school admin.");
+        toast.error("Username not found. Please check and try again.");
         setSubmitting(false);
         return;
       }
