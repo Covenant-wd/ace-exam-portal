@@ -1,50 +1,58 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight
 } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import { supabase } from "@/integrations/supabase/client";
 
 const adminLinks = [
-  { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/sessions", label: "Sessions", icon: Calendar },
-  { to: "/admin/classes", label: "Classes", icon: GraduationCap },
-  { to: "/admin/students", label: "Students", icon: Users },
-  { to: "/admin/instructors", label: "Instructors", icon: UserCheck },
-  { to: "/admin/subjects", label: "Subjects", icon: BookOpen },
-  { to: "/admin/exams", label: "Exams", icon: FileText },
-  { to: "/admin/results", label: "Results", icon: BarChart3 },
-  { to: "/admin/attendance", label: "Attendance", icon: CheckSquare },
-  { to: "/admin/timetable", label: "Timetable", icon: Clock },
-  { to: "/admin/grades", label: "Grades", icon: Award },
-  { to: "/admin/fees", label: "Fees", icon: DollarSign },
-  { to: "/admin/announcements", label: "Announcements", icon: Megaphone },
-  { to: "/admin/parents", label: "Parents", icon: Heart },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
+  { to: "/admin/sessions", label: "Sessions", icon: Calendar, group: "Academic" },
+  { to: "/admin/classes", label: "Classes", icon: GraduationCap, group: "Academic" },
+  { to: "/admin/subjects", label: "Subjects", icon: BookOpen, group: "Academic" },
+  { to: "/admin/timetable", label: "Timetable", icon: Clock, group: "Academic" },
+  { to: "/admin/students", label: "Students", icon: Users, group: "People" },
+  { to: "/admin/instructors", label: "Instructors", icon: UserCheck, group: "People" },
+  { to: "/admin/parents", label: "Parents", icon: Heart, group: "People" },
+  { to: "/admin/exams", label: "Exams", icon: FileText, group: "Assessment" },
+  { to: "/admin/results", label: "Results", icon: BarChart3, group: "Assessment" },
+  { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
+  { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
+  { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
+  { to: "/admin/announcements", label: "Announcements", icon: Megaphone, group: "Records" },
+  { to: "/admin/settings", label: "Settings", icon: Settings, group: "System" },
 ];
 
 const studentLinks = [
-  { to: "/student", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/student/exams", label: "Exams", icon: ClipboardList },
-  { to: "/student/results", label: "My Results", icon: BarChart3 },
+  { to: "/student", label: "Dashboard", icon: LayoutDashboard, group: "" },
+  { to: "/student/exams", label: "My Exams", icon: ClipboardList, group: "" },
+  { to: "/student/results", label: "My Results", icon: BarChart3, group: "" },
 ];
 
 const parentLinks = [
-  { to: "/parent", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/parent", label: "Dashboard", icon: LayoutDashboard, group: "" },
 ];
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: any;
-}
+interface NavItem { to: string; label: string; icon: any; group?: string; }
+
+const roleColors: Record<string, string> = {
+  admin: "from-violet-600 to-blue-600",
+  instructor: "from-blue-600 to-cyan-600",
+  student: "from-emerald-600 to-teal-600",
+  parent: "from-pink-600 to-rose-600",
+};
+
+const roleBadgeColors: Record<string, string> = {
+  admin: "bg-violet-500/20 text-violet-300",
+  instructor: "bg-blue-500/20 text-blue-300",
+  student: "bg-emerald-500/20 text-emerald-300",
+  parent: "bg-pink-500/20 text-pink-300",
+};
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user } = useAuth();
@@ -59,16 +67,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (role !== "instructor" || !user) return;
     const loadPerms = async () => {
       const { data } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
-      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard }];
-      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen });
-      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText });
-      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3 });
-      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users });
-      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare });
-      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award });
-      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock });
-      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign });
-      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone });
+      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
+      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen, group: "Academic" });
+      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText, group: "Academic" });
+      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock, group: "Academic" });
+      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
+      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award, group: "Assessment" });
+      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users, group: "People" });
+      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare, group: "Records" });
+      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
+      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone, group: "Records" });
       setInstructorLinks(links);
     };
     loadPerms();
@@ -81,79 +89,146 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     navigate("/");
   };
 
+  // Group links for admin/instructor
+  const grouped = links.reduce((acc, link) => {
+    const g = link.group || "";
+    if (!acc[g]) acc[g] = [];
+    acc[g].push(link);
+    return acc;
+  }, {} as Record<string, NavItem[]>);
+
+  const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
+  const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-[#f5f5f7] dark:bg-[#0f0f14]">
+
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:static lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300 lg:static lg:translate-x-0",
+        "bg-[#13131a] text-white",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-white/5 min-h-[65px]">
+          <div className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-lg overflow-hidden",
+            gradientClass
+          )}>
             {logoUrl ? (
               <img src={logoUrl} alt="School logo" className="h-full w-full object-contain" />
             ) : (
-              <GraduationCap className="h-5 w-5" />
+              <GraduationCap className="h-4 w-4 text-white" />
             )}
           </div>
-          <div>
-            <h1 className="font-bold text-lg leading-tight truncate">{schoolName}</h1>
-            <p className="text-xs opacity-80 capitalize">{role} Panel</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-sm leading-tight truncate text-white" title={schoolName}>
+              {schoolName}
+            </h1>
+            <span className={cn("inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize mt-0.5", badgeClass)}>
+              {role} panel
+            </span>
           </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden shrink-0 text-white/40 hover:text-white transition-colors p-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {links.map((link) => {
-            const active = location.pathname === link.to;
-            return (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                )}
-              >
-                <link.icon className="h-4 w-4" />
-                {link.label}
-              </Link>
-            );
-          })}
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4 scrollbar-thin">
+          {Object.entries(grouped).map(([group, groupLinks]) => (
+            <div key={group}>
+              {group && (
+                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                  {group}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {groupLinks.map((link) => {
+                  const active = location.pathname === link.to;
+                  return (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      onClick={() => setSidebarOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all group",
+                        active
+                          ? "bg-white/10 text-white"
+                          : "text-white/50 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <link.icon className={cn("h-4 w-4 shrink-0 transition-colors", active ? "text-white" : "text-white/40 group-hover:text-white/70")} />
+                      <span className="truncate">{link.label}</span>
+                      {active && <ChevronRight className="ml-auto h-3 w-3 text-white/40 shrink-0" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        <div className="border-t border-sidebar-border p-4">
-          <p className="mb-2 truncate text-xs opacity-70">{user?.email}</p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+        {/* Footer */}
+        <div className="border-t border-white/5 p-3">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-1">
+            <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white", gradientClass)}>
+              {user?.email?.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-white/60 truncate">{user?.email}</p>
+            </div>
+          </div>
+          <button
             onClick={handleSignOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 transition-all"
           >
-            <LogOut className="mr-2 h-4 w-4" />
+            <LogOut className="h-4 w-4 shrink-0" />
             Sign Out
-          </Button>
+          </button>
         </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center gap-4 border-b bg-card px-4 py-3 lg:px-6">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </Button>
-          <div className="flex-1" />
+      {/* Main content */}
+      <div className="flex flex-1 flex-col min-w-0">
+
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white/80 dark:bg-[#13131a]/80 backdrop-blur-xl px-4 py-3 lg:px-6">
+          <button
+            className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+
+          {/* Page title from current route */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">
+              {links.find(l => l.to === location.pathname)?.label || "Dashboard"}
+            </p>
+          </div>
+
+          {/* Role badge on header */}
+          <span className={cn("hidden sm:inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize shrink-0", badgeClass)}>
+            {role}
+          </span>
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+
+        <main className="flex-1 overflow-auto p-4 lg:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
