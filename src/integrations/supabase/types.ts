@@ -1143,6 +1143,10 @@ export type Database = {
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      confirm_user_email: {
+        Args: { _user_id: string }
+        Returns: void
+      }
       create_parent_account: {
         Args: { _email: string; _password: string; _full_name: string; _username: string; _school_id: string }
         Returns: string
