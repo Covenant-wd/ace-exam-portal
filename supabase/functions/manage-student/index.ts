@@ -151,33 +151,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (action === "create_parent") {
-      const { email, password, full_name, username, school_id: targetSchoolId } = body;
-
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email, password, email_confirm: true,
-        user_metadata: { full_name, school_id: callerSchoolId },
-      });
-      if (createError) throw createError;
-
-      await supabaseAdmin.from("profiles").update({
-        full_name,
-        first_name: full_name.split(" ")[0] || "",
-        last_name: full_name.split(" ").slice(1).join(" ") || "",
-        username: username || null,
-        school_id: callerSchoolId,
-      }).eq("user_id", newUser.user!.id);
-
-      await supabaseAdmin.from("user_roles").update({
-        role: "parent",
-        school_id: callerSchoolId,
-      }).eq("user_id", newUser.user!.id);
-
-      return new Response(JSON.stringify({ success: true, user_id: newUser.user!.id }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
