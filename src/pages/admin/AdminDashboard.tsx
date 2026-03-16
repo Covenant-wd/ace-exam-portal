@@ -1,56 +1,131 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpen, FileText, Users, ClipboardList } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Users, BookOpen, FileText, ClipboardList, UserCheck, Heart, TrendingUp, Calendar, ChevronRight, GraduationCap } from "lucide-react";
 
 export default function AdminDashboard() {
   const { schoolId } = useAuth();
-  const [stats, setStats] = useState({ students: 0, subjects: 0, exams: 0, attempts: 0 });
+  const [stats, setStats] = useState({ students: 0, subjects: 0, exams: 0, attempts: 0, instructors: 0, parents: 0, classes: 0 });
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [activeTerm, setActiveTerm] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!schoolId) return;
     const fetchStats = async () => {
-      const [students, subjects, exams, attempts] = await Promise.all([
+      const [students, subjects, exams, attempts, instructors, parents, classes, sess, term] = await Promise.all([
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student").eq("school_id", schoolId),
         supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
         supabase.from("exams").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
         supabase.from("exam_attempts").select("id, exams!inner(school_id)", { count: "exact", head: true }).eq("is_submitted", true).eq("exams.school_id", schoolId),
+        supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "instructor").eq("school_id", schoolId),
+        supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "parent").eq("school_id", schoolId),
+        supabase.from("classes").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
+        supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
+        supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
       ]);
       setStats({
         students: students.count ?? 0,
         subjects: subjects.count ?? 0,
         exams: exams.count ?? 0,
         attempts: attempts.count ?? 0,
+        instructors: instructors.count ?? 0,
+        parents: parents.count ?? 0,
+        classes: classes.count ?? 0,
       });
+      if (sess.data) setActiveSession(sess.data.name);
+      if (term.data) setActiveTerm(term.data.name);
+      setLoading(false);
     };
     fetchStats();
   }, [schoolId]);
 
-  const cards = [
-    { label: "Students", value: stats.students, icon: Users, color: "bg-primary" },
-    { label: "Subjects", value: stats.subjects, icon: BookOpen, color: "bg-secondary" },
-    { label: "Exams", value: stats.exams, icon: FileText, color: "bg-accent" },
-    { label: "Submissions", value: stats.attempts, icon: ClipboardList, color: "bg-destructive" },
+  const primaryStats = [
+    { label: "Students", value: stats.students, icon: Users, color: "bg-blue-500", light: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", to: "/admin/students" },
+    { label: "Instructors", value: stats.instructors, icon: UserCheck, color: "bg-violet-500", light: "bg-violet-50 dark:bg-violet-500/10", text: "text-violet-600 dark:text-violet-400", to: "/admin/instructors" },
+    { label: "Parents", value: stats.parents, icon: Heart, color: "bg-pink-500", light: "bg-pink-50 dark:bg-pink-500/10", text: "text-pink-600 dark:text-pink-400", to: "/admin/parents" },
+    { label: "Classes", value: stats.classes, icon: GraduationCap, color: "bg-emerald-500", light: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", to: "/admin/classes" },
+    { label: "Subjects", value: stats.subjects, icon: BookOpen, color: "bg-amber-500", light: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", to: "/admin/subjects" },
+    { label: "Exams", value: stats.exams, icon: FileText, color: "bg-cyan-500", light: "bg-cyan-50 dark:bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400", to: "/admin/exams" },
+    { label: "Submissions", value: stats.attempts, icon: ClipboardList, color: "bg-orange-500", light: "bg-orange-50 dark:bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", to: "/admin/results" },
+    { label: "Growth", value: `${stats.students > 0 ? "+" + stats.students : "0"}`, icon: TrendingUp, color: "bg-teal-500", light: "bg-teal-50 dark:bg-teal-500/10", text: "text-teal-600 dark:text-teal-400", to: "/admin/students" },
+  ];
+
+  const quickLinks = [
+    { label: "Add Student", to: "/admin/students", icon: Users, desc: "Enroll new students" },
+    { label: "Create Exam", to: "/admin/exams", icon: FileText, desc: "Set up assessments" },
+    { label: "Mark Attendance", to: "/admin/attendance", icon: ClipboardList, desc: "Daily attendance" },
+    { label: "Record Payment", to: "/admin/fees", icon: ClipboardList, desc: "Fee management" },
+    { label: "Post Announcement", to: "/admin/announcements", icon: ClipboardList, desc: "Broadcast messages" },
+    { label: "View Results", to: "/admin/results", icon: TrendingUp, desc: "Exam performance" },
   ];
 
   return (
-    <div>
-      <h1 className="mb-6 text-3xl font-bold">Dashboard</h1>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Card key={c.label} className="border-0 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${c.color} text-white`}>
-                <c.icon className="h-4 w-4" />
+    <div className="space-y-6">
+
+      {/* Welcome banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-blue-600 to-cyan-600 p-6 text-white shadow-lg">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)", backgroundSize: "30px 30px" }} />
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight">Admin Dashboard</h1>
+            <p className="text-white/70 text-sm mt-1">Manage your school from one place</p>
+          </div>
+          {(activeSession || activeTerm) && (
+            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
+              <Calendar className="h-4 w-4 text-white/60 shrink-0" />
+              <div>
+                {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
+                {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
               </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">{c.value}</p>
-            </CardContent>
-          </Card>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {primaryStats.map((stat) => (
+          <Link
+            key={stat.label}
+            to={stat.to}
+            className="group relative bg-white dark:bg-white/5 rounded-2xl p-4 shadow-sm border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.light}`}>
+                <stat.icon className={`h-5 w-5 ${stat.text}`} />
+              </div>
+              <ChevronRight className="h-4 w-4 text-black/20 dark:text-white/20 group-hover:text-black/40 dark:group-hover:text-white/40 transition-colors" />
+            </div>
+            <p className="text-2xl font-extrabold text-foreground">
+              {loading ? <span className="inline-block h-7 w-10 rounded bg-black/5 dark:bg-white/5 animate-pulse" /> : stat.value}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5 font-medium">{stat.label}</p>
+          </Link>
         ))}
+      </div>
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-base font-bold text-foreground mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {quickLinks.map((ql) => (
+            <Link
+              key={ql.label}
+              to={ql.to}
+              className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                <ql.icon className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{ql.label}</p>
+                <p className="text-xs text-muted-foreground truncate">{ql.desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );
