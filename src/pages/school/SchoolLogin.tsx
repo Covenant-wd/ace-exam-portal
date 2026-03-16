@@ -19,17 +19,15 @@ interface School {
 
 export default function SchoolLogin() {
   const { slug } = useParams<{ slug: string }>();
-  const { user, role, loading: authLoading, signIn, signUp } = useAuth();
+  const { user, role, loading: authLoading, signIn } = useAuth();
   const [school, setSchool] = useState<School | null>(null);
   const [loadingSchool, setLoadingSchool] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
   // Form states
   const [loginTab, setLoginTab] = useState("student");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -80,18 +78,8 @@ export default function SchoolLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    if (isSignUp) {
-      const { error } = await signUp(email, password, fullName, school!.id);
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Account created! Check your email to verify.");
-        setIsSignUp(false);
-      }
-    } else {
-      const { error } = await signIn(email, password);
-      if (error) toast.error(error.message);
-    }
+    const { error } = await signIn(email, password);
+    if (error) toast.error(error.message);
     setSubmitting(false);
   };
 
@@ -112,63 +100,18 @@ export default function SchoolLogin() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!isSignUp ? (
-            <Tabs value={loginTab} onValueChange={setLoginTab}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="student" className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5" /> Student
-                </TabsTrigger>
-                <TabsTrigger value="staff" className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Staff
-                </TabsTrigger>
-              </TabsList>
+          <Tabs value={loginTab} onValueChange={setLoginTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="student" className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" /> Student
+              </TabsTrigger>
+              <TabsTrigger value="staff" className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5" /> Staff
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="student">
-                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@email.com" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-                  </div>
-                  <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Student Sign In"}
-                  </Button>
-                </form>
-                <p className="mt-4 text-center text-sm text-muted-foreground">
-                  Don't have an account?{" "}
-                  <button onClick={() => setIsSignUp(true)} className="text-primary font-medium hover:underline">
-                    Sign Up
-                  </button>
-                </p>
-              </TabsContent>
-
-              <TabsContent value="staff">
-                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@school.com" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password</Label>
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-                  </div>
-                  <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Staff Sign In"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <>
-              <h3 className="text-lg font-semibold mb-4 text-center">Create Student Account</h3>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
-                </div>
+            <TabsContent value="student">
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label>Email</Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@email.com" required />
@@ -178,17 +121,33 @@ export default function SchoolLogin() {
                   <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
                 </div>
                 <Button type="submit" className="w-full" size="lg" disabled={submitting}>
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign Up"}
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Student Sign In"}
                 </Button>
               </form>
-              <p className="mt-4 text-center text-sm text-muted-foreground">
-                Already have an account?{" "}
-                <button onClick={() => setIsSignUp(false)} className="text-primary font-medium hover:underline">
-                  Sign In
-                </button>
+              <p className="mt-4 text-center text-sm text-muted-foreground text-xs">
+                Contact your school admin if you don't have an account.
               </p>
-            </>
-          )}
+            </TabsContent>
+
+            <TabsContent value="staff">
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@school.com" required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Password</Label>
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+                </div>
+                <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Staff Sign In"}
+                </Button>
+              </form>
+              <p className="mt-4 text-center text-sm text-muted-foreground text-xs">
+                Contact your school admin if you don't have an account.
+              </p>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
