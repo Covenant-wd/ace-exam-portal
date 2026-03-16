@@ -641,6 +641,38 @@ export type Database = {
           },
         ]
       }
+      parent_students: {
+        Row: {
+          id: string
+          parent_id: string
+          student_id: string
+          school_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parent_id: string
+          student_id: string
+          school_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parent_id?: string
+          student_id?: string
+          school_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parent_students_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           address: string | null
@@ -1111,6 +1143,18 @@ export type Database = {
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      create_parent_account: {
+        Args: { _email: string; _password: string; _full_name: string; _username: string; _school_id: string }
+        Returns: string
+      }
+      get_school_students: {
+        Args: { _school_id: string }
+        Returns: { id: string; user_id: string; full_name: string; first_name: string; middle_name: string; last_name: string; username: string; class_id: string; class_name: string; school_id: string; gender: string; date_of_birth: string; address: string; parent_name: string; nationality: string; subjects_offered: string[]; created_at: string; updated_at: string }[]
+      }
+      get_email_by_username: {
+        Args: { _username: string; _school_id: string }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
