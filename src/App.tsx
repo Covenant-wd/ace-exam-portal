@@ -31,11 +31,13 @@ import StudentExams from "./pages/student/StudentExams";
 import TakeExam from "./pages/student/TakeExam";
 import StudentResults from "./pages/student/StudentResults";
 import InstructorDashboard from "./pages/instructor/InstructorDashboard";
+import Parents from "./pages/admin/Parents";
+import ParentDashboard from "./pages/parent/ParentDashboard";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" }) {
+function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" }) {
   const { user, role, loading } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) {
@@ -80,6 +82,7 @@ function AppRoutes() {
       <Route path="/admin/grades" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/fees" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Fees /></DashboardLayout></ProtectedRoute>} />
       <Route path="/admin/announcements" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Announcements /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin/parents" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Parents /></DashboardLayout></ProtectedRoute>} />
 
       {/* Instructor routes */}
       <Route path="/instructor" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><InstructorDashboard /></DashboardLayout></ProtectedRoute>} />
@@ -99,6 +102,9 @@ function AppRoutes() {
       <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
       <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><TakeExam /></ProtectedRoute>} />
       <Route path="/student/results" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentResults /></DashboardLayout></ProtectedRoute>} />
+
+      {/* Parent routes */}
+      <Route path="/parent" element={<ProtectedRoute requiredRole="parent"><DashboardLayout><ParentDashboard /></DashboardLayout></ProtectedRoute>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>
