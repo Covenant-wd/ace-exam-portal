@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ const adminLinks = [
   { to: "/admin/grades", label: "Grades", icon: Award },
   { to: "/admin/fees", label: "Fees", icon: DollarSign },
   { to: "/admin/announcements", label: "Announcements", icon: Megaphone },
+  { to: "/admin/parents", label: "Parents", icon: Heart },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
@@ -33,6 +34,10 @@ const studentLinks = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard },
   { to: "/student/exams", label: "Exams", icon: ClipboardList },
   { to: "/student/results", label: "My Results", icon: BarChart3 },
+];
+
+const parentLinks = [
+  { to: "/parent", label: "Dashboard", icon: LayoutDashboard },
 ];
 
 interface NavItem {
@@ -69,7 +74,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     loadPerms();
   }, [role, user]);
 
-  const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : studentLinks;
+  const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
 
   const handleSignOut = async () => {
     await signOut();
