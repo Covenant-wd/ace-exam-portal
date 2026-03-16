@@ -23,7 +23,7 @@ interface Parent {
 interface StudentItem { user_id: string; full_name: string; }
 
 export default function Parents() {
-  const { session, schoolId } = useAuth();
+  const { schoolId } = useAuth();
   const [parents, setParents] = useState<Parent[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,18 +156,22 @@ export default function Parents() {
       } else {
         // Create via manage-student-like edge function isn't available
         // Use manage-school-admin as a workaround to create any user
-        const { data, error } = await supabase.functions.invoke("manage-student", {
-          body: { action: "create_parent", email, password, full_name: fullName, username },
-          headers: { Authorization: `Bearer ${session?.access_token}` },
+        // Create parent via SQL function (no edge function needed)
+        const { data: newUserId, error: createError } = await supabase.rpc("create_parent_account", {
+          _email: email,
+          _password: password,
+          _full_name: fullName,
+          _username: username,
+          _school_id: schoolId!,
         });
 
-        if (error || data?.error) {
-          toast.error(data?.error || "Failed to create parent. Please try again.");
+        if (createError) {
+          toast.error(createError.message || "Failed to create parent.");
           setSaving(false);
           return;
         }
 
-        const newUserId = data?.user_id;
+        // Link children
         if (newUserId && selectedChildren.length > 0) {
           await supabase.from("parent_students").insert(
             selectedChildren.map(sid => ({ parent_id: newUserId, student_id: sid, school_id: schoolId! }))
