@@ -154,8 +154,6 @@ export default function Parents() {
         }
         toast.success("Parent updated");
       } else {
-        // Create via manage-student-like edge function isn't available
-        // Use manage-school-admin as a workaround to create any user
         // Create parent via SQL function (no edge function needed)
         const { data: newUserId, error: createError } = await supabase.rpc("create_parent_account", {
           _email: email,
