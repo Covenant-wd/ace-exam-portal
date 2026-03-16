@@ -36,31 +36,77 @@ export default function Parents() {
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const callFn = async (body: any) => {
-    const { data, error } = await supabase.functions.invoke("manage-parent", {
-      body,
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-    return data;
-  };
-
   const fetchData = async () => {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const [parentsData, studentsRes] = await Promise.all([
-        callFn({ action: "list" }),
-        supabase.from("user_roles").select("user_id").eq("role", "student").eq("school_id", schoolId),
-      ]);
-      setParents(parentsData.parents || []);
+      // Get parent user_ids for this school
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "parent")
+        .eq("school_id", schoolId);
 
-      if (studentsRes.data && studentsRes.data.length > 0) {
-        const userIds = studentsRes.data.map((r: any) => r.user_id);
-        const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", userIds).order("full_name");
-        setStudents((profiles || []) as StudentItem[]);
+      const parentIds = (roles || []).map((r: any) => r.user_id);
+
+      // Get student list
+      const { data: studentRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "student")
+        .eq("school_id", schoolId);
+
+      const studentIds = (studentRoles || []).map((r: any) => r.user_id);
+      if (studentIds.length > 0) {
+        const { data: studentProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", studentIds)
+          .order("full_name");
+        setStudents((studentProfiles || []) as StudentItem[]);
       }
+
+      if (parentIds.length === 0) {
+        setParents([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get parent profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, username")
+        .in("user_id", parentIds)
+        .order("full_name");
+
+      // Get parent-student links
+      const { data: links } = await supabase
+        .from("parent_students")
+        .select("parent_id, student_id")
+        .in("parent_id", parentIds);
+
+      // Get student names for the links
+      const linkedStudentIds = [...new Set((links || []).map((l: any) => l.student_id))];
+      let studentNameMap: Record<string, string> = {};
+      if (linkedStudentIds.length > 0) {
+        const { data: sProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", linkedStudentIds);
+        (sProfiles || []).forEach((p: any) => { studentNameMap[p.user_id] = p.full_name; });
+      }
+
+      const parentList: Parent[] = (profiles || []).map((p: any) => ({
+        user_id: p.user_id,
+        full_name: p.full_name,
+        email: "",
+        username: p.username,
+        children: (links || [])
+          .filter((l: any) => l.parent_id === p.user_id)
+          .map((l: any) => ({ student_id: l.student_id, full_name: studentNameMap[l.student_id] || "Unknown" })),
+      }));
+
+      setParents(parentList);
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -86,30 +132,47 @@ export default function Parents() {
 
   const handleSave = async () => {
     if (!fullName.trim() || !email.trim()) { toast.error("Name and email are required"); return; }
-    if (!editing && !password) { toast.error("Password is required for new parent"); return; }
+    if (!editing && !password) { toast.error("Password is required"); return; }
     if (!editing && !username.trim()) { toast.error("Username is required"); return; }
     setSaving(true);
     try {
       if (editing) {
-        await callFn({
-          action: "update",
-          user_id: editing.user_id,
+        // Update profile
+        await supabase.from("profiles").update({
           full_name: fullName,
-          email,
-          username,
-          child_ids: selectedChildren,
-          ...(password ? { password } : {}),
-        });
+          first_name: fullName.split(" ")[0] || "",
+          last_name: fullName.split(" ").slice(1).join(" ") || "",
+          username: username || null,
+        }).eq("user_id", editing.user_id);
+
+        // Update children links
+        await supabase.from("parent_students").delete().eq("parent_id", editing.user_id);
+        if (selectedChildren.length > 0) {
+          await supabase.from("parent_students").insert(
+            selectedChildren.map(sid => ({ parent_id: editing.user_id, student_id: sid, school_id: schoolId! }))
+          );
+        }
         toast.success("Parent updated");
       } else {
-        await callFn({
-          action: "create",
-          full_name: fullName,
-          email,
-          username,
-          password,
-          child_ids: selectedChildren,
+        // Create via manage-student-like edge function isn't available
+        // Use manage-school-admin as a workaround to create any user
+        const { data, error } = await supabase.functions.invoke("manage-student", {
+          body: { action: "create_parent", email, password, full_name: fullName, username },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
         });
+
+        if (error || data?.error) {
+          toast.error(data?.error || "Failed to create parent. Please try again.");
+          setSaving(false);
+          return;
+        }
+
+        const newUserId = data?.user_id;
+        if (newUserId && selectedChildren.length > 0) {
+          await supabase.from("parent_students").insert(
+            selectedChildren.map(sid => ({ parent_id: newUserId, student_id: sid, school_id: schoolId! }))
+          );
+        }
         toast.success("Parent created");
       }
       setDialogOpen(false);
@@ -121,9 +184,14 @@ export default function Parents() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm("Delete this parent?")) return;
+    if (!confirm("Delete this parent? This cannot be undone.")) return;
     try {
-      await callFn({ action: "delete", user_id: userId });
+      // Delete links first
+      await supabase.from("parent_students").delete().eq("parent_id", userId);
+      // Delete role
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      // Delete profile
+      await supabase.from("profiles").delete().eq("user_id", userId);
       toast.success("Parent deleted");
       fetchData();
     } catch (err: any) {
@@ -154,7 +222,6 @@ export default function Parents() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Username</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Children</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -162,7 +229,7 @@ export default function Parents() {
             <TableBody>
               {parents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                     <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />No parents yet
                   </TableCell>
                 </TableRow>
@@ -170,7 +237,6 @@ export default function Parents() {
                 <TableRow key={p.user_id}>
                   <TableCell className="font-medium">{p.full_name}</TableCell>
                   <TableCell>{p.username || "—"}</TableCell>
-                  <TableCell>{p.email}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {p.children.length === 0 ? (
@@ -198,9 +264,9 @@ export default function Parents() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2"><Label>Full Name *</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Parent full name" /></div>
-            <div className="space-y-2"><Label>Email *</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@email.com" /></div>
+            {!editing && <div className="space-y-2"><Label>Email *</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@email.com" /></div>}
             <div className="space-y-2"><Label>Username *</Label><Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username for login" /></div>
-            <div className="space-y-2"><Label>{editing ? "Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6} /></div>
+            {!editing && <div className="space-y-2"><Label>Password *</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6} /></div>}
 
             <div className="space-y-2">
               <Label>Assign Children ({selectedChildren.length} selected)</Label>
