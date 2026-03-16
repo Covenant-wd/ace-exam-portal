@@ -154,28 +154,58 @@ export default function Parents() {
         }
         toast.success("Parent updated");
       } else {
-        // Create parent via SQL function (no edge function needed)
-        const { data: newUserId, error: createError } = await supabase.rpc("create_parent_account", {
-          _email: email,
-          _password: password,
-          _full_name: fullName,
-          _username: username,
-          _school_id: schoolId!,
+        // Use a secondary client with sessionStorage so admin session is unaffected
+        const { createClient } = await import("@supabase/supabase-js");
+        const tempClient = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          { auth: { storage: sessionStorage, persistSession: false, autoRefreshToken: false } }
+        );
+
+        // Sign up the parent using proper Supabase Auth (correct password hashing)
+        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName, school_id: schoolId },
+          },
         });
 
-        if (createError) {
-          toast.error(createError.message || "Failed to create parent.");
+        if (signUpError || !signUpData.user) {
+          toast.error(signUpError?.message || "Failed to create parent account.");
           setSaving(false);
           return;
         }
 
+        const newUserId = signUpData.user.id;
+
+        // Immediately sign out the temp client so no session conflict
+        await tempClient.auth.signOut();
+
+        // Update profile and role using the admin's session (supabase client)
+        await supabase.from("profiles").update({
+          full_name: fullName,
+          first_name: fullName.split(" ")[0] || "",
+          last_name: fullName.split(" ").slice(1).join(" ") || "",
+          username: username || null,
+          school_id: schoolId!,
+        }).eq("user_id", newUserId);
+
+        await supabase.from("user_roles").update({
+          role: "parent" as any,
+          school_id: schoolId!,
+        }).eq("user_id", newUserId);
+
+        // Confirm email so parent can login immediately (no email verification needed)
+        await supabase.rpc("confirm_user_email", { _user_id: newUserId });
+
         // Link children
-        if (newUserId && selectedChildren.length > 0) {
+        if (selectedChildren.length > 0) {
           await supabase.from("parent_students").insert(
             selectedChildren.map(sid => ({ parent_id: newUserId, student_id: sid, school_id: schoolId! }))
           );
         }
-        toast.success("Parent created");
+        toast.success("Parent created successfully");
       }
       setDialogOpen(false);
       fetchData();
