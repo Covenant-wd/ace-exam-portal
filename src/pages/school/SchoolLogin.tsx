@@ -26,6 +26,7 @@ export default function SchoolLogin() {
 
   // Form states
   const [loginTab, setLoginTab] = useState("student");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +76,46 @@ export default function SchoolLogin() {
     return <Navigate to="/student" replace />;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleStudentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      // Look up email from username in profiles, scoped to this school
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("username", username.trim())
+        .eq("school_id", school!.id)
+        .single();
+
+      if (profileError || !profile) {
+        toast.error("Username not found. Please check and try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      // Get email using the get_email_by_username function
+      const { data: emailData, error: emailError } = await supabase
+        .rpc("get_email_by_username", {
+          _username: username.trim(),
+          _school_id: school!.id,
+        });
+
+      if (emailError || !emailData) {
+        toast.error("Account not found. Contact your school admin.");
+        setSubmitting(false);
+        return;
+      }
+
+      const { error } = await signIn(emailData, password);
+      if (error) toast.error("Incorrect password. Please try again.");
+    } catch {
+      toast.error("Login failed. Please try again.");
+    }
+    setSubmitting(false);
+  };
+
+  const handleStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     const { error } = await signIn(email, password);
@@ -111,10 +151,10 @@ export default function SchoolLogin() {
             </TabsList>
 
             <TabsContent value="student">
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              <form onSubmit={handleStudentSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@email.com" required />
+                  <Label>Username</Label>
+                  <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter your username" required autoComplete="username" />
                 </div>
                 <div className="space-y-2">
                   <Label>Password</Label>
@@ -130,7 +170,7 @@ export default function SchoolLogin() {
             </TabsContent>
 
             <TabsContent value="staff">
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              <form onSubmit={handleStaffSubmit} className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label>Email</Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@school.com" required />
