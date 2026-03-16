@@ -34,17 +34,38 @@ interface AnnouncementItem {
 }
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
   const [fees, setFees] = useState<FeeRecord[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, late: 0, total: 0 });
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [activeTerm, setActiveTerm] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
+      // Load active session & term for this school
+      if (schoolId) {
+        const { data: sessData } = await supabase
+          .from("sessions")
+          .select("name")
+          .eq("school_id", schoolId)
+          .eq("is_active", true)
+          .single();
+        if (sessData) setActiveSession(sessData.name);
+
+        const { data: termData } = await supabase
+          .from("terms")
+          .select("name")
+          .eq("school_id", schoolId)
+          .eq("is_active", true)
+          .single();
+        if (termData) setActiveTerm(termData.name);
+      }
+
       // Load attendance
       const { data: attData } = await supabase.from("attendance").select("date, status")
         .eq("student_id", user.id).order("date", { ascending: false }).limit(50);
@@ -94,13 +115,35 @@ export default function StudentDashboard() {
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, schoolId]);
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">My Dashboard</h1>
+
+      {/* Active Session & Term Banner */}
+      {(activeSession || activeTerm) && (
+        <Card className="border-0 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center gap-3 py-3 px-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4 text-primary" />
+              <span>Current Period:</span>
+            </div>
+            {activeSession && (
+              <Badge variant="outline" className="text-sm font-medium">
+                {activeSession}
+              </Badge>
+            )}
+            {activeTerm && (
+              <Badge className="text-sm font-medium">
+                {activeTerm}
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
