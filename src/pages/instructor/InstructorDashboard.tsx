@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { BookOpen, FileText, Users, BarChart3, Calendar, Loader2, CheckSquare, Award, DollarSign, Megaphone, ChevronRight, GraduationCap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, FileText, Users, BarChart3, Calendar, Loader2 } from "lucide-react";
+
+const permLabels: Record<string, { label: string; icon: any; to: string; color: string }> = {
+  can_manage_exams:       { label: "Manage Exams",     icon: FileText,    to: "/instructor/exams",       color: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" },
+  can_view_results:       { label: "View Results",     icon: BarChart3,   to: "/instructor/results",     color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
+  can_manage_students:    { label: "Manage Students",  icon: Users,       to: "/instructor/students",    color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
+  can_manage_subjects:    { label: "Manage Subjects",  icon: BookOpen,    to: "/instructor/subjects",    color: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400" },
+  can_mark_attendance:    { label: "Mark Attendance",  icon: CheckSquare, to: "/instructor/attendance",  color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400" },
+  can_manage_grades:      { label: "Manage Grades",    icon: Award,       to: "/instructor/grades",      color: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" },
+  can_manage_timetable:   { label: "Timetable",        icon: Calendar,    to: "/instructor/timetable",   color: "bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400" },
+  can_manage_fees:        { label: "Manage Fees",      icon: DollarSign,  to: "/instructor/fees",        color: "bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400" },
+  can_post_announcements: { label: "Announcements",    icon: Megaphone,   to: "/instructor/announcements", color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400" },
+};
 
 export default function InstructorDashboard() {
-  const { user } = useAuth();
+  const { user, schoolId } = useAuth();
   const [permissions, setPermissions] = useState<any>(null);
-  const [stats, setStats] = useState({ classes: 0, exams: 0, students: 0 });
+  const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [activeSession, setActiveSession] = useState("");
   const [activeTerm, setActiveTerm] = useState("");
   const [loading, setLoading] = useState(true);
@@ -16,77 +28,103 @@ export default function InstructorDashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      // Fetch permissions
-      const { data: perms } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
-      setPermissions(perms);
+      const [permsRes, classesRes] = await Promise.all([
+        supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single(),
+        supabase.from("instructor_classes").select("class_id, classes:class_id(id, name)").eq("instructor_id", user.id),
+      ]);
+      setPermissions(permsRes.data);
+      setClasses((classesRes.data || []).map((c: any) => c.classes).filter(Boolean));
 
-      // Fetch assigned classes
-      const { data: assignedClasses } = await supabase.from("instructor_classes").select("class_id").eq("instructor_id", user.id);
-      const classCount = assignedClasses?.length || 0;
-      setStats(s => ({ ...s, classes: classCount }));
-
-      // Active session & term
-      const { data: sess } = await supabase.from("sessions").select("name").eq("is_active", true).single();
-      if (sess) setActiveSession(sess.name);
-      const { data: term } = await supabase.from("terms").select("name").eq("is_active", true).single();
-      if (term) setActiveTerm(term.name);
-
+      if (schoolId) {
+        const [sess, term] = await Promise.all([
+          supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
+          supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
+        ]);
+        if (sess.data) setActiveSession(sess.data.name);
+        if (term.data) setActiveTerm(term.data.name);
+      }
       setLoading(false);
     };
     load();
-  }, [user]);
+  }, [user, schoolId]);
 
-  if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  const activePerms = permissions ? Object.entries(permLabels).filter(([key]) => permissions[key]) : [];
 
-  const cards = [
-    { label: "Assigned Classes", value: stats.classes, icon: BookOpen, color: "text-primary" },
-  ];
+  if (loading) return <div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">Instructor Dashboard</h1>
+    <div className="space-y-6">
 
-      {(activeSession || activeTerm) && (
-        <Card className="mb-6 border-0 shadow-md bg-primary/5">
-          <CardContent className="flex items-center gap-4 py-4">
-            <Calendar className="h-5 w-5 text-primary" />
-            {activeSession && <Badge variant="outline">{activeSession}</Badge>}
-            {activeTerm && <Badge>{activeTerm}</Badge>}
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        {cards.map(c => (
-          <Card key={c.label} className="border-0 shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
-              <c.icon className={`h-4 w-4 ${c.color}`} />
-            </CardHeader>
-            <CardContent><div className="text-2xl font-bold">{c.value}</div></CardContent>
-          </Card>
-        ))}
+      {/* Welcome banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-lg">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, white 1px, transparent 1px)", backgroundSize: "25px 25px" }} />
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight">Instructor Dashboard</h1>
+            <p className="text-white/70 text-sm mt-1">
+              {classes.length > 0 ? `Teaching ${classes.length} class${classes.length > 1 ? "es" : ""}` : "No classes assigned yet"}
+            </p>
+          </div>
+          {(activeSession || activeTerm) && (
+            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
+              <Calendar className="h-4 w-4 text-white/60 shrink-0" />
+              <div>
+                {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
+                {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <Card className="border-0 shadow-md">
-        <CardHeader><CardTitle>Your Permissions</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {permissions?.can_manage_exams && <Badge>Create & Manage Exams</Badge>}
-            {permissions?.can_view_results && <Badge>View Results</Badge>}
-            {permissions?.can_manage_students && <Badge>Manage Students</Badge>}
-            {permissions?.can_manage_subjects && <Badge>Manage Subjects</Badge>}
-            {permissions?.can_mark_attendance && <Badge>Mark Attendance</Badge>}
-            {permissions?.can_manage_grades && <Badge>Manage Grades</Badge>}
-            {permissions?.can_manage_timetable && <Badge>Manage Timetable</Badge>}
-            {permissions?.can_manage_fees && <Badge>Manage Fees</Badge>}
-            {permissions?.can_post_announcements && <Badge>Post Announcements</Badge>}
-            {!permissions?.can_manage_exams && !permissions?.can_view_results && !permissions?.can_manage_students && !permissions?.can_manage_subjects && !permissions?.can_mark_attendance && !permissions?.can_manage_grades && !permissions?.can_manage_timetable && !permissions?.can_manage_fees && !permissions?.can_post_announcements && (
-              <p className="text-muted-foreground text-sm">No permissions assigned yet. Contact your administrator.</p>
-            )}
+      {/* Assigned Classes */}
+      {classes.length > 0 && (
+        <div>
+          <h2 className="text-base font-bold text-foreground mb-3">My Classes</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {classes.map(c => (
+              <div key={c.id} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-500/10">
+                  <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
+              </div>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* Permissions / Quick Access */}
+      <div>
+        <h2 className="text-base font-bold text-foreground mb-3">Your Access</h2>
+        {activePerms.length === 0 ? (
+          <div className="rounded-2xl border border-black/5 dark:border-white/5 bg-white dark:bg-white/5 p-8 text-center">
+            <p className="text-muted-foreground text-sm">No permissions assigned yet.</p>
+            <p className="text-muted-foreground text-xs mt-1">Contact your school admin.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {activePerms.map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              return (
+                <Link
+                  key={key}
+                  to={cfg.to}
+                  className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+                >
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${cfg.color.split(' ').slice(0, 2).join(' ')}`}>
+                    <Icon className={`h-4 w-4 ${cfg.color.split(' ').slice(2).join(' ')}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{cfg.label}</p>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground mt-0.5 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
