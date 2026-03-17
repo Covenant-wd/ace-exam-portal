@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { sendParentWelcomeEmail } from "@/lib/email";
 
 interface Child { student_id: string; full_name: string; }
 interface Parent {
@@ -206,6 +207,17 @@ export default function Parents() {
           );
         }
         toast.success("Parent created successfully");
+        // Send welcome email to parent
+        const childNameList = students.filter(s => selectedChildren.includes(s.user_id)).map(s => s.full_name);
+        const loginUrl = `${window.location.origin}/school/${window.location.hostname}`;
+        await sendParentWelcomeEmail({
+          to: email,
+          parentName: fullName,
+          schoolName: document.title || "School",
+          loginUrl: window.location.origin,
+          username,
+          childNames: childNameList,
+        });
       }
       setDialogOpen(false);
       fetchData();

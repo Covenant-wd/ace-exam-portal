@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { sendAbsentNotificationEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -117,6 +118,34 @@ export default function Attendance() {
       if (error) throw error;
       toast.success("Attendance saved successfully");
       setExistingRecords(true);
+      // Send absent notifications to parents
+      try {
+        const absentStudents = Array.from(records.values()).filter(r => r.status === "absent");
+        for (const absent of absentStudents) {
+          const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", absent.student_id);
+          if (!parentLinks || parentLinks.length === 0) continue;
+          const parentIds = parentLinks.map((p: any) => p.parent_id);
+          const { data: parentEmailRows } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+          const parentEmails = (parentEmailRows || []).map((r: any) => r.email).filter(Boolean);
+          if (parentEmails.length === 0) continue;
+          const studentProfile = students.find(s => s.user_id === absent.student_id);
+          const className = classes.find(c => c.id === selectedClass)?.name || "";
+          // Get parent names
+          const { data: parentProfiles } = await supabase.from("profiles").select("full_name").in("user_id", parentIds);
+          const parentName = parentProfiles?.[0]?.full_name || "Parent";
+          if (studentProfile) {
+            await sendAbsentNotificationEmail({
+              to: parentEmails,
+              parentName,
+              studentName: studentProfile.full_name,
+              schoolName: document.title || "School",
+              className,
+              date: selectedDate,
+              loginUrl: window.location.origin,
+            });
+          }
+        }
+      } catch {}
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };

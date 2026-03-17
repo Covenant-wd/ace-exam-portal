@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { sendFeePaymentEmail } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -114,6 +115,33 @@ export default function Fees() {
       } as any);
       if (error) throw error;
       toast.success("Payment recorded");
+      // Send fee payment email to student and parents
+      try {
+        const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", payStudent).single();
+        const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: payStudent });
+        const emails: string[] = [];
+        if (studentEmail) emails.push(studentEmail);
+        const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", payStudent);
+        if (parentLinks && parentLinks.length > 0) {
+          const parentIds = parentLinks.map((p: any) => p.parent_id);
+          const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+          (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+        }
+        const feeName = feeTypes.find(f => f.id === payFeeType)?.name || "";
+        if (emails.length > 0 && profile) {
+          await sendFeePaymentEmail({
+            to: emails,
+            recipientName: profile.full_name,
+            studentName: profile.full_name,
+            schoolName: document.title || "School",
+            feeName,
+            amountPaid: parseFloat(payAmount),
+            paymentDate: new Date().toISOString(),
+            receiptNumber: payReceipt,
+            loginUrl: window.location.origin,
+          });
+        }
+      } catch {}
       setPayDialog(false);
       setPayStudent(""); setPayFeeType(""); setPayAmount(""); setPayReceipt(""); setPayNotes("");
       await loadPayments(schoolId);

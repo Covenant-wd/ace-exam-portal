@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Shield, School } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { sendInstructorWelcomeEmail } from "@/lib/email";
 
 interface Instructor {
   user_id: string;
@@ -111,8 +112,17 @@ export default function Instructors() {
         await callFn({ action: "update", user_id: editing.user_id, email, full_name: fullName, ...(password ? { password } : {}) });
         toast.success("Instructor updated");
       } else {
-        await callFn({ action: "create", email, password, full_name: fullName });
+        const res = await callFn({ action: "create", email, password, full_name: fullName });
         toast.success("Instructor created");
+        // Send welcome email
+        const loginUrl = window.location.origin + "/school/" + window.location.pathname.split("/")[2];
+        await sendInstructorWelcomeEmail({
+          to: email,
+          instructorName: fullName,
+          schoolName: document.title || "School",
+          loginUrl: window.location.origin,
+          password,
+        });
       }
       setDialogOpen(false);
       fetchData();

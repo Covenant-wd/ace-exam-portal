@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { sendAnnouncementEmail } from "@/lib/email";
+import { supabase as sb } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,6 +61,25 @@ export default function Announcements() {
       } else {
         const { error } = await supabase.from("announcements").insert(payload);
         if (error) throw error;
+        // Send email notification to relevant users
+        try {
+          const targetRoles = targetRole === "all" ? ["student", "instructor", "parent"] : [targetRole];
+          const { data: roleRows } = await supabase.from("user_roles").select("user_id").in("role", targetRoles).eq("school_id", schoolId!);
+          const userIds = (roleRows || []).map((r: any) => r.user_id);
+          if (userIds.length > 0) {
+            const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const emails = (emailRows || []).map((r: any) => r.email).filter(Boolean);
+            if (emails.length > 0) {
+              await sendAnnouncementEmail({
+                to: emails,
+                schoolName: document.title || "School",
+                title,
+                content,
+                loginUrl: window.location.origin,
+              });
+            }
+          }
+        } catch {}
       }
       toast.success(editing ? "Updated" : "Published");
       setDialog(false);
