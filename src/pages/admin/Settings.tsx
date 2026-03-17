@@ -5,10 +5,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, School, ImagePlus, Trash2 } from "lucide-react";
+import { Loader2, Save, School, ImagePlus, Trash2, Bell } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { useEffect, useState } from "react";
 
 export default function Settings() {
+  const { schoolId } = useAuth();
   const { schoolName, isLoading: nameLoading } = useSchoolName();
+  const [notifyAnnouncement, setNotifyAnnouncement] = useState(true);
+  const [notifyExamResult, setNotifyExamResult] = useState(true);
+  const [notifyFeePayment, setNotifyFeePayment] = useState(true);
+  const [notifyAttendanceAbsent, setNotifyAttendanceAbsent] = useState(true);
+  const [notifySaving, setNotifySaving] = useState(false);
+
+  useEffect(() => {
+    if (!schoolId) return;
+    const loadNotifSettings = async () => {
+      const { data } = await supabase.from("school_settings")
+        .select("key, value")
+        .eq("school_id", schoolId)
+        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent"]);
+      (data || []).forEach((s: any) => {
+        const val = s.value === "true";
+        if (s.key === "notify_announcement") setNotifyAnnouncement(val);
+        if (s.key === "notify_exam_result") setNotifyExamResult(val);
+        if (s.key === "notify_fee_payment") setNotifyFeePayment(val);
+        if (s.key === "notify_attendance_absent") setNotifyAttendanceAbsent(val);
+      });
+    };
+    loadNotifSettings();
+  }, [schoolId]);
+
+  const saveNotifSetting = async (key: string, value: boolean) => {
+    if (!schoolId) return;
+    await supabase.from("school_settings").upsert(
+      { key, value: String(value), school_id: schoolId },
+      { onConflict: "school_id,key" }
+    );
+  };
   const { logoUrl, isLoading: logoLoading } = useSchoolLogo();
   const updateNameMutation = useUpdateSchoolName();
   const updateLogoMutation = useUpdateSchoolLogo();
@@ -152,6 +188,42 @@ export default function Settings() {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Email Notifications</CardTitle>
+              <CardDescription>Choose which activities trigger automatic email alerts.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { label: "New Announcement", desc: "Notify all relevant users when an announcement is posted", value: notifyAnnouncement, key: "notify_announcement", set: setNotifyAnnouncement },
+            { label: "Exam Result Available", desc: "Notify students and parents when exam results are published", value: notifyExamResult, key: "notify_exam_result", set: setNotifyExamResult },
+            { label: "Fee Payment Recorded", desc: "Notify students and parents when a fee payment is recorded", value: notifyFeePayment, key: "notify_fee_payment", set: setNotifyFeePayment },
+            { label: "Attendance Absent", desc: "Notify parents when their child is marked absent", value: notifyAttendanceAbsent, key: "notify_attendance_absent", set: setNotifyAttendanceAbsent },
+          ].map(item => (
+            <div key={item.key} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
+              <div>
+                <p className="text-sm font-medium">{item.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+              </div>
+              <Switch
+                checked={item.value}
+                onCheckedChange={async (v) => {
+                  item.set(v);
+                  await saveNotifSetting(item.key, v);
+                }}
+              />
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>
