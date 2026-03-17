@@ -172,11 +172,9 @@ export default function Parents() {
           },
         });
 
-        if (signUpError || !signUpData.user) {
-          toast.error(signUpError?.message || "Failed to create parent account.");
-          setSaving(false);
-          return;
-        }
+        if (signUpError) throw new Error(signUpError.message);
+        if (!signUpData.user) throw new Error("Failed to create account. Please try again.");
+        if ((signUpData.user.identities ?? []).length === 0) throw new Error("This email is already registered. Use a different email.");
 
         const newUserId = signUpData.user.id;
 

@@ -38,7 +38,7 @@ interface ClassItem {
 }
 
 export default function Instructors() {
-  const { session, schoolId } = useAuth();
+  const { schoolId } = useAuth();
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,40 +61,36 @@ export default function Instructors() {
   const [classesInstructor, setClassesInstructor] = useState<Instructor | null>(null);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
 
-  const callFn = async (body: any) => {
-    const { data, error } = await supabase.functions.invoke("manage-instructor", {
-      body,
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    });
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-    return data;
-  };
-
   const fetchData = async () => {
+    if (!schoolId) return;
     try {
-      const [instrData, classData] = await Promise.all([
-        callFn({ action: "list" }),
-        supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
+      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "instructor").eq("school_id", schoolId);
+      const instrIds = (roles || []).map((r: any) => r.user_id);
+      const { data: classData } = await supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name");
+      setClasses(classData || []);
+
+      if (instrIds.length === 0) { setInstructors([]); setLoading(false); return; }
+
+      const [profilesRes, permsRes, classLinksRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name, first_name, last_name").in("user_id", instrIds).order("full_name"),
+        supabase.from("instructor_permissions").select("*").in("instructor_id", instrIds),
+        supabase.from("instructor_classes").select("instructor_id, class_id").in("instructor_id", instrIds),
       ]);
-      const rawInstructors = instrData.instructors || [];
-      // Fetch permissions directly from DB to avoid edge function cache issues
-      const userIds = rawInstructors.map((i: any) => i.user_id);
-      if (userIds.length > 0) {
-        const { data: permsData } = await supabase
-          .from("instructor_permissions")
-          .select("*")
-          .in("instructor_id", userIds);
-        const permsMap = new Map((permsData || []).map((p: any) => [p.instructor_id, p]));
-        const merged = rawInstructors.map((i: any) => ({
-          ...i,
-          permissions: permsMap.get(i.user_id) || i.permissions,
-        }));
-        setInstructors(merged);
-      } else {
-        setInstructors(rawInstructors);
-      }
-      setClasses(classData.data || []);
+
+      const permsMap = new Map((permsRes.data || []).map((p: any) => [p.instructor_id, p]));
+      const classMap = new Map<string, string[]>();
+      (classLinksRes.data || []).forEach((l: any) => {
+        if (!classMap.has(l.instructor_id)) classMap.set(l.instructor_id, []);
+        classMap.get(l.instructor_id)!.push(l.class_id);
+      });
+
+      setInstructors((profilesRes.data || []).map((p: any) => ({
+        user_id: p.user_id,
+        full_name: p.full_name,
+        email: "",
+        permissions: permsMap.get(p.user_id) || {},
+        assigned_classes: classMap.get(p.user_id) || [],
+      })));
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -109,13 +105,40 @@ export default function Instructors() {
     setSaving(true);
     try {
       if (editing) {
-        await callFn({ action: "update", user_id: editing.user_id, email, full_name: fullName, ...(password ? { password } : {}) });
+        await supabase.from("profiles").update({
+          full_name: fullName,
+          first_name: fullName.split(" ")[0] || "",
+          last_name: fullName.split(" ").slice(1).join(" ") || "",
+        }).eq("user_id", editing.user_id);
         toast.success("Instructor updated");
       } else {
-        const res = await callFn({ action: "create", email, password, full_name: fullName });
-        toast.success("Instructor created");
-        // Send welcome email
-        const loginUrl = window.location.origin + "/school/" + window.location.pathname.split("/")[2];
+        const { createClient } = await import("@supabase/supabase-js");
+        const tempClient = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          { auth: { storage: sessionStorage, persistSession: false, autoRefreshToken: false } }
+        );
+        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+          email, password,
+          options: { data: { full_name: fullName, school_id: schoolId } },
+        });
+        await tempClient.auth.signOut();
+
+        if (signUpError) throw new Error(signUpError.message);
+        if (!signUpData.user) throw new Error("Failed to create account. Please try again.");
+        if ((signUpData.user.identities ?? []).length === 0) throw new Error("This email is already registered. Use a different email.");
+
+        const newUserId = signUpData.user.id;
+        await supabase.rpc("confirm_user_email", { _user_id: newUserId });
+        await supabase.from("profiles").update({
+          full_name: fullName,
+          first_name: fullName.split(" ")[0] || "",
+          last_name: fullName.split(" ").slice(1).join(" ") || "",
+          school_id: schoolId!,
+        }).eq("user_id", newUserId);
+        await supabase.from("user_roles").update({ role: "instructor" as any, school_id: schoolId! }).eq("user_id", newUserId);
+        await supabase.from("instructor_permissions").insert({ instructor_id: newUserId, school_id: schoolId! } as any);
+
         await sendInstructorWelcomeEmail({
           to: email,
           instructorName: fullName,
@@ -123,6 +146,7 @@ export default function Instructors() {
           loginUrl: window.location.origin,
           password,
         });
+        toast.success("Instructor created");
       }
       setDialogOpen(false);
       fetchData();
@@ -135,7 +159,10 @@ export default function Instructors() {
   const handleDelete = async (userId: string) => {
     if (!confirm("Delete this instructor?")) return;
     try {
-      await callFn({ action: "delete", user_id: userId });
+      await supabase.from("instructor_permissions").delete().eq("instructor_id", userId);
+      await supabase.from("instructor_classes").delete().eq("instructor_id", userId);
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      await supabase.from("profiles").delete().eq("user_id", userId);
       toast.success("Instructor deleted");
       fetchData();
     } catch (err: any) {
@@ -175,7 +202,12 @@ export default function Instructors() {
     if (!classesInstructor) return;
     setSaving(true);
     try {
-      await callFn({ action: "assign_classes", instructor_id: classesInstructor.user_id, class_ids: selectedClasses });
+      await supabase.from("instructor_classes").delete().eq("instructor_id", classesInstructor.user_id);
+      if (selectedClasses.length > 0) {
+        await supabase.from("instructor_classes").insert(
+          selectedClasses.map(classId => ({ instructor_id: classesInstructor.user_id, class_id: classId, school_id: schoolId! }))
+        );
+      }
       toast.success("Classes assigned");
       setClassesOpen(false);
       fetchData();
