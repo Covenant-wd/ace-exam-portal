@@ -123,9 +123,9 @@ export default function Instructors() {
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create instructor account.");
 
-        await supabase.from("instructor_permissions").insert({
+        await supabase.from("instructor_permissions").upsert({
           instructor_id: newUserId, school_id: schoolId!,
-        } as any);
+        } as any, { onConflict: "instructor_id" });
 
         // Fire-and-forget welcome email
         sendInstructorWelcomeEmail({
