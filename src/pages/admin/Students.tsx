@@ -159,41 +159,29 @@ export default function Students() {
         if (error) throw error;
         toast.success("Student updated");
       } else {
-        const { createClient } = await import("@supabase/supabase-js");
-        const tempClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          { auth: { storage: sessionStorage, persistSession: false, autoRefreshToken: false } }
-        );
-        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
-          email: form.email,
-          password: form.password,
-          options: { data: { full_name: fullName, school_id: schoolId } },
-        });
-        await tempClient.auth.signOut();
+        const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
+          _email:     form.email.trim().toLowerCase(),
+          _password:  form.password,
+          _full_name: fullName,
+          _role:      "student",
+          _school_id: schoolId!,
+          _username:  form.username || null,
+        } as any);
+        if (createError) throw new Error(createError.message);
+        if (!newUserId) throw new Error("Failed to create student account.");
 
-        if (signUpError) throw new Error(signUpError.message);
-        if (!signUpData.user) throw new Error("Failed to create account. Please try again.");
-        if ((signUpData.user.identities ?? []).length === 0) throw new Error("This email is already registered. Use a different email.");
-
-        const newUserId = signUpData.user.id;
-        await supabase.rpc("confirm_user_email", { _user_id: newUserId });
         await supabase.from("profiles").update({
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
+          first_name:       form.first_name,
+          middle_name:      form.middle_name || "",
+          last_name:        form.last_name,
+          class_id:         form.class_id || null,
+          date_of_birth:    form.date_of_birth || null,
+          address:          form.address || "",
+          parent_name:      form.parent_name || "",
+          nationality:      form.nationality || "",
+          gender:           form.gender || "",
           subjects_offered: subjects,
-          school_id: schoolId!,
         }).eq("user_id", newUserId);
-        await supabase.from("user_roles").update({ role: "student" as any, school_id: schoolId! }).eq("user_id", newUserId);
         toast.success("Student created");
       }
       setDialogOpen(false);

@@ -155,48 +155,17 @@ export default function Parents() {
         }
         toast.success("Parent updated");
       } else {
-        // Use a secondary client with sessionStorage so admin session is unaffected
-        const { createClient } = await import("@supabase/supabase-js");
-        const tempClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          { auth: { storage: sessionStorage, persistSession: false, autoRefreshToken: false } }
-        );
-
-        // Sign up the parent using proper Supabase Auth (correct password hashing)
-        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName, school_id: schoolId },
-          },
-        });
-
-        if (signUpError) throw new Error(signUpError.message);
-        if (!signUpData.user) throw new Error("Failed to create account. Please try again.");
-        if ((signUpData.user.identities ?? []).length === 0) throw new Error("This email is already registered. Use a different email.");
-
-        const newUserId = signUpData.user.id;
-
-        // Immediately sign out the temp client so no session conflict
-        await tempClient.auth.signOut();
-
-        // Update profile and role using the admin's session (supabase client)
-        await supabase.from("profiles").update({
-          full_name: fullName,
-          first_name: fullName.split(" ")[0] || "",
-          last_name: fullName.split(" ").slice(1).join(" ") || "",
-          username: username || null,
-          school_id: schoolId!,
-        }).eq("user_id", newUserId);
-
-        await supabase.from("user_roles").update({
-          role: "parent" as any,
-          school_id: schoolId!,
-        }).eq("user_id", newUserId);
-
-        // Confirm email so parent can login immediately (no email verification needed)
-        await supabase.rpc("confirm_user_email", { _user_id: newUserId });
+        // Create user via SQL function
+        const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
+          _email:     email.trim().toLowerCase(),
+          _password:  password,
+          _full_name: fullName,
+          _role:      "parent",
+          _school_id: schoolId!,
+          _username:  username || null,
+        } as any);
+        if (createError) throw new Error(createError.message);
+        if (!newUserId) throw new Error("Failed to create parent account.");
 
         // Link children
         if (selectedChildren.length > 0) {
@@ -208,14 +177,14 @@ export default function Parents() {
         // Send welcome email to parent
         const childNameList = students.filter(s => selectedChildren.includes(s.user_id)).map(s => s.full_name);
         const loginUrl = `${window.location.origin}/school/${window.location.hostname}`;
-        await sendParentWelcomeEmail({
+        sendParentWelcomeEmail({
           to: email,
           parentName: fullName,
           schoolName: document.title || "School",
           loginUrl: window.location.origin,
           username,
           childNames: childNameList,
-        });
+        }).catch(() => {});
       }
       setDialogOpen(false);
       fetchData();

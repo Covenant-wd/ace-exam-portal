@@ -112,40 +112,29 @@ export default function Instructors() {
         }).eq("user_id", editing.user_id);
         toast.success("Instructor updated");
       } else {
-        const { createClient } = await import("@supabase/supabase-js");
-        const tempClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          { auth: { storage: sessionStorage, persistSession: false, autoRefreshToken: false } }
-        );
-        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
-          email, password,
-          options: { data: { full_name: fullName, school_id: schoolId } },
-        });
-        await tempClient.auth.signOut();
+        const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
+          _email:     email.trim().toLowerCase(),
+          _password:  password,
+          _full_name: fullName,
+          _role:      "instructor",
+          _school_id: schoolId!,
+          _username:  null,
+        } as any);
+        if (createError) throw new Error(createError.message);
+        if (!newUserId) throw new Error("Failed to create instructor account.");
 
-        if (signUpError) throw new Error(signUpError.message);
-        if (!signUpData.user) throw new Error("Failed to create account. Please try again.");
-        if ((signUpData.user.identities ?? []).length === 0) throw new Error("This email is already registered. Use a different email.");
+        await supabase.from("instructor_permissions").insert({
+          instructor_id: newUserId, school_id: schoolId!,
+        } as any);
 
-        const newUserId = signUpData.user.id;
-        await supabase.rpc("confirm_user_email", { _user_id: newUserId });
-        await supabase.from("profiles").update({
-          full_name: fullName,
-          first_name: fullName.split(" ")[0] || "",
-          last_name: fullName.split(" ").slice(1).join(" ") || "",
-          school_id: schoolId!,
-        }).eq("user_id", newUserId);
-        await supabase.from("user_roles").update({ role: "instructor" as any, school_id: schoolId! }).eq("user_id", newUserId);
-        await supabase.from("instructor_permissions").insert({ instructor_id: newUserId, school_id: schoolId! } as any);
-
-        await sendInstructorWelcomeEmail({
+        // Fire-and-forget welcome email
+        sendInstructorWelcomeEmail({
           to: email,
           instructorName: fullName,
           schoolName: document.title || "School",
           loginUrl: window.location.origin,
           password,
-        });
+        }).catch(() => {});
         toast.success("Instructor created");
       }
       setDialogOpen(false);
