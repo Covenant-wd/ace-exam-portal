@@ -113,29 +113,29 @@ export default function SuperAdminDashboard() {
     }
     setAssignSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("manage-school-admin", {
-        body: {
-          action: "create",
-          school_id: assignSchoolId,
-          email: adminEmail,
-          password: adminPassword,
-          full_name: adminName,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
+        _email:     adminEmail.trim().toLowerCase(),
+        _password:  adminPassword,
+        _full_name: adminName,
+        _role:      "admin",
+        _school_id: assignSchoolId,
+        _username:  null,
+      } as any);
+      if (createError) throw new Error(createError.message);
+      if (!newUserId) throw new Error("Failed to create admin account.");
+
       toast.success("School admin created successfully");
-      // Send welcome email to new admin
+      // Fire-and-forget welcome email
       const school = schools.find(s => s.id === assignSchoolId);
       if (school) {
         const loginUrl = `${window.location.origin}/school/${school.slug}`;
-        await sendAdminWelcomeEmail({
+        sendAdminWelcomeEmail({
           to: adminEmail,
           adminName: adminName,
           schoolName: school.name,
           loginUrl,
           password: adminPassword,
-        });
+        }).catch(() => {});
       }
       setAssignDialog(false);
       setAdminEmail(""); setAdminPassword(""); setAdminName("");
