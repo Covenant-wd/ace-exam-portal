@@ -10,6 +10,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import SuperAdminLayout from "./components/SuperAdminLayout";
 import SuperAdminLogin from "./pages/super-admin/SuperAdminLogin";
 import SuperAdminDashboard from "./pages/super-admin/SuperAdminDashboard";
+import SuperAdminUsers from "./pages/super-admin/SuperAdminUsers";
 import SchoolLogin from "./pages/school/SchoolLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Subjects from "./pages/admin/Subjects";
@@ -60,6 +61,7 @@ function AppRoutes() {
       {/* Super Admin */}
       <Route path="/super-admin/login" element={<SuperAdminLogin />} />
       <Route path="/super-admin" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
+      <Route path="/super-admin/users" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminUsers /></SuperAdminLayout></ProtectedRoute>} />
 
       {/* Legacy auth routes - redirect to home */}
       <Route path="/auth" element={<Navigate to="/" replace />} />
