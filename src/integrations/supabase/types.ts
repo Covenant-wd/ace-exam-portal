@@ -1143,6 +1143,27 @@ export type Database = {
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      get_all_school_users: {
+        Args: Record<string, never>
+        Returns: {
+          user_id: string
+          email: string
+          full_name: string
+          role: string
+          school_id: string
+          school_name: string
+          username: string | null
+          created_at: string
+        }[]
+      }
+      delete_school_user: {
+        Args: { _user_id: string }
+        Returns: void
+      }
+      update_school_user: {
+        Args: { _user_id: string; _full_name: string; _role: string; _school_id: string }
+        Returns: void
+      }
       create_school_user: {
         Args: { _email: string; _password: string; _full_name: string; _role: string; _school_id: string; _username?: string | null }
         Returns: string
