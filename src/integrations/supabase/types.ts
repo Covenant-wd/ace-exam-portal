@@ -1143,6 +1143,10 @@ export type Database = {
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      create_school_user: {
+        Args: { _email: string; _password: string; _full_name: string; _role: string; _school_id: string; _username?: string | null }
+        Returns: string
+      }
       get_user_emails_by_ids: {
         Args: { _user_ids: string[] }
         Returns: { user_id: string; email: string }[]
