@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { sendAdminWelcomeEmail } from "@/lib/email";
 import { Loader2, Plus, School, Users, Copy, ExternalLink, Trash2, Edit } from "lucide-react";
 
 interface SchoolItem {
@@ -124,6 +125,18 @@ export default function SuperAdminDashboard() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success("School admin created successfully");
+      // Send welcome email to new admin
+      const school = schools.find(s => s.id === assignSchoolId);
+      if (school) {
+        const loginUrl = `${window.location.origin}/school/${school.slug}`;
+        await sendAdminWelcomeEmail({
+          to: adminEmail,
+          adminName: adminName,
+          schoolName: school.name,
+          loginUrl,
+          password: adminPassword,
+        });
+      }
       setAssignDialog(false);
       setAdminEmail(""); setAdminPassword(""); setAdminName("");
     } catch (err: any) {
