@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { sendExamResultEmail } from "@/lib/email";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -126,7 +127,34 @@ export default function TakeExam() {
       is_submitted: true, score, total_questions: questions.length, submitted_at: new Date().toISOString(),
     }).eq("id", attemptId);
 
-    toast.success(isTimeout ? "Time's up! Exam auto-submitted." : "Exam submitted successfully!");
+    toast.success(isTimeout ? "Time\'s up! Exam auto-submitted." : "Exam submitted successfully!");
+    // Send result email to student and parents
+    try {
+      const { data: examData } = await supabase.from("exams").select("title, school_id").eq("id", examId!).single();
+      const { data: profile } = await supabase.from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
+      const { data: userAuth } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
+      const emails: string[] = [];
+      if (userAuth) emails.push(userAuth);
+      // Get parent emails
+      const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", user!.id);
+      if (parentLinks && parentLinks.length > 0) {
+        const parentIds = parentLinks.map((p: any) => p.parent_id);
+        const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+        (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+      }
+      if (emails.length > 0 && examData && profile) {
+        await sendExamResultEmail({
+          to: emails,
+          recipientName: profile.full_name,
+          studentName: profile.full_name,
+          schoolName: document.title || "School",
+          examTitle: examData.title,
+          score,
+          totalQuestions: questions.length,
+          loginUrl: window.location.origin,
+        });
+      }
+    } catch {}
     navigate("/student/results");
   }, [attemptId, answers, questions, examId, navigate]);
 
