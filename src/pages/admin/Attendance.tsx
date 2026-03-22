@@ -49,16 +49,13 @@ export default function Attendance() {
 
   const loadStudentsAndAttendance = async () => {
     setLoading(true);
-    // Only fetch users with student role in this class
-    const { data: roleData } = await supabase
-      .from("user_roles").select("user_id").eq("role", "student").eq("school_id", schoolId!);
-    const studentIds = (roleData || []).map((r: any) => r.user_id);
-    const { data: studentData } = studentIds.length > 0
-      ? await supabase.from("profiles").select("user_id, full_name, class_id")
-          .in("user_id", studentIds).eq("class_id", selectedClass).order("full_name")
-      : { data: [] };
-    const studentList = (studentData as StudentProfile[]) || [];
-    setStudents(studentList);
+    // Use SECURITY DEFINER function - guaranteed to only return this school's students
+    const { data: allStudents } = await supabase
+      .rpc("get_school_students_only", { _school_id: schoolId! });
+    const studentList = ((allStudents as any[]) || [])
+      .filter((s: any) => s.class_id === selectedClass)
+      .map((s: any) => ({ user_id: s.user_id, full_name: s.full_name, class_id: s.class_id }));
+    setStudents(studentList as StudentProfile[]);
 
     const { data: attendanceData } = await supabase
       .from("attendance").select("*")
