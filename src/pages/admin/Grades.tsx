@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, Plus, Save, Trash2, Award, Pencil } from "lucide-react";
 
-interface GradeCategory { id: string; name: string; weight: number; term_id: string | null; }
+interface GradeCategory { id: string; name: string; weight: number; max_score: number; term_id: string | null; }
 interface ClassItem { id: string; name: string; }
 interface Subject { id: string; name: string; }
 interface Term { id: string; name: string; session_id: string; }
@@ -30,13 +31,14 @@ export default function Grades() {
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
-
   const [grades, setGrades] = useState<Map<string, number>>(new Map());
   const [saving, setSaving] = useState(false);
 
   const [catDialog, setCatDialog] = useState(false);
+  const [editingCat, setEditingCat] = useState<GradeCategory | null>(null);
   const [catName, setCatName] = useState("");
   const [catWeight, setCatWeight] = useState("100");
+  const [catMaxScore, setCatMaxScore] = useState("100");
   const [catSaving, setCatSaving] = useState(false);
 
   useEffect(() => {
@@ -82,8 +84,18 @@ export default function Grades() {
     setGrades(map);
   };
 
+  const refreshCategories = async () => {
+    const { data } = await supabase.from("grade_categories").select("*").eq("school_id", schoolId!).order("name");
+    setCategories((data as GradeCategory[]) || []);
+  };
+
+  const activeCategoryMaxScore = categories.find(c => c.id === selectedCategory)?.max_score ?? 100;
+
   const handleSaveGrades = async () => {
     if (!schoolId || !user) return;
+    const invalid = students.find(s => (grades.get(s.user_id) ?? 0) > activeCategoryMaxScore);
+    if (invalid) { toast.error(`Score cannot exceed the obtainable mark of ${activeCategoryMaxScore}`); return; }
+
     setSaving(true);
     try {
       await supabase.from("grades").delete()
@@ -93,9 +105,10 @@ export default function Grades() {
       const inserts = students.map((s) => ({
         student_id: s.user_id, subject_id: selectedSubject, class_id: selectedClass,
         term_id: selectedTerm, school_id: schoolId, category_id: selectedCategory,
-        score: grades.get(s.user_id) || 0, max_score: 100, graded_by: user.id,
+        score: grades.get(s.user_id) ?? 0,
+        max_score: activeCategoryMaxScore,
+        graded_by: user.id,
       }));
-
       const { error } = await supabase.from("grades").insert(inserts as any);
       if (error) throw error;
       toast.success("Grades saved successfully");
@@ -103,62 +116,111 @@ export default function Grades() {
     setSaving(false);
   };
 
+  const openNewCategory = () => {
+    setEditingCat(null); setCatName(""); setCatWeight("100"); setCatMaxScore("100");
+    setCatDialog(true);
+  };
+
+  const openEditCategory = (cat: GradeCategory) => {
+    setEditingCat(cat); setCatName(cat.name);
+    setCatWeight(String(cat.weight)); setCatMaxScore(String(cat.max_score));
+    setCatDialog(true);
+  };
+
   const handleSaveCategory = async () => {
-    if (!catName || !schoolId) return;
+    if (!catName.trim() || !schoolId) { toast.error("Category name is required"); return; }
+    const maxScore = parseFloat(catMaxScore);
+    const weight = parseFloat(catWeight);
+    if (isNaN(maxScore) || maxScore <= 0) { toast.error("Obtainable mark must be greater than 0"); return; }
+    if (isNaN(weight) || weight <= 0) { toast.error("Weight must be greater than 0"); return; }
     setCatSaving(true);
     try {
-      const { error } = await supabase.from("grade_categories").insert({
-        school_id: schoolId, name: catName, weight: parseFloat(catWeight) || 100,
-        term_id: selectedTerm || null,
-      } as any);
-      if (error) throw error;
-      toast.success("Category created");
-      setCatDialog(false); setCatName(""); setCatWeight("100");
-      const { data } = await supabase.from("grade_categories").select("*").eq("school_id", schoolId).order("name");
-      setCategories((data as GradeCategory[]) || []);
+      if (editingCat) {
+        const { error } = await supabase.from("grade_categories")
+          .update({ name: catName.trim(), weight, max_score: maxScore } as any).eq("id", editingCat.id);
+        if (error) throw error;
+        toast.success("Category updated");
+      } else {
+        const { error } = await supabase.from("grade_categories").insert({
+          school_id: schoolId, name: catName.trim(), weight, max_score: maxScore,
+          term_id: selectedTerm || null,
+        } as any);
+        if (error) throw error;
+        toast.success("Category created");
+      }
+      setCatDialog(false);
+      await refreshCategories();
     } catch (err: any) { toast.error(err.message); }
     setCatSaving(false);
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm("Delete this grade category?")) return;
+    if (!confirm("Delete this grade category? All grades in this category will also be deleted.")) return;
+    await supabase.from("grades").delete().eq("category_id", id);
     await supabase.from("grade_categories").delete().eq("id", id);
     setCategories(categories.filter((c) => c.id !== id));
+    if (selectedCategory === id) setSelectedCategory("");
     toast.success("Category deleted");
   };
 
-  const setScore = (studentId: string, score: number) => {
+  const setScore = (studentId: string, value: string) => {
+    const score = parseFloat(value);
     const newGrades = new Map(grades);
-    newGrades.set(studentId, score);
+    if (value === "" || isNaN(score)) { newGrades.set(studentId, 0); }
+    else { newGrades.set(studentId, Math.min(score, activeCategoryMaxScore)); }
     setGrades(newGrades);
   };
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
+  const totalMaxScore = categories.reduce((sum, c) => sum + Number(c.max_score), 0);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Grades & Report Cards</h1>
-        <p className="text-muted-foreground">Manage grade categories and enter student scores</p>
+        <p className="text-muted-foreground">Manage grade categories with obtainable marks and enter student scores</p>
       </div>
 
+      {/* Grade Categories */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Grade Categories</CardTitle>
-          <Button size="sm" onClick={() => setCatDialog(true)}><Plus className="mr-1 h-4 w-4" /> Add Category</Button>
+          <div>
+            <CardTitle>Grade Categories</CardTitle>
+            {categories.length > 0 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Total obtainable marks: <span className="font-semibold text-foreground">{totalMaxScore}</span>
+              </p>
+            )}
+          </div>
+          <Button size="sm" onClick={openNewCategory}><Plus className="mr-1 h-4 w-4" /> Add Category</Button>
         </CardHeader>
         <CardContent>
           {categories.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">No grade categories. Create categories like "First CA", "Second CA", "Exam".</p>
+            <p className="text-center text-muted-foreground py-4">
+              No categories yet. Create categories like "First CA" (30 marks), "Second CA" (30 marks), "Exam" (70 marks).
+            </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {categories.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
-                  <span className="font-medium text-sm">{c.name}</span>
-                  <span className="text-xs text-muted-foreground">({c.weight}%)</span>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDeleteCategory(c.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                <div key={c.id} className="flex items-center justify-between rounded-xl border bg-card px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-sm">{c.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="secondary" className="text-xs">
+                        <Award className="h-3 w-3 mr-1" />{c.max_score} marks
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">Weight: {c.weight}%</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditCategory(c)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteCategory(c.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -166,6 +228,7 @@ export default function Grades() {
         </CardContent>
       </Card>
 
+      {/* Enter Scores */}
       <Card>
         <CardHeader><CardTitle>Enter Scores</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -184,28 +247,63 @@ export default function Grades() {
             </Select>
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
               <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-              <SelectContent>{categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name} ({c.max_score} marks)</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
+
+          {selectedCategory && (
+            <div className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/20 px-4 py-2.5">
+              <Award className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-sm">
+                Obtainable mark for <strong>{categories.find(c => c.id === selectedCategory)?.name}</strong>:{" "}
+                <strong className="text-primary">{activeCategoryMaxScore} marks</strong>
+                <span className="text-muted-foreground ml-2">— scores cannot exceed this</span>
+              </p>
+            </div>
+          )}
 
           {selectedClass && selectedSubject && selectedTerm && selectedCategory && (
             <>
               <Table>
-                <TableHeader><TableRow><TableHead className="w-8">#</TableHead><TableHead>Student</TableHead><TableHead className="w-32">Score</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Score (out of {activeCategoryMaxScore})</TableHead>
+                    <TableHead className="w-24">%</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {students.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No students</TableCell></TableRow>
-                  ) : (
-                    students.map((s, i) => (
+                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No students in this class</TableCell></TableRow>
+                  ) : students.map((s, i) => {
+                    const score = grades.get(s.user_id) ?? 0;
+                    const pct = activeCategoryMaxScore > 0 ? Math.round((score / activeCategoryMaxScore) * 100) : 0;
+                    return (
                       <TableRow key={s.user_id}>
                         <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="font-medium">{s.full_name}</TableCell>
                         <TableCell>
-                          <Input type="number" min="0" max="100" value={grades.get(s.user_id) ?? ""} onChange={(e) => setScore(s.user_id, parseFloat(e.target.value) || 0)} className="w-24" />
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number" min="0" max={activeCategoryMaxScore}
+                              value={grades.get(s.user_id) ?? ""}
+                              onChange={(e) => setScore(s.user_id, e.target.value)}
+                              className="w-24" placeholder="0"
+                            />
+                            <span className="text-sm text-muted-foreground">/ {activeCategoryMaxScore}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={pct >= 50 ? "default" : "destructive"} className="text-xs">{pct}%</Badge>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
+                    );
+                  })}
                 </TableBody>
               </Table>
               {students.length > 0 && (
@@ -219,13 +317,34 @@ export default function Grades() {
         </CardContent>
       </Card>
 
+      {/* Add/Edit Category Dialog */}
       <Dialog open={catDialog} onOpenChange={setCatDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Grade Category</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2"><Label>Category Name</Label><Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. First CA, Exam" /></div>
-            <div className="space-y-2"><Label>Weight (%)</Label><Input type="number" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="100" /></div>
-            <Button onClick={handleSaveCategory} disabled={catSaving} className="w-full">{catSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Category"}</Button>
+          <DialogHeader>
+            <DialogTitle>{editingCat ? "Edit Grade Category" : "Add Grade Category"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Category Name *</Label>
+              <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. First CA, Second CA, Exam" />
+            </div>
+            <div className="space-y-2">
+              <Label>Obtainable Mark *</Label>
+              <Input type="number" min="1" value={catMaxScore} onChange={(e) => setCatMaxScore(e.target.value)} placeholder="e.g. 30" />
+              <p className="text-xs text-muted-foreground">Maximum score a student can get in this category (e.g. 30 for CA, 70 for Exam)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Weight (%) *</Label>
+              <Input type="number" min="1" max="100" value={catWeight} onChange={(e) => setCatWeight(e.target.value)} placeholder="e.g. 30" />
+              <p className="text-xs text-muted-foreground">How much this contributes to the final grade percentage</p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setCatDialog(false)}>Cancel</Button>
+              <Button onClick={handleSaveCategory} disabled={catSaving} className="flex-1">
+                {catSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingCat ? "Update" : "Create"} Category
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
