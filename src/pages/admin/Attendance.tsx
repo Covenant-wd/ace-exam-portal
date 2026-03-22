@@ -49,9 +49,14 @@ export default function Attendance() {
 
   const loadStudentsAndAttendance = async () => {
     setLoading(true);
-    const { data: studentData } = await supabase
-      .from("profiles").select("user_id, full_name, class_id")
-      .eq("class_id", selectedClass).eq("school_id", schoolId!).order("full_name");
+    // Only fetch users with student role in this class
+    const { data: roleData } = await supabase
+      .from("user_roles").select("user_id").eq("role", "student").eq("school_id", schoolId!);
+    const studentIds = (roleData || []).map((r: any) => r.user_id);
+    const { data: studentData } = studentIds.length > 0
+      ? await supabase.from("profiles").select("user_id, full_name, class_id")
+          .in("user_id", studentIds).eq("class_id", selectedClass).order("full_name")
+      : { data: [] };
     const studentList = (studentData as StudentProfile[]) || [];
     setStudents(studentList);
 

@@ -59,9 +59,15 @@ export default function Grades() {
 
   useEffect(() => {
     if (!selectedClass || !schoolId) { setStudents([]); return; }
-    supabase.from("profiles").select("user_id, full_name, class_id")
-      .eq("class_id", selectedClass).eq("school_id", schoolId).order("full_name")
-      .then(({ data }) => setStudents((data as StudentProfile[]) || []));
+    supabase.from("user_roles").select("user_id")
+      .eq("role", "student").eq("school_id", schoolId)
+      .then(async ({ data: roleData }) => {
+        const studentIds = (roleData || []).map((r: any) => r.user_id);
+        if (studentIds.length === 0) { setStudents([]); return; }
+        const { data } = await supabase.from("profiles").select("user_id, full_name, class_id")
+          .in("user_id", studentIds).eq("class_id", selectedClass).order("full_name");
+        setStudents((data as StudentProfile[]) || []);
+      });
   }, [selectedClass, schoolId]);
 
   useEffect(() => {

@@ -53,11 +53,23 @@ export default function Fees() {
       const [classRes, termRes, studentRes] = await Promise.all([
         supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
         supabase.from("terms").select("id, name").eq("school_id", schoolId).order("name"),
-        supabase.from("profiles").select("user_id, full_name").eq("school_id", schoolId).order("full_name"),
+        supabase.from("user_roles").select("user_id").eq("school_id", schoolId).eq("role", "student"),
       ]);
       setClasses((classRes.data as ClassItem[]) || []);
       setTerms((termRes.data as Term[]) || []);
-      setStudents((studentRes.data as StudentProfile[]) || []);
+
+      // Only load profiles for actual students
+      const studentIds = ((studentRes.data as any[]) || []).map((r: any) => r.user_id);
+      if (studentIds.length > 0) {
+        const { data: studentProfiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", studentIds)
+          .order("full_name");
+        setStudents((studentProfiles as StudentProfile[]) || []);
+      } else {
+        setStudents([]);
+      }
       await loadFeeTypes(schoolId);
       await loadPayments(schoolId);
       setLoading(false);
