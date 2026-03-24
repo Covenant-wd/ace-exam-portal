@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Save, Trash2, Award, Pencil } from "lucide-react";
+import { Loader2, Plus, Save, Trash2, Award, Pencil, Eye } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ReportCard from "@/components/ReportCard";
 
 interface GradeCategory { id: string; name: string; weight: number; max_score: number; term_id: string | null; }
 interface ClassItem { id: string; name: string; }
@@ -32,6 +34,9 @@ export default function Grades() {
   const [selectedTerm, setSelectedTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [grades, setGrades] = useState<Map<string, number>>(new Map());
+  const [allGrades, setAllGrades] = useState<any[]>([]);
+  const [reportStudent, setReportStudent] = useState("");
+  const [loadingReport, setLoadingReport] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [catDialog, setCatDialog] = useState(false);
@@ -74,6 +79,25 @@ export default function Grades() {
     if (!selectedClass || !selectedSubject || !selectedTerm || !selectedCategory) { setGrades(new Map()); return; }
     loadGrades();
   }, [selectedClass, selectedSubject, selectedTerm, selectedCategory]);
+
+  const loadAllGradesForStudent = async (studentId: string) => {
+    if (!studentId || !selectedClass || !selectedTerm || !schoolId) return;
+    setLoadingReport(true);
+    const { data } = await supabase.from("grades")
+      .select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)")
+      .eq("student_id", studentId)
+      .eq("class_id", selectedClass)
+      .eq("term_id", selectedTerm)
+      .eq("school_id", schoolId);
+    const mapped = (data || []).map((g: any) => ({
+      subject_name: g.subjects?.name || "—",
+      category_name: g.grade_categories?.name || "—",
+      category_max_score: g.grade_categories?.max_score ?? g.max_score,
+      score: g.score,
+    }));
+    setAllGrades(mapped);
+    setLoadingReport(false);
+  };
 
   const loadGrades = async () => {
     const { data } = await supabase.from("grades").select("student_id, score")
@@ -228,10 +252,19 @@ export default function Grades() {
         </CardContent>
       </Card>
 
-      {/* Enter Scores */}
+      {/* Enter Scores + Report Card View */}
       <Card>
-        <CardHeader><CardTitle>Enter Scores</CardTitle></CardHeader>
+        <CardHeader>
+          <Tabs defaultValue="enter">
+            <div className="flex items-center justify-between">
+              <CardTitle>Scores & Report Card</CardTitle>
+              <TabsList>
+                <TabsTrigger value="enter"><Save className="h-3.5 w-3.5 mr-1.5" />Enter Scores</TabsTrigger>
+                <TabsTrigger value="report"><Eye className="h-3.5 w-3.5 mr-1.5" />Report Card</TabsTrigger>
+              </TabsList>
+            </div>
         <CardContent className="space-y-4">
+          <TabsContent value="enter" className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Select value={selectedClass} onValueChange={setSelectedClass}>
               <SelectTrigger><SelectValue placeholder="Class" /></SelectTrigger>
@@ -314,6 +347,36 @@ export default function Grades() {
               )}
             </>
           )}
+          </TabsContent>
+
+          <TabsContent value="report" className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <SelectTrigger><SelectValue placeholder="Class" /></SelectTrigger>
+                <SelectContent>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                <SelectTrigger><SelectValue placeholder="Term" /></SelectTrigger>
+                <SelectContent>{terms.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <Select value={reportStudent} onValueChange={(v) => { setReportStudent(v); loadAllGradesForStudent(v); }}>
+                <SelectTrigger><SelectValue placeholder="Select Student" /></SelectTrigger>
+                <SelectContent>{students.map((s) => <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            {loadingReport ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : reportStudent ? (
+              <ReportCard
+                grades={allGrades}
+                studentName={students.find(s => s.user_id === reportStudent)?.full_name}
+                term={terms.find(t => t.id === selectedTerm)?.name}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground text-sm">Select class, term and student to view report card</div>
+            )}
+          </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
