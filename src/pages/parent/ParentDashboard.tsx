@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, Users } from "lucide-react";
+import ReportCard from "@/components/ReportCard";
 
 interface Child { student_id: string; full_name: string; }
 interface AttendanceRecord { date: string; status: string; }
-interface GradeRecord { subject_name: string; category_name: string; score: number; max_score: number; }
+interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
 interface FeeRecord { fee_name: string; amount_paid: number; payment_date: string; }
 interface ExamResult { exam_title: string; score: number; total_questions: number; submitted_at: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
@@ -72,7 +73,7 @@ export default function ParentDashboard() {
 
       const [attRes, gradesRes, feesRes, resultsRes, annRes] = await Promise.all([
         supabase.from("attendance").select("date, status").eq("student_id", selectedChild).order("date", { ascending: false }).limit(50),
-        supabase.from("grades").select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
+        supabase.from("grades").select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
         supabase.from("fee_payments").select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
         supabase.from("exam_attempts").select("score, total_questions, submitted_at, exams:exam_id(title)").eq("student_id", selectedChild).eq("is_submitted", true).order("submitted_at", { ascending: false }),
         supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).eq("school_id", schoolId!).order("created_at", { ascending: false }).limit(10),
@@ -89,8 +90,8 @@ export default function ParentDashboard() {
       setGrades((gradesRes.data || []).map((g: any) => ({
         subject_name: g.subjects?.name || "—",
         category_name: g.grade_categories?.name || "—",
+        category_max_score: g.grade_categories?.max_score ?? g.max_score,
         score: g.score,
-        max_score: g.max_score,
       })));
 
       setFees((feesRes.data || []).map((f: any) => ({
@@ -282,29 +283,12 @@ export default function ParentDashboard() {
             </TabsContent>
 
             <TabsContent value="grades">
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Subject</TableHead><TableHead>Category</TableHead><TableHead>Score</TableHead><TableHead>%</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {grades.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No grades yet</TableCell></TableRow>
-                      ) : grades.map((g, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{g.subject_name}</TableCell>
-                          <TableCell>{g.category_name}</TableCell>
-                          <TableCell>{g.score}/{g.max_score}</TableCell>
-                          <TableCell>
-                            <Badge variant={((g.score / g.max_score) * 100) >= 50 ? "default" : "destructive"}>
-                              {((g.score / g.max_score) * 100).toFixed(0)}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+              <ReportCard
+                grades={grades}
+                studentName={selectedChildName}
+                term={activeTerm}
+                session={activeSession}
+              />
             </TabsContent>
 
             <TabsContent value="fees">
