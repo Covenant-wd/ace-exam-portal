@@ -49,12 +49,6 @@ export default function TakeExam() {
       const { data: existing } = await supabase.from("exam_attempts")
         .select("*").eq("exam_id", examId!).eq("student_id", user!.id).single();
 
-      if (existing?.is_submitted) {
-        toast.info("You've already completed this exam.");
-        navigate("/student");
-        return;
-      }
-
       const [examRes, qRes] = await Promise.all([
         supabase.from("exams").select("*").eq("id", examId!).single(),
         supabase.from("questions").select("id, question_text, option_a, option_b, option_c, option_d, question_order")
@@ -64,6 +58,25 @@ export default function TakeExam() {
       if (!examRes.data) { navigate("/student"); return; }
       setExam(examRes.data);
       setQuestions(qRes.data ?? []);
+
+      // Handle submitted attempt
+      if (existing?.is_submitted) {
+        if (!examRes.data.allow_retake) {
+          toast.info("You've already completed this exam.");
+          navigate("/student");
+          return;
+        }
+        // Retake allowed — delete old attempt and start fresh
+        await supabase.from("student_answers").delete().eq("attempt_id", existing.id);
+        await supabase.from("exam_attempts").delete().eq("id", existing.id);
+        // Will fall through to create new attempt below
+        const { data: attempt } = await supabase.from("exam_attempts")
+          .insert({ exam_id: examId!, student_id: user!.id }).select().single();
+        setAttemptId(attempt!.id);
+        setTimeLeft(examRes.data.duration_minutes * 60);
+        setLoading(false);
+        return;
+      }
 
       // Check if subject allows calculator
       const { data: subjectData } = await supabase.from("subjects").select("allow_calculator" as any).eq("id", examRes.data.subject_id).single();
