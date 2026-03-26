@@ -59,49 +59,61 @@ export default function TakeExam() {
       setExam(examRes.data);
       setQuestions(qRes.data ?? []);
 
-      // Handle submitted attempt
-      if (existing?.is_submitted) {
-        if (!examRes.data.allow_retake) {
-          toast.info("You've already completed this exam.");
-          navigate("/student");
-          return;
-        }
-        // Retake allowed — delete old attempt and start fresh
-        await supabase.from("student_answers").delete().eq("attempt_id", existing.id);
-        await supabase.from("exam_attempts").delete().eq("id", existing.id);
-        // Will fall through to create new attempt below
-        const { data: attempt } = await supabase.from("exam_attempts")
-          .insert({ exam_id: examId!, student_id: user!.id }).select().single();
-        setAttemptId(attempt!.id);
-        setTimeLeft(examRes.data.duration_minutes * 60);
-        setLoading(false);
-        return;
-      }
-
       // Check if subject allows calculator
       const { data: subjectData } = await supabase.from("subjects").select("allow_calculator" as any).eq("id", examRes.data.subject_id).single();
       if (subjectData && (subjectData as any).allow_calculator) {
         setAllowCalculator(true);
       }
 
-      if (existing) {
+      // Handle existing attempt
+      if (existing?.is_submitted) {
+        // Exam already submitted
+        if (!examRes.data.allow_retake) {
+          toast.info("You've already completed this exam.");
+          navigate("/student");
+          return;
+        }
+        // Retake allowed — wipe old attempt completely and start fresh
+        await supabase.from("student_answers").delete().eq("attempt_id", existing.id);
+        await supabase.from("exam_attempts").delete().eq("id", existing.id);
+        const { data: newAttempt, error: newErr } = await supabase
+          .from("exam_attempts")
+          .insert({ exam_id: examId!, student_id: user!.id })
+          .select().single();
+        if (newErr || !newAttempt) {
+          toast.error("Failed to start retake. Please try again.");
+          navigate("/student/exams");
+          return;
+        }
+        setAttemptId(newAttempt.id);
+        setTimeLeft(examRes.data.duration_minutes * 60);
+        setLoading(false);
+        return;
+      }
+
+      if (existing && !existing.is_submitted) {
+        // In-progress attempt — resume it
         setAttemptId(existing.id);
-        // Calculate remaining time
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
         const remaining = Math.max(0, examRes.data.duration_minutes * 60 - elapsed);
         setTimeLeft(Math.floor(remaining));
-
-        // Load existing answers
         const { data: savedAnswers } = await supabase.from("student_answers")
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
         (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
         setAnswers(map);
       } else {
-        // Create new attempt
-        const { data: attempt } = await supabase.from("exam_attempts")
-          .insert({ exam_id: examId!, student_id: user!.id }).select().single();
-        setAttemptId(attempt!.id);
+        // No attempt yet — create one
+        const { data: attempt, error: attemptErr } = await supabase
+          .from("exam_attempts")
+          .insert({ exam_id: examId!, student_id: user!.id })
+          .select().single();
+        if (attemptErr || !attempt) {
+          toast.error("Failed to start exam. Please try again.");
+          navigate("/student/exams");
+          return;
+        }
+        setAttemptId(attempt.id);
         setTimeLeft(examRes.data.duration_minutes * 60);
       }
 
