@@ -1149,6 +1149,10 @@ export type Database = {
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      reset_exam_attempt: {
+        Args: { _exam_id: string; _student_id: string }
+        Returns: string
+      }
       get_all_school_users: {
         Args: Record<string, never>
         Returns: {
