@@ -73,19 +73,21 @@ export default function TakeExam() {
           navigate("/student");
           return;
         }
-        // Retake allowed — wipe old attempt completely and start fresh
-        await supabase.from("student_answers").delete().eq("attempt_id", existing.id);
-        await supabase.from("exam_attempts").delete().eq("id", existing.id);
-        const { data: newAttempt, error: newErr } = await supabase
-          .from("exam_attempts")
-          .insert({ exam_id: examId!, student_id: user!.id })
-          .select().single();
-        if (newErr || !newAttempt) {
+        // Retake allowed — use secure function to reset attempt
+        const { data: newAttemptId, error: retakeErr } = await supabase
+          .rpc("reset_exam_attempt", {
+            _exam_id: examId!,
+            _student_id: user!.id,
+          });
+        if (retakeErr || !newAttemptId) {
           toast.error("Failed to start retake. Please try again.");
           navigate("/student/exams");
           return;
         }
-        setAttemptId(newAttempt.id);
+        setAttemptId(newAttemptId);
+        setAnswers({});
+        setFlagged(new Set());
+        setCurrentIndex(0);
         setTimeLeft(examRes.data.duration_minutes * 60);
         setLoading(false);
         return;
