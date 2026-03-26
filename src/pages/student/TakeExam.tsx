@@ -47,7 +47,7 @@ export default function TakeExam() {
     const init = async () => {
       // Check existing attempt
       const { data: existing } = await supabase.from("exam_attempts")
-        .select("*").eq("exam_id", examId!).eq("student_id", user!.id).single();
+        .select("*").eq("exam_id", examId!).eq("student_id", user!.id).maybeSingle();
 
       const [examRes, qRes] = await Promise.all([
         supabase.from("exams").select("*").eq("id", examId!).single(),
