@@ -686,6 +686,7 @@ export type Database = {
           class_name: string | null
           created_at: string
           date_of_birth: string | null
+          email: string | null
           first_name: string
           full_name: string
           gender: string | null
@@ -706,6 +707,7 @@ export type Database = {
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
+          email?: string | null
           first_name?: string
           full_name?: string
           gender?: string | null
@@ -726,6 +728,7 @@ export type Database = {
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
+          email?: string | null
           first_name?: string
           full_name?: string
           gender?: string | null
