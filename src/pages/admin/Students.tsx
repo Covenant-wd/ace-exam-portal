@@ -102,19 +102,8 @@ export default function Students() {
         toast.error(error.message);
         setStudents([]);
       } else {
-        // Fetch real emails from auth.users via RPC (profiles table has no email)
-        const profileList = profiles || [];
-        const profileIds = profileList.map((p: any) => p.user_id);
-        const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
-          _user_ids: profileIds,
-        });
-        const emailMap: Record<string, string> = {};
-        (emailRows || []).forEach((r: any) => { emailMap[r.user_id] = r.email; });
-
-        setStudents(profileList.map((p: any) => ({
-          ...p,
-          email: emailMap[p.user_id] || "",
-        })));
+        // email is now stored directly in profiles table
+        setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
       }
     } catch (err: any) {
       toast.error("Failed to load: " + err.message);
