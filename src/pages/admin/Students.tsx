@@ -102,7 +102,19 @@ export default function Students() {
         toast.error(error.message);
         setStudents([]);
       } else {
-        setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
+        // Fetch real emails from auth.users via RPC (profiles table has no email)
+        const profileList = profiles || [];
+        const profileIds = profileList.map((p: any) => p.user_id);
+        const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
+          _user_ids: profileIds,
+        });
+        const emailMap: Record<string, string> = {};
+        (emailRows || []).forEach((r: any) => { emailMap[r.user_id] = r.email; });
+
+        setStudents(profileList.map((p: any) => ({
+          ...p,
+          email: emailMap[p.user_id] || "",
+        })));
       }
     } catch (err: any) {
       toast.error("Failed to load: " + err.message);
@@ -157,6 +169,24 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", editing.user_id);
         if (error) throw error;
+        // Update local state immediately so changes reflect at once
+        const updatedStudent = {
+          ...editing!,
+          first_name: form.first_name,
+          middle_name: form.middle_name || "",
+          last_name: form.last_name,
+          full_name: fullName,
+          username: form.username || null,
+          class_id: form.class_id || null,
+          class_name: classes.find(c => c.id === form.class_id)?.name || null,
+          date_of_birth: form.date_of_birth || null,
+          address: form.address || "",
+          parent_name: form.parent_name || "",
+          nationality: form.nationality || "",
+          gender: form.gender || "",
+          subjects_offered: subjects,
+        };
+        setStudents(prev => prev.map(s => s.user_id === editing!.user_id ? updatedStudent : s));
         toast.success("Student updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
@@ -185,7 +215,10 @@ export default function Students() {
         toast.success("Student created");
       }
       setDialogOpen(false);
-      fetchStudents();
+      if (!editing) {
+        // Only re-fetch for new students to get their email populated
+        fetchStudents();
+      }
     } catch (err: any) {
       toast.error(err.message || "Operation failed");
     }
