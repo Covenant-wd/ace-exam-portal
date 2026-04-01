@@ -224,6 +224,7 @@ export type Database = {
       }
       exams: {
         Row: {
+          allow_retake: boolean
           class_id: string | null
           created_at: string
           created_by: string | null
@@ -240,6 +241,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allow_retake?: boolean
           class_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -256,6 +258,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allow_retake?: boolean
           class_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -421,6 +424,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          max_score: number
           name: string
           school_id: string
           term_id: string | null
@@ -429,6 +433,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          max_score?: number
           name: string
           school_id: string
           term_id?: string | null
@@ -437,6 +442,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          max_score?: number
           name?: string
           school_id?: string
           term_id?: string | null
@@ -585,14 +591,14 @@ export type Database = {
       instructor_permissions: {
         Row: {
           can_manage_exams: boolean
+          can_manage_fees: boolean
+          can_manage_grades: boolean
           can_manage_students: boolean
           can_manage_subjects: boolean
-          can_view_results: boolean
-          can_mark_attendance: boolean
-          can_manage_grades: boolean
           can_manage_timetable: boolean
-          can_manage_fees: boolean
+          can_mark_attendance: boolean
           can_post_announcements: boolean
+          can_view_results: boolean
           created_at: string
           id: string
           instructor_id: string
@@ -601,14 +607,14 @@ export type Database = {
         }
         Insert: {
           can_manage_exams?: boolean
+          can_manage_fees?: boolean
+          can_manage_grades?: boolean
           can_manage_students?: boolean
           can_manage_subjects?: boolean
-          can_view_results?: boolean
-          can_mark_attendance?: boolean
-          can_manage_grades?: boolean
           can_manage_timetable?: boolean
-          can_manage_fees?: boolean
+          can_mark_attendance?: boolean
           can_post_announcements?: boolean
+          can_view_results?: boolean
           created_at?: string
           id?: string
           instructor_id: string
@@ -617,14 +623,14 @@ export type Database = {
         }
         Update: {
           can_manage_exams?: boolean
+          can_manage_fees?: boolean
+          can_manage_grades?: boolean
           can_manage_students?: boolean
           can_manage_subjects?: boolean
-          can_view_results?: boolean
-          can_mark_attendance?: boolean
-          can_manage_grades?: boolean
           can_manage_timetable?: boolean
-          can_manage_fees?: boolean
+          can_mark_attendance?: boolean
           can_post_announcements?: boolean
+          can_view_results?: boolean
           created_at?: string
           id?: string
           instructor_id?: string
@@ -643,25 +649,25 @@ export type Database = {
       }
       parent_students: {
         Row: {
+          created_at: string
           id: string
           parent_id: string
-          student_id: string
           school_id: string
-          created_at: string
+          student_id: string
         }
         Insert: {
+          created_at?: string
           id?: string
           parent_id: string
-          student_id: string
           school_id: string
-          created_at?: string
+          student_id: string
         }
         Update: {
+          created_at?: string
           id?: string
           parent_id?: string
-          student_id?: string
           school_id?: string
-          created_at?: string
+          student_id?: string
         }
         Relationships: [
           {
@@ -680,6 +686,7 @@ export type Database = {
           class_name: string | null
           created_at: string
           date_of_birth: string | null
+          email: string | null
           first_name: string
           full_name: string
           gender: string | null
@@ -700,6 +707,7 @@ export type Database = {
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
+          email?: string | null
           first_name?: string
           full_name?: string
           gender?: string | null
@@ -720,6 +728,7 @@ export type Database = {
           class_name?: string | null
           created_at?: string
           date_of_birth?: string | null
+          email?: string | null
           first_name?: string
           full_name?: string
           gender?: string | null
@@ -1139,65 +1148,151 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      student_list_view: {
+        Row: {
+          address: string | null
+          class_id: string | null
+          class_name: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          email: string | null
+          first_name: string | null
+          full_name: string | null
+          gender: string | null
+          id: string | null
+          last_name: string | null
+          middle_name: string | null
+          nationality: string | null
+          parent_name: string | null
+          school_id: string | null
+          subjects_offered: string[] | null
+          updated_at: string | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      get_user_school_id: { Args: { _user_id: string }; Returns: string }
+      confirm_user_email: { Args: { _user_id: string }; Returns: undefined }
+      create_school_user: {
+        Args: {
+          _email: string
+          _full_name: string
+          _password: string
+          _role: string
+          _school_id: string
+          _username?: string
+        }
+        Returns: string
+      }
+      delete_school_user: { Args: { _user_id: string }; Returns: undefined }
       get_all_school_users: {
-        Args: Record<string, never>
+        Args: never
         Returns: {
-          user_id: string
+          created_at: string
           email: string
           full_name: string
           role: string
           school_id: string
           school_name: string
-          username: string | null
-          created_at: string
+          user_id: string
+          username: string
         }[]
       }
-      delete_school_user: {
-        Args: { _user_id: string }
-        Returns: void
-      }
-      update_school_user: {
-        Args: { _user_id: string; _full_name: string; _role: string; _school_id: string }
-        Returns: void
-      }
-      create_school_user: {
-        Args: { _email: string; _password: string; _full_name: string; _role: string; _school_id: string; _username?: string | null }
+      get_email_by_user_id: { Args: { _user_id: string }; Returns: string }
+      get_email_by_username: {
+        Args: { _school_id: string; _username: string }
         Returns: string
       }
-      get_user_emails_by_ids: {
-        Args: { _user_ids: string[] }
-        Returns: { user_id: string; email: string }[]
-      }
-      get_email_by_user_id: {
-        Args: { _user_id: string }
-        Returns: string
-      }
-      confirm_user_email: {
-        Args: { _user_id: string }
-        Returns: void
-      }
-      create_parent_account: {
-        Args: { _email: string; _password: string; _full_name: string; _username: string; _school_id: string }
-        Returns: string
+      get_school_parents: {
+        Args: { _school_id: string }
+        Returns: {
+          created_at: string
+          first_name: string
+          full_name: string
+          id: string
+          last_name: string
+          school_id: string
+          updated_at: string
+          user_id: string
+          username: string
+        }[]
       }
       get_school_students: {
         Args: { _school_id: string }
-        Returns: { id: string; user_id: string; full_name: string; first_name: string; middle_name: string; last_name: string; username: string; class_id: string; class_name: string; school_id: string; gender: string; date_of_birth: string; address: string; parent_name: string; nationality: string; subjects_offered: string[]; created_at: string; updated_at: string }[]
+        Returns: {
+          address: string
+          class_id: string
+          class_name: string
+          created_at: string
+          date_of_birth: string
+          first_name: string
+          full_name: string
+          gender: string
+          id: string
+          last_name: string
+          middle_name: string
+          nationality: string
+          parent_name: string
+          school_id: string
+          subjects_offered: string[]
+          updated_at: string
+          user_id: string
+          username: string
+        }[]
       }
-      get_email_by_username: {
-        Args: { _username: string; _school_id: string }
-        Returns: string
+      get_school_students_only: {
+        Args: { _school_id: string }
+        Returns: {
+          class_id: string
+          full_name: string
+          user_id: string
+          username: string
+        }[]
       }
+      get_user_emails_by_ids: {
+        Args: { _user_ids: string[] }
+        Returns: {
+          email: string
+          user_id: string
+        }[]
+      }
+      get_user_school_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      reset_exam_attempt: {
+        Args: { _exam_id: string; _student_id: string }
+        Returns: string
+      }
+      update_school_user: {
+        Args: {
+          _full_name: string
+          _role: string
+          _school_id: string
+          _user_id: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
