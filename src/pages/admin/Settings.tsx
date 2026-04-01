@@ -9,7 +9,7 @@ import { Loader2, Save, School, ImagePlus, Trash2, Bell } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { useEffect, useState } from "react";
+
 
 export default function Settings() {
   const { schoolId } = useAuth();
