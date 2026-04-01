@@ -26,6 +26,7 @@ export default function SuperAdminLogin() {
   }
 
   if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
+  if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
   if (user) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
