@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Pencil, Trash2, Loader2, FileQuestion } from "lucide-react";
 
 interface Exam {
@@ -21,6 +22,7 @@ interface Exam {
   description: string;
   duration_minutes: number;
   is_published: boolean;
+  allow_retake: boolean;
   subject_id: string;
   term_id: string | null;
   class_id: string | null;
@@ -48,6 +50,7 @@ export default function Exams() {
   const [description, setDescription] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [duration, setDuration] = useState("30");
+  const [allowRetake, setAllowRetake] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
   const [termId, setTermId] = useState("");
   const [classId, setClassId] = useState("");
@@ -78,7 +81,9 @@ export default function Exams() {
     const payload: any = {
       title, description, subject_id: subjectId,
       duration_minutes: parseInt(duration) || 30,
-      is_published: isPublished, created_by: user?.id,
+      is_published: isPublished,
+      allow_retake: allowRetake,
+      created_by: user?.id,
       term_id: termId || null,
       class_id: classId || null,
       school_id: schoolId,
@@ -108,7 +113,7 @@ export default function Exams() {
 
   const openEdit = (e: Exam) => {
     setEditing(e); setTitle(e.title); setDescription(e.description || ""); setSubjectId(e.subject_id);
-    setDuration(String(e.duration_minutes)); setIsPublished(e.is_published);
+    setDuration(String(e.duration_minutes)); setIsPublished(e.is_published); setAllowRetake(e.allow_retake ?? false);
     setTermId(e.term_id || ""); setClassId(e.class_id || ""); setOpen(true);
   };
 
@@ -159,6 +164,13 @@ export default function Exams() {
               <div className="space-y-2"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mid-term Exam" /></div>
               <div className="space-y-2"><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} /></div>
               <div className="space-y-2"><Label>Duration (minutes)</Label><Input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} min="1" /></div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="text-sm font-medium">Allow Retake</p>
+                  <p className="text-xs text-muted-foreground">Students can retake this exam after submission</p>
+                </div>
+                <Switch checked={allowRetake} onCheckedChange={setAllowRetake} />
+              </div>
               <div className="flex items-center gap-2"><Switch checked={isPublished} onCheckedChange={setIsPublished} /><Label>Published</Label></div>
               <Button onClick={handleSave} className="w-full" disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Update" : "Create"}</Button>
             </div>
@@ -185,6 +197,16 @@ export default function Exams() {
                     <TableCell>{(e as any).classes?.name || "All"}</TableCell>
                     <TableCell className="text-sm">{getTermLabel(e.term_id)}</TableCell>
                     <TableCell>{e.duration_minutes} min</TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={e.allow_retake ?? false}
+                        onCheckedChange={async (v) => {
+                          await supabase.from("exams").update({ allow_retake: v } as any).eq("id", e.id);
+                          setExams(exams.map(ex => ex.id === e.id ? { ...ex, allow_retake: v } : ex));
+                          toast.success(v ? "Retake enabled" : "Retake disabled");
+                        }}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Badge variant={e.is_published ? "default" : "secondary"} className="cursor-pointer" onClick={() => togglePublish(e)}>
                         {e.is_published ? "Published" : "Draft"}

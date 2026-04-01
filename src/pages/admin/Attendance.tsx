@@ -49,11 +49,13 @@ export default function Attendance() {
 
   const loadStudentsAndAttendance = async () => {
     setLoading(true);
-    const { data: studentData } = await supabase
-      .from("profiles").select("user_id, full_name, class_id")
-      .eq("class_id", selectedClass).eq("school_id", schoolId!).order("full_name");
-    const studentList = (studentData as StudentProfile[]) || [];
-    setStudents(studentList);
+    // Use SECURITY DEFINER function - guaranteed to only return this school's students
+    const { data: allStudents } = await supabase
+      .rpc("get_school_students_only", { _school_id: schoolId! });
+    const studentList = ((allStudents as any[]) || [])
+      .filter((s: any) => s.class_id === selectedClass)
+      .map((s: any) => ({ user_id: s.user_id, full_name: s.full_name, class_id: s.class_id }));
+    setStudents(studentList as StudentProfile[]);
 
     const { data: attendanceData } = await supabase
       .from("attendance").select("*")
