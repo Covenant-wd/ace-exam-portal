@@ -233,6 +233,7 @@ export type Database = {
           end_date: string | null
           id: string
           is_published: boolean
+          allow_retake: boolean
           school_id: string | null
           start_date: string | null
           subject_id: string
@@ -250,6 +251,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_published?: boolean
+          allow_retake?: boolean
           school_id?: string | null
           start_date?: string | null
           subject_id: string
@@ -267,6 +269,7 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_published?: boolean
+          allow_retake?: boolean
           school_id?: string | null
           start_date?: string | null
           subject_id?: string

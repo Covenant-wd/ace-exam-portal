@@ -102,6 +102,7 @@ export default function Students() {
         toast.error(error.message);
         setStudents([]);
       } else {
+        // email is now stored directly in profiles table
         setStudents((profiles || []).map((p: any) => ({ ...p, email: p.email || "" })));
       }
     } catch (err: any) {
@@ -157,6 +158,24 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", editing.user_id);
         if (error) throw error;
+        // Update local state immediately so changes reflect at once
+        const updatedStudent = {
+          ...editing!,
+          first_name: form.first_name,
+          middle_name: form.middle_name || "",
+          last_name: form.last_name,
+          full_name: fullName,
+          username: form.username || null,
+          class_id: form.class_id || null,
+          class_name: classes.find(c => c.id === form.class_id)?.name || null,
+          date_of_birth: form.date_of_birth || null,
+          address: form.address || "",
+          parent_name: form.parent_name || "",
+          nationality: form.nationality || "",
+          gender: form.gender || "",
+          subjects_offered: subjects,
+        };
+        setStudents(prev => prev.map(s => s.user_id === editing!.user_id ? updatedStudent : s));
         toast.success("Student updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
@@ -185,7 +204,10 @@ export default function Students() {
         toast.success("Student created");
       }
       setDialogOpen(false);
-      fetchStudents();
+      if (!editing) {
+        // Only re-fetch for new students to get their email populated
+        fetchStudents();
+      }
     } catch (err: any) {
       toast.error(err.message || "Operation failed");
     }

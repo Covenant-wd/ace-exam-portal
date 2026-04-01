@@ -47,13 +47,7 @@ export default function TakeExam() {
     const init = async () => {
       // Check existing attempt
       const { data: existing } = await supabase.from("exam_attempts")
-        .select("*").eq("exam_id", examId!).eq("student_id", user!.id).single();
-
-      if (existing?.is_submitted) {
-        toast.info("You've already completed this exam.");
-        navigate("/student");
-        return;
-      }
+        .select("*").eq("exam_id", examId!).eq("student_id", user!.id).maybeSingle();
 
       const [examRes, qRes] = await Promise.all([
         supabase.from("exams").select("*").eq("id", examId!).single(),
@@ -71,24 +65,57 @@ export default function TakeExam() {
         setAllowCalculator(true);
       }
 
-      if (existing) {
+      // Handle existing attempt
+      if (existing?.is_submitted) {
+        // Exam already submitted
+        if (!examRes.data.allow_retake) {
+          toast.info("You've already completed this exam.");
+          navigate("/student");
+          return;
+        }
+        // Retake allowed — use secure function to reset attempt
+        const { data: newAttemptId, error: retakeErr } = await supabase
+          .rpc("reset_exam_attempt", {
+            _exam_id: examId!,
+            _student_id: user!.id,
+          });
+        if (retakeErr || !newAttemptId) {
+          toast.error("Failed to start retake. Please try again.");
+          navigate("/student/exams");
+          return;
+        }
+        setAttemptId(newAttemptId);
+        setAnswers({});
+        setFlagged(new Set());
+        setCurrentIndex(0);
+        setTimeLeft(examRes.data.duration_minutes * 60);
+        setLoading(false);
+        return;
+      }
+
+      if (existing && !existing.is_submitted) {
+        // In-progress attempt — resume it
         setAttemptId(existing.id);
-        // Calculate remaining time
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
         const remaining = Math.max(0, examRes.data.duration_minutes * 60 - elapsed);
         setTimeLeft(Math.floor(remaining));
-
-        // Load existing answers
         const { data: savedAnswers } = await supabase.from("student_answers")
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
         (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
         setAnswers(map);
       } else {
-        // Create new attempt
-        const { data: attempt } = await supabase.from("exam_attempts")
-          .insert({ exam_id: examId!, student_id: user!.id }).select().single();
-        setAttemptId(attempt!.id);
+        // No attempt yet — create one
+        const { data: attempt, error: attemptErr } = await supabase
+          .from("exam_attempts")
+          .insert({ exam_id: examId!, student_id: user!.id })
+          .select().single();
+        if (attemptErr || !attempt) {
+          toast.error("Failed to start exam. Please try again.");
+          navigate("/student/exams");
+          return;
+        }
+        setAttemptId(attempt.id);
         setTimeLeft(examRes.data.duration_minutes * 60);
       }
 

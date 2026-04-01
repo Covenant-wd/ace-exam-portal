@@ -121,7 +121,11 @@ export default function StudentExams() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <CardTitle className="text-lg">{exam.title}</CardTitle>
-                        {completed && <Badge variant="secondary">Completed</Badge>}
+                        {completed && (
+                          <Badge variant={exam.allow_retake ? "outline" : "secondary"}>
+                            {exam.allow_retake ? "Retake Available" : "Completed"}
+                          </Badge>
+                        )}
                       </div>
                       {exam.description && <CardDescription>{exam.description}</CardDescription>}
                     </CardHeader>
@@ -130,7 +134,16 @@ export default function StudentExams() {
                         <Clock className="h-4 w-4" />{exam.duration_minutes} minutes
                       </div>
                       {completed ? (
-                        <p className="text-sm font-medium">Score: {attempt.score}/{attempt.total_questions} ({Math.round((attempt.score / attempt.total_questions) * 100)}%)</p>
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Score: {attempt.score}/{attempt.total_questions} ({Math.round((attempt.score / attempt.total_questions) * 100)}%)</p>
+                          {exam.allow_retake ? (
+                            <Button asChild variant="outline" className="w-full">
+                              <Link to={`/student/exam/${exam.id}`}>Retake Exam</Link>
+                            </Button>
+                          ) : (
+                            <p className="text-xs text-muted-foreground text-center">Retake not allowed</p>
+                          )}
+                        </div>
                       ) : (
                         <Button asChild className="w-full"><Link to={`/student/exam/${exam.id}`}>Start Exam</Link></Button>
                       )}

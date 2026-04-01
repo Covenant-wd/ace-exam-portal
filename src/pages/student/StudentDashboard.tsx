@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3 } from "lucide-react";
+import ReportCard from "@/components/ReportCard";
 
 interface AttendanceRecord {
   date: string;
@@ -15,8 +16,8 @@ interface AttendanceRecord {
 interface GradeRecord {
   subject_name: string;
   category_name: string;
+  category_max_score: number;
   score: number;
-  max_score: number;
 }
 
 interface FeeRecord {
@@ -82,14 +83,14 @@ export default function StudentDashboard() {
       const { data: gradeData } = await supabase.from("grades").select(`
         score, max_score,
         subjects:subject_id(name),
-        grade_categories:category_id(name)
+        grade_categories:category_id(name, max_score)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
       const gradeRecords = (gradeData || []).map((g: any) => ({
         subject_name: g.subjects?.name || "—",
         category_name: g.grade_categories?.name || "—",
+        category_max_score: g.grade_categories?.max_score ?? g.max_score,
         score: g.score,
-        max_score: g.max_score,
       }));
       setGrades(gradeRecords);
 
@@ -233,38 +234,11 @@ export default function StudentDashboard() {
         </TabsContent>
 
         <TabsContent value="grades">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Percentage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {grades.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No grades yet</TableCell></TableRow>
-                  ) : (
-                    grades.map((g, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium">{g.subject_name}</TableCell>
-                        <TableCell>{g.category_name}</TableCell>
-                        <TableCell>{g.score}/{g.max_score}</TableCell>
-                        <TableCell>
-                          <Badge variant={((g.score / g.max_score) * 100) >= 50 ? "default" : "destructive"}>
-                            {((g.score / g.max_score) * 100).toFixed(0)}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <ReportCard
+            grades={grades}
+            term={activeTerm}
+            session={activeSession}
+          />
         </TabsContent>
 
         <TabsContent value="fees">
