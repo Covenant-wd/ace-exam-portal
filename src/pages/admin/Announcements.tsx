@@ -64,7 +64,7 @@ export default function Announcements() {
         // Send email notification to relevant users
         try {
           const targetRoles = targetRole === "all" ? ["student", "instructor", "parent"] : [targetRole];
-          const { data: roleRows } = await supabase.from("user_roles").select("user_id").in("role", targetRoles).eq("school_id", schoolId!);
+          const { data: roleRows } = await supabase.from("user_roles").select("user_id").in("role", targetRoles as any).eq("school_id", schoolId!);
           const userIds = (roleRows || []).map((r: any) => r.user_id);
           if (userIds.length > 0) {
             const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });

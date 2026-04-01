@@ -2,16 +2,16 @@ import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, LogOut, Menu, School, ShieldCheck, Users, Briefcase } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, School, DollarSign, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/super-admin", label: "Schools", icon: School },
-  { to: "/super-admin/users", label: "All Users", icon: Users },
-  { to: "/super-admin/outreach-officers", label: "Outreach Officers", icon: Briefcase },
+  { to: "/outreach", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/outreach/schools", label: "Referred Schools", icon: School },
+  { to: "/outreach/earnings", label: "Earnings", icon: DollarSign },
 ];
 
-export default function SuperAdminLayout({ children }: { children: ReactNode }) {
+export default function OutreachOfficerLayout({ children }: { children: ReactNode }) {
   const { signOut, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/super-admin/login");
+    navigate("/outreach/login");
   };
 
   return (
@@ -36,11 +36,11 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
-            <ShieldCheck className="h-5 w-5" />
+            <Briefcase className="h-5 w-5" />
           </div>
           <div>
             <h1 className="font-bold text-lg leading-tight">Academia</h1>
-            <p className="text-xs opacity-80">Super Admin</p>
+            <p className="text-xs opacity-80">Outreach Officer</p>
           </div>
         </div>
 
