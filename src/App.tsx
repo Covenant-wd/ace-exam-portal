@@ -8,9 +8,15 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/DashboardLayout";
 import SuperAdminLayout from "./components/SuperAdminLayout";
+import OutreachOfficerLayout from "./components/OutreachOfficerLayout";
 import SuperAdminLogin from "./pages/super-admin/SuperAdminLogin";
 import SuperAdminDashboard from "./pages/super-admin/SuperAdminDashboard";
 import SuperAdminUsers from "./pages/super-admin/SuperAdminUsers";
+import OutreachOfficers from "./pages/super-admin/OutreachOfficers";
+import OutreachLogin from "./pages/outreach/OutreachLogin";
+import OutreachDashboard from "./pages/outreach/OutreachDashboard";
+import OutreachSchools from "./pages/outreach/OutreachSchools";
+import OutreachEarnings from "./pages/outreach/OutreachEarnings";
 import SchoolLogin from "./pages/school/SchoolLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import Subjects from "./pages/admin/Subjects";
@@ -38,11 +44,12 @@ import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" }) {
+function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" | "outreach_officer" }) {
   const { user, role, loading } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!user) {
     if (requiredRole === "super_admin") return <Navigate to="/super-admin/login" replace />;
+    if (requiredRole === "outreach_officer") return <Navigate to="/outreach/login" replace />;
     if (requiredRole === "student") return <Navigate to="/" replace />;
     return <Navigate to="/" replace />;
   }
