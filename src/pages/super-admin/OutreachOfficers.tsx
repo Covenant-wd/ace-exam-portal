@@ -85,8 +85,8 @@ export default function OutreachOfficers() {
         _password: password,
         _full_name: fullName,
         _role: "outreach_officer",
-        _school_id: "00000000-0000-0000-0000-000000000000",
-      });
+        _school_id: null,
+      } as any);
       if (error) throw error;
       toast.success("Outreach officer created");
       setCreateDialog(false);
