@@ -1243,11 +1243,6 @@ export type Database = {
         Returns: string
       }
       delete_school_user: { Args: { _user_id: string }; Returns: undefined }
-      get_user_school_id: { Args: { _user_id: string }; Returns: string }
-      reset_exam_attempt: {
-        Args: { _exam_id: string; _student_id: string }
-        Returns: string
-      }
       get_all_school_users: {
         Args: never
         Returns: {
