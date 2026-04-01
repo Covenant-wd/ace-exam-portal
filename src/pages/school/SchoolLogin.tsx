@@ -79,6 +79,7 @@ export default function SchoolLogin() {
     if (role === "admin") return <Navigate to="/admin" replace />;
     if (role === "instructor") return <Navigate to="/instructor" replace />;
     if (role === "parent") return <Navigate to="/parent" replace />;
+    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
     return <Navigate to="/student" replace />;
   }
 
