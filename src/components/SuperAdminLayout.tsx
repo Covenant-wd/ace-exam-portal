@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { to: "/super-admin", label: "Schools", icon: School },
   { to: "/super-admin/users", label: "All Users", icon: Users },
+  { to: "/super-admin/outreach-officers", label: "Outreach Officers", icon: Briefcase },
 ];
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {

@@ -69,6 +69,13 @@ function AppRoutes() {
       <Route path="/super-admin/login" element={<SuperAdminLogin />} />
       <Route path="/super-admin" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
       <Route path="/super-admin/users" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminUsers /></SuperAdminLayout></ProtectedRoute>} />
+      <Route path="/super-admin/outreach-officers" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><OutreachOfficers /></SuperAdminLayout></ProtectedRoute>} />
+
+      {/* Outreach Officer */}
+      <Route path="/outreach/login" element={<OutreachLogin />} />
+      <Route path="/outreach" element={<ProtectedRoute requiredRole="outreach_officer"><OutreachOfficerLayout><OutreachDashboard /></OutreachOfficerLayout></ProtectedRoute>} />
+      <Route path="/outreach/schools" element={<ProtectedRoute requiredRole="outreach_officer"><OutreachOfficerLayout><OutreachSchools /></OutreachOfficerLayout></ProtectedRoute>} />
+      <Route path="/outreach/earnings" element={<ProtectedRoute requiredRole="outreach_officer"><OutreachOfficerLayout><OutreachEarnings /></OutreachOfficerLayout></ProtectedRoute>} />
 
       {/* Legacy auth routes - redirect to home */}
       <Route path="/auth" element={<Navigate to="/" replace />} />
