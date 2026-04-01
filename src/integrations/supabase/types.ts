@@ -807,6 +807,44 @@ export type Database = {
           },
         ]
       }
+      school_referrals: {
+        Row: {
+          commission_amount: number
+          commission_paid: boolean
+          created_at: string
+          id: string
+          notes: string | null
+          officer_id: string
+          school_id: string
+        }
+        Insert: {
+          commission_amount?: number
+          commission_paid?: boolean
+          created_at?: string
+          id?: string
+          notes?: string | null
+          officer_id: string
+          school_id: string
+        }
+        Update: {
+          commission_amount?: number
+          commission_paid?: boolean
+          created_at?: string
+          id?: string
+          notes?: string | null
+          officer_id?: string
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_referrals_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       school_settings: {
         Row: {
           id: string
