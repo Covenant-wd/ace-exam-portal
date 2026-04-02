@@ -46,7 +46,7 @@ export default function SchoolLogin() {
   // Reset fields when role changes
   useEffect(() => { setIdentifier(""); setPassword(""); }, [activeRole]);
 
-  if (loadingSchool || authLoading) {
+  if (loadingSchool || authLoading || (user && !role)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0f0f14]">
         <div className="flex flex-col items-center gap-4">
@@ -76,11 +76,12 @@ export default function SchoolLogin() {
 
   if (user) {
     if (role === "super_admin") return <Navigate to="/super-admin" replace />;
+    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
     if (role === "admin") return <Navigate to="/admin" replace />;
     if (role === "instructor") return <Navigate to="/instructor" replace />;
     if (role === "parent") return <Navigate to="/parent" replace />;
-    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
-    return <Navigate to="/student" replace />;
+    if (role === "student") return <Navigate to="/student" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

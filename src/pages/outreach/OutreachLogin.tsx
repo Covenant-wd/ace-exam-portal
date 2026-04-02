@@ -15,8 +15,13 @@ export default function OutreachLogin() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (loading || (user && !role)) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
+  if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
+  if (user && role === "admin") return <Navigate to="/admin" replace />;
+  if (user && role === "instructor") return <Navigate to="/instructor" replace />;
+  if (user && role === "parent") return <Navigate to="/parent" replace />;
+  if (user && role === "student") return <Navigate to="/student" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

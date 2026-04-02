@@ -46,14 +46,27 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" | "outreach_officer" }) {
   const { user, role, loading } = useAuth();
-  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+  if (loading || (user && !role)) {
+    return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  }
+
   if (!user) {
     if (requiredRole === "super_admin") return <Navigate to="/super-admin/login" replace />;
     if (requiredRole === "outreach_officer") return <Navigate to="/outreach/login" replace />;
-    if (requiredRole === "student") return <Navigate to="/" replace />;
     return <Navigate to="/" replace />;
   }
-  if (role !== requiredRole) return <Navigate to="/" replace />;
+
+  if (role !== requiredRole) {
+    if (role === "super_admin") return <Navigate to="/super-admin" replace />;
+    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
+    if (role === "admin") return <Navigate to="/admin" replace />;
+    if (role === "instructor") return <Navigate to="/instructor" replace />;
+    if (role === "parent") return <Navigate to="/parent" replace />;
+    if (role === "student") return <Navigate to="/student" replace />;
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 

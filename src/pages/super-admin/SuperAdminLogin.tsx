@@ -17,7 +17,7 @@ export default function SuperAdminLogin() {
     return () => clearTimeout(t);
   }, []);
 
-  if (loading) {
+  if (loading || (user && !role)) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e1a" }}>
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#c9a84c" }} />
@@ -27,6 +27,10 @@ export default function SuperAdminLogin() {
 
   if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
   if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
+  if (user && role === "admin") return <Navigate to="/admin" replace />;
+  if (user && role === "instructor") return <Navigate to="/instructor" replace />;
+  if (user && role === "parent") return <Navigate to="/parent" replace />;
+  if (user && role === "student") return <Navigate to="/student" replace />;
   if (user) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
