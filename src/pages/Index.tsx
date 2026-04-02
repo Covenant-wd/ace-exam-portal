@@ -84,11 +84,18 @@ export default function Index() {
   );
 
   if (user) {
-    if (role === "super_admin") return <Navigate to="/super-admin" replace />;
-    if (role === "admin")       return <Navigate to="/admin" replace />;
-    if (role === "instructor")  return <Navigate to="/instructor" replace />;
-    if (role === "parent")      return <Navigate to="/parent" replace />;
-    return <Navigate to="/student" replace />;
+    if (role === "super_admin")      return <Navigate to="/super-admin" replace />;
+    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
+    if (role === "admin")            return <Navigate to="/admin" replace />;
+    if (role === "instructor")       return <Navigate to="/instructor" replace />;
+    if (role === "parent")           return <Navigate to="/parent" replace />;
+    if (role === "student")          return <Navigate to="/student" replace />;
+    // Role not yet loaded or unknown — show loading
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f]">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+      </div>
+    );
   }
 
   const filteredSchools = schools.filter(s =>
