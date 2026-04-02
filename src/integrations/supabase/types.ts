@@ -233,7 +233,6 @@ export type Database = {
           end_date: string | null
           id: string
           is_published: boolean
-          allow_retake: boolean
           school_id: string | null
           start_date: string | null
           subject_id: string
@@ -251,7 +250,6 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_published?: boolean
-          allow_retake?: boolean
           school_id?: string | null
           start_date?: string | null
           subject_id: string
@@ -269,7 +267,6 @@ export type Database = {
           end_date?: string | null
           id?: string
           is_published?: boolean
-          allow_retake?: boolean
           school_id?: string | null
           start_date?: string | null
           subject_id?: string
@@ -1237,7 +1234,7 @@ export type Database = {
           _full_name: string
           _password: string
           _role: string
-          _school_id: string
+          _school_id?: string
           _username?: string
         }
         Returns: string
@@ -1260,6 +1257,15 @@ export type Database = {
       get_email_by_username: {
         Args: { _school_id: string; _username: string }
         Returns: string
+      }
+      get_outreach_officers: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          user_id: string
+        }[]
       }
       get_school_parents: {
         Args: { _school_id: string }
