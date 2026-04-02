@@ -58,21 +58,24 @@ export default function OutreachOfficers() {
   }, []);
 
   const loadData = async () => {
-    // Load officers (users with outreach_officer role)
-    const { data: usersData } = await supabase.rpc("get_all_school_users");
-    const allUsers = (usersData as any[]) || [];
-    const officerList = allUsers.filter((u: any) => u.role === "outreach_officer");
-    setOfficers(officerList);
+    try {
+      // Load officers using dedicated function (they have NULL school_id so get_all_school_users misses them)
+      const { data: officersData, error: officersError } = await supabase.rpc("get_outreach_officers");
+      if (officersError) console.error("Officers error:", officersError);
+      setOfficers((officersData as any[]) || []);
 
-    // Load schools
-    const { data: schoolData } = await supabase.from("schools").select("id, name").order("name");
-    setSchools((schoolData as SchoolItem[]) || []);
+      // Load schools
+      const { data: schoolData } = await supabase.from("schools").select("id, name").order("name");
+      setSchools((schoolData as SchoolItem[]) || []);
 
-    // Load all referrals
-    const { data: refData } = await supabase.from("school_referrals").select("*, schools(name)").order("created_at", { ascending: false });
-    setReferrals((refData as any[]) || []);
-
-    setLoading(false);
+      // Load all referrals
+      const { data: refData } = await supabase.from("school_referrals").select("*, schools(name)").order("created_at", { ascending: false });
+      setReferrals((refData as any[]) || []);
+    } catch (err: any) {
+      console.error("loadData error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateOfficer = async () => {
