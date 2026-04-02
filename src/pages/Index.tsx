@@ -28,8 +28,8 @@ const steps = [
 ];
 
 // Spring config for snappy feel
-const spring = { type: "spring", stiffness: 400, damping: 28 };
-const gentleSpring = { type: "spring", stiffness: 200, damping: 20 };
+const spring = { type: "spring" as const, stiffness: 400, damping: 28 };
+const gentleSpring = { type: "spring" as const, stiffness: 200, damping: 20 };
 
 // Floating orb component
 function FloatingOrb({ className }: { className: string }) {
