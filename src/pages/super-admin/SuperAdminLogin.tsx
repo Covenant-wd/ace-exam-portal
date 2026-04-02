@@ -6,32 +6,34 @@ import { Loader2 } from "lucide-react";
 
 export default function SuperAdminLogin() {
   const { user, role, loading, signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail]         = useState("");
+  const [password, setPassword]   = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [doorOpen, setDoorOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [showPass, setShowPass]   = useState(false);
+  const [doorOpen, setDoorOpen]   = useState(false);
+  const [mounted, setMounted]     = useState(false);
+  const [focused, setFocused]     = useState<"email"|"pass"|null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 100);
+    const t = setTimeout(() => setMounted(true), 80);
     return () => clearTimeout(t);
   }, []);
 
   if (loading || (user && !role)) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "#0a0e1a" }}>
-        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "#c9a84c" }} />
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#07090f" }}>
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color:"#c9a84c" }} />
       </div>
     );
   }
 
-  if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
+  if (user && role === "super_admin")      return <Navigate to="/super-admin" replace />;
   if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
-  if (user && role === "admin") return <Navigate to="/admin" replace />;
-  if (user && role === "instructor") return <Navigate to="/instructor" replace />;
-  if (user && role === "parent") return <Navigate to="/parent" replace />;
-  if (user && role === "student") return <Navigate to="/student" replace />;
-  if (user) return <Navigate to="/" replace />;
+  if (user && role === "admin")            return <Navigate to="/admin" replace />;
+  if (user && role === "instructor")       return <Navigate to="/instructor" replace />;
+  if (user && role === "parent")           return <Navigate to="/parent" replace />;
+  if (user && role === "student")          return <Navigate to="/student" replace />;
+  if (user)                                return <Navigate to="/" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,616 +50,665 @@ export default function SuperAdminLogin() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap');
 
-        .ahq-root {
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        .sl-root {
           min-height: 100vh;
+          min-height: 100dvh;
           background: #07090f;
           display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: 'DM Sans', sans-serif;
+          align-items: stretch;
+          font-family: 'Outfit', sans-serif;
           overflow: hidden;
           position: relative;
         }
 
-        /* Marble-like background texture */
-        .ahq-root::before {
-          content: '';
+        /* ── ambient background ── */
+        .sl-bg {
           position: fixed;
           inset: 0;
-          background:
-            radial-gradient(ellipse 80% 60% at 20% 10%, rgba(201,168,76,0.07) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 50% at 80% 90%, rgba(99,120,180,0.08) 0%, transparent 60%),
-            radial-gradient(ellipse 100% 100% at 50% 50%, #0c1020 0%, #07090f 100%);
           pointer-events: none;
           z-index: 0;
         }
-
-        /* Subtle grid lines */
-        .ahq-root::after {
-          content: '';
-          position: fixed;
+        .sl-bg-orb1 {
+          position: absolute;
+          width: 600px; height: 600px;
+          top: -200px; left: -150px;
+          background: radial-gradient(circle, rgba(201,168,76,0.06) 0%, transparent 70%);
+          border-radius: 50%;
+        }
+        .sl-bg-orb2 {
+          position: absolute;
+          width: 500px; height: 500px;
+          bottom: -150px; right: -100px;
+          background: radial-gradient(circle, rgba(80,100,180,0.07) 0%, transparent 70%);
+          border-radius: 50%;
+        }
+        .sl-bg-grid {
+          position: absolute;
           inset: 0;
           background-image:
-            linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
-          background-size: 60px 60px;
-          pointer-events: none;
-          z-index: 0;
+            linear-gradient(rgba(201,168,76,0.028) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(201,168,76,0.028) 1px, transparent 1px);
+          background-size: 56px 56px;
         }
 
-        .ahq-layout {
+        /* ── layout ── */
+        .sl-wrap {
           position: relative;
           z-index: 1;
           display: flex;
-          align-items: center;
-          gap: 0;
           width: 100%;
-          max-width: 1000px;
-          min-height: 580px;
-          margin: 2rem;
-          border-radius: 20px;
-          overflow: hidden;
-          box-shadow:
-            0 0 0 1px rgba(201,168,76,0.15),
-            0 40px 120px rgba(0,0,0,0.8),
-            0 0 80px rgba(201,168,76,0.05);
+          min-height: 100vh;
+          min-height: 100dvh;
           opacity: ${mounted ? 1 : 0};
-          transform: ${mounted ? 'translateY(0)' : 'translateY(24px)'};
-          transition: opacity 0.8s ease, transform 0.8s ease;
+          transform: ${mounted ? 'none' : 'translateY(16px)'};
+          transition: opacity 0.7s ease, transform 0.7s ease;
         }
 
-        /* LEFT — Door scene */
-        .ahq-door-panel {
-          flex: 0 0 42%;
-          background: linear-gradient(160deg, #111827 0%, #0c1020 100%);
-          position: relative;
-          display: flex;
+        /* ── LEFT panel — door scene ── */
+        .sl-left {
+          flex: 0 0 44%;
+          display: none;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
-          overflow: hidden;
-          padding: 40px 30px;
-          border-right: 1px solid rgba(201,168,76,0.12);
-        }
-
-        .ahq-door-panel::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(ellipse 70% 70% at 50% 30%, rgba(201,168,76,0.06) 0%, transparent 70%);
-        }
-
-        /* Architectural column detail */
-        .ahq-column-left, .ahq-column-right {
-          position: absolute;
-          top: 0; bottom: 0;
-          width: 14px;
-          background: linear-gradient(180deg, rgba(201,168,76,0.15) 0%, rgba(201,168,76,0.08) 50%, rgba(201,168,76,0.15) 100%);
-        }
-        .ahq-column-left { left: 0; border-right: 1px solid rgba(201,168,76,0.2); }
-        .ahq-column-right { right: 0; border-left: 1px solid rgba(201,168,76,0.2); }
-
-        /* Floor line */
-        .ahq-floor {
-          position: absolute;
-          bottom: 44px;
-          left: 20px; right: 20px;
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(201,168,76,0.3), transparent);
-        }
-
-        /* Door frame */
-        .ahq-door-frame {
+          background: linear-gradient(150deg, #111520 0%, #0c1018 100%);
+          border-right: 1px solid rgba(201,168,76,0.10);
           position: relative;
-          width: 160px;
-          height: 240px;
-          z-index: 2;
-        }
-
-        .ahq-door-arch {
-          position: absolute;
-          top: 0; left: 0; right: 0;
-          height: 50px;
-          border: 2px solid rgba(201,168,76,0.4);
-          border-bottom: none;
-          border-radius: 80px 80px 0 0;
-        }
-
-        .ahq-door-arch-inner {
-          position: absolute;
-          top: 6px; left: 6px; right: 6px;
-          height: 38px;
-          border: 1px solid rgba(201,168,76,0.2);
-          border-bottom: none;
-          border-radius: 60px 60px 0 0;
-        }
-
-        .ahq-door-surround {
-          position: absolute;
-          top: 30px; left: 0; right: 0; bottom: 0;
-          border: 2px solid rgba(201,168,76,0.4);
-          border-top: none;
-          border-radius: 0 0 2px 2px;
-        }
-
-        .ahq-door-surround-inner {
-          position: absolute;
-          top: 6px; left: 6px; right: 6px; bottom: 6px;
-          border: 1px solid rgba(201,168,76,0.15);
-        }
-
-        /* The actual door (swings open) */
-        .ahq-door {
-          position: absolute;
-          top: 30px; left: 2px; right: 2px; bottom: 2px;
-          transform-origin: left center;
-          transform: perspective(600px) rotateY(${doorOpen ? '-75deg' : '0deg'});
-          transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-          background: linear-gradient(135deg, #1a2035 0%, #141928 60%, #1a2035 100%);
-          border-radius: 0 0 1px 1px;
           overflow: hidden;
-          box-shadow: inset -4px 0 12px rgba(0,0,0,0.5), inset 4px 0 8px rgba(201,168,76,0.05);
+          padding: 60px 40px;
         }
 
-        /* Door panels (decorative recessed rectangles) */
-        .ahq-door-panel-top, .ahq-door-panel-bottom {
+        @media (min-width: 900px) {
+          .sl-left { display: flex; }
+        }
+
+        /* columns */
+        .sl-col { position: absolute; top:0; bottom:0; width:12px; }
+        .sl-col-l { left:0; background: linear-gradient(180deg, rgba(201,168,76,0.12) 0%, rgba(201,168,76,0.06) 50%, rgba(201,168,76,0.12) 100%); border-right: 1px solid rgba(201,168,76,0.18); }
+        .sl-col-r { right:0; background: linear-gradient(180deg, rgba(201,168,76,0.12) 0%, rgba(201,168,76,0.06) 50%, rgba(201,168,76,0.12) 100%); border-left: 1px solid rgba(201,168,76,0.18); }
+
+        /* stars */
+        .sl-star { position: absolute; border-radius: 50%; background: rgba(201,168,76,0.5); animation: sl-twinkle 3s ease-in-out infinite; }
+        @keyframes sl-twinkle { 0%,100%{opacity:0.3} 50%{opacity:0.9} }
+
+        /* floor */
+        .sl-floor {
+          position: absolute;
+          bottom: 52px; left: 20px; right: 20px;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(201,168,76,0.25), transparent);
+        }
+
+        /* label above door */
+        .sl-door-label {
+          position: absolute;
+          top: 36px; left: 0; right: 0;
+          text-align: center;
+          font-family: 'Playfair Display', serif;
+          font-size: 11px;
+          letter-spacing: 5px;
+          text-transform: uppercase;
+          color: rgba(201,168,76,0.45);
+        }
+
+        /* door scene */
+        .sl-scene { position: relative; width: 170px; height: 260px; }
+
+        .sl-arch {
+          position: absolute;
+          top: 0; left: 0; right: 0; height: 55px;
+          border: 2px solid rgba(201,168,76,0.38);
+          border-bottom: none;
+          border-radius: 85px 85px 0 0;
+        }
+        .sl-arch-inner {
+          position: absolute;
+          top: 7px; left: 7px; right: 7px; height: 42px;
+          border: 1px solid rgba(201,168,76,0.18);
+          border-bottom: none;
+          border-radius: 65px 65px 0 0;
+        }
+        .sl-surround {
+          position: absolute;
+          top: 33px; left: 0; right: 0; bottom: 0;
+          border: 2px solid rgba(201,168,76,0.38);
+          border-top: none;
+        }
+        .sl-surround-inner {
+          position: absolute;
+          inset: 7px;
+          border: 1px solid rgba(201,168,76,0.13);
+        }
+
+        .sl-door-glow {
+          position: absolute;
+          top: 33px; left: 4px; right: 4px; bottom: 0;
+          background: radial-gradient(ellipse at center, rgba(201,168,76,0.14), transparent 70%);
+          opacity: ${doorOpen ? 1 : 0};
+          transition: opacity 0.8s ease 0.5s;
+          z-index: 0;
+        }
+        .sl-door-light {
+          position: absolute;
+          top: 33px; left: 2px;
+          width: 28px; bottom: 2px;
+          background: linear-gradient(90deg, rgba(201,168,76,0.18), transparent);
+          opacity: ${doorOpen ? 1 : 0};
+          transition: opacity 0.7s ease 0.4s;
+          z-index: 2;
+          pointer-events: none;
+        }
+
+        .sl-door {
+          position: absolute;
+          top: 33px; left: 2px; right: 2px; bottom: 2px;
+          transform-origin: left center;
+          transform: perspective(700px) rotateY(${doorOpen ? '-72deg' : '0deg'});
+          transition: transform 1.3s cubic-bezier(0.4,0,0.2,1);
+          background: linear-gradient(145deg, #1c2338 0%, #141928 60%, #1c2338 100%);
+          box-shadow: inset -5px 0 14px rgba(0,0,0,0.6), inset 4px 0 8px rgba(201,168,76,0.04);
+          z-index: 1;
+        }
+        .sl-door-p1, .sl-door-p2 {
           position: absolute;
           left: 14px; right: 14px;
-          border: 1px solid rgba(201,168,76,0.25);
+          border: 1px solid rgba(201,168,76,0.22);
           border-radius: 2px;
-          background: rgba(201,168,76,0.03);
+          background: rgba(201,168,76,0.025);
         }
-        .ahq-door-panel-top { top: 14px; height: 62px; }
-        .ahq-door-panel-bottom { top: 90px; height: 100px; }
-
-        /* Door panel inner lines */
-        .ahq-door-panel-top::before, .ahq-door-panel-bottom::before {
-          content: '';
-          position: absolute;
-          inset: 4px;
-          border: 1px solid rgba(201,168,76,0.12);
+        .sl-door-p1 { top: 14px; height: 66px; }
+        .sl-door-p2 { top: 94px; height: 108px; }
+        .sl-door-p1::after, .sl-door-p2::after {
+          content:''; position:absolute; inset:4px;
+          border: 1px solid rgba(201,168,76,0.10);
           border-radius: 1px;
         }
-
-        /* Keyhole */
-        .ahq-keyhole {
+        .sl-keyhole {
           position: absolute;
-          right: 18px;
-          top: 50%;
+          right: 16px; top: 50%;
           transform: translateY(-50%);
-          width: 14px;
-          height: 22px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 2px;
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
         }
-
-        .ahq-keyhole-circle {
-          width: 10px;
-          height: 10px;
+        .sl-kh-circle {
+          width: 11px; height: 11px;
           border-radius: 50%;
-          border: 1.5px solid rgba(201,168,76,0.6);
+          border: 1.5px solid rgba(201,168,76,0.65);
           background: rgba(201,168,76,0.08);
-          box-shadow: 0 0 6px rgba(201,168,76,0.3);
+          box-shadow: 0 0 7px rgba(201,168,76,0.3);
+        }
+        .sl-kh-slot {
+          width: 4px; height: 8px;
+          background: rgba(201,168,76,0.45);
+          border-radius: 0 0 3px 3px;
+          box-shadow: 0 0 5px rgba(201,168,76,0.3);
         }
 
-        .ahq-keyhole-slot {
-          width: 4px;
-          height: 8px;
-          background: rgba(201,168,76,0.4);
-          border-radius: 0 0 2px 2px;
-          box-shadow: 0 0 4px rgba(201,168,76,0.3);
-        }
-
-        /* Light glow visible when door opens */
-        .ahq-door-light {
+        .sl-tagline {
           position: absolute;
-          top: 30px; left: 2px;
-          width: 30px;
-          bottom: 2px;
-          background: linear-gradient(90deg, rgba(201,168,76,0.15), transparent);
-          opacity: ${doorOpen ? 1 : 0};
-          transition: opacity 0.8s ease 0.4s;
-          pointer-events: none;
-        }
-
-        /* Glow behind door */
-        .ahq-door-glow {
-          position: absolute;
-          top: 28px; left: 4px; right: 4px; bottom: 0;
-          background: radial-gradient(ellipse at center, rgba(201,168,76,0.12), transparent 70%);
-          opacity: ${doorOpen ? 1 : 0};
-          transition: opacity 0.8s ease 0.6s;
-          pointer-events: none;
-          z-index: -1;
-        }
-
-        /* Welcome text above door */
-        .ahq-door-label {
-          position: absolute;
-          top: 28px;
-          left: 0; right: 0;
+          bottom: 62px; left: 0; right: 0;
           text-align: center;
-        }
-
-        .ahq-door-label-text {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 11px;
-          letter-spacing: 4px;
-          text-transform: uppercase;
-          color: rgba(201,168,76,0.5);
-        }
-
-        /* Tagline below door */
-        .ahq-door-tagline {
-          position: absolute;
-          bottom: 56px;
-          left: 0; right: 0;
-          text-align: center;
-        }
-
-        .ahq-door-tagline p {
-          font-family: 'Cormorant Garamond', serif;
+          font-family: 'Playfair Display', serif;
           font-size: 12px;
-          color: rgba(255,255,255,0.25);
-          letter-spacing: 2px;
+          letter-spacing: 3px;
           text-transform: uppercase;
-          margin: 0;
+          color: rgba(255,255,255,0.18);
         }
 
-        /* Stars / ambient lights */
-        .ahq-star {
+        /* featured quote */
+        .sl-quote {
           position: absolute;
-          width: 2px;
-          height: 2px;
-          background: rgba(201,168,76,0.4);
-          border-radius: 50%;
+          bottom: 80px; left: 28px; right: 28px;
+          text-align: center;
+          padding-top: 20px;
+        }
+        .sl-quote p {
+          font-family: 'Playfair Display', serif;
+          font-style: italic;
+          font-size: 13.5px;
+          color: rgba(201,168,76,0.35);
+          line-height: 1.7;
+          letter-spacing: 0.3px;
         }
 
-        /* RIGHT — Form panel */
-        .ahq-form-panel {
+        /* ── RIGHT panel — form ── */
+        .sl-right {
           flex: 1;
-          background: linear-gradient(160deg, #0f1523 0%, #0c1018 100%);
-          padding: 52px 48px;
           display: flex;
           flex-direction: column;
           justify-content: center;
+          align-items: center;
+          padding: 40px 24px;
+          background: linear-gradient(160deg, #0f1422 0%, #0a0e1a 100%);
           position: relative;
+          overflow: hidden;
         }
 
-        .ahq-brand {
+        @media (min-width: 900px) {
+          .sl-right { padding: 60px 64px; align-items: flex-start; }
+        }
+
+        /* mobile top bar */
+        .sl-mobile-brand {
           display: flex;
           align-items: center;
           gap: 10px;
-          margin-bottom: 40px;
+          margin-bottom: 36px;
+          align-self: flex-start;
+        }
+        @media (min-width: 900px) {
+          .sl-mobile-brand { display: flex; }
         }
 
-        .ahq-brand-icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 8px;
-          background: linear-gradient(135deg, #c9a84c, #a8883a);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 18px;
-          font-weight: 700;
+        .sl-form-inner {
+          width: 100%;
+          max-width: 400px;
+        }
+
+        .sl-brand-icon {
+          width: 40px; height: 40px;
+          border-radius: 10px;
+          background: linear-gradient(135deg, #c9a84c, #a07830);
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'Playfair Display', serif;
+          font-size: 20px; font-weight: 700;
           color: #07090f;
+          box-shadow: 0 4px 16px rgba(201,168,76,0.3);
+          flex-shrink: 0;
         }
-
-        .ahq-brand-name {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 18px;
-          font-weight: 600;
-          color: rgba(255,255,255,0.85);
-          letter-spacing: 0.5px;
+        .sl-brand-text {
+          font-family: 'Playfair Display', serif;
+          font-size: 18px; font-weight: 600;
+          color: rgba(255,255,255,0.88);
+          letter-spacing: 0.3px;
         }
+        .sl-brand-text span { color: #c9a84c; }
 
-        .ahq-brand-name span {
-          color: #c9a84c;
-        }
-
-        .ahq-heading {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 38px;
-          font-weight: 600;
-          color: #fff;
-          line-height: 1.15;
-          margin: 0 0 8px;
-          letter-spacing: -0.5px;
-        }
-
-        .ahq-subheading {
-          font-size: 14px;
-          color: rgba(255,255,255,0.38);
-          margin: 0 0 36px;
-          line-height: 1.6;
-          font-weight: 300;
-        }
-
-        .ahq-field {
-          margin-bottom: 20px;
-        }
-
-        .ahq-label {
-          display: block;
+        /* badge */
+        .sl-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(201,168,76,0.08);
+          border: 1px solid rgba(201,168,76,0.2);
+          border-radius: 100px;
+          padding: 5px 14px;
           font-size: 11px;
           letter-spacing: 2px;
           text-transform: uppercase;
           color: rgba(201,168,76,0.7);
-          margin-bottom: 8px;
-          font-weight: 500;
+          margin-bottom: 20px;
         }
-
-        .ahq-input {
-          width: 100%;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 8px;
-          padding: 13px 16px;
-          font-size: 15px;
-          color: rgba(255,255,255,0.85);
-          font-family: 'DM Sans', sans-serif;
-          outline: none;
-          transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-          box-sizing: border-box;
+        .sl-badge-dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: #c9a84c;
+          animation: sl-pulse 2s ease-in-out infinite;
         }
+        @keyframes sl-pulse { 0%,100%{opacity:0.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
 
-        .ahq-input::placeholder {
-          color: rgba(255,255,255,0.18);
+        .sl-heading {
+          font-family: 'Playfair Display', serif;
+          font-size: clamp(32px, 5vw, 46px);
+          font-weight: 600;
+          color: #fff;
+          line-height: 1.12;
+          margin-bottom: 10px;
+          letter-spacing: -0.5px;
         }
-
-        .ahq-input:focus {
-          border-color: rgba(201,168,76,0.45);
-          background: rgba(201,168,76,0.04);
-          box-shadow: 0 0 0 3px rgba(201,168,76,0.08);
+        .sl-heading em {
+          font-style: italic;
+          background: linear-gradient(90deg, #c9a84c, #e8c96a, #c9a84c);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: sl-shimmer 4s linear infinite;
         }
+        @keyframes sl-shimmer { to { background-position: 200% center; } }
 
-        .ahq-btn {
-          width: 100%;
-          padding: 15px 24px;
-          background: linear-gradient(135deg, #c9a84c 0%, #a8883a 100%);
-          border: none;
-          border-radius: 8px;
-          color: #07090f;
-          font-family: 'DM Sans', sans-serif;
+        .sl-sub {
           font-size: 14px;
+          color: rgba(255,255,255,0.35);
+          line-height: 1.65;
+          margin-bottom: 36px;
+          font-weight: 300;
+        }
+
+        /* form fields */
+        .sl-field { margin-bottom: 18px; }
+
+        .sl-label {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+          font-size: 11px;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: rgba(201,168,76,0.65);
           font-weight: 500;
+        }
+
+        .sl-input-wrap {
+          position: relative;
+        }
+        .sl-input {
+          width: 100%;
+          background: rgba(255,255,255,0.035);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          padding: 14px 44px 14px 16px;
+          font-size: 15px;
+          color: rgba(255,255,255,0.88);
+          font-family: 'Outfit', sans-serif;
+          outline: none;
+          transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+        }
+        .sl-input::placeholder { color: rgba(255,255,255,0.18); }
+        .sl-input:focus {
+          border-color: rgba(201,168,76,0.5);
+          background: rgba(201,168,76,0.04);
+          box-shadow: 0 0 0 3px rgba(201,168,76,0.08), 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .sl-input-icon {
+          position: absolute;
+          right: 14px; top: 50%;
+          transform: translateY(-50%);
+          color: rgba(255,255,255,0.2);
+          pointer-events: none;
+          display: flex;
+          transition: color 0.2s;
+        }
+        .sl-input:focus ~ .sl-input-icon { color: rgba(201,168,76,0.5); }
+
+        .sl-toggle-pass {
+          position: absolute;
+          right: 14px; top: 50%;
+          transform: translateY(-50%);
+          background: none; border: none;
+          color: rgba(255,255,255,0.25);
+          cursor: pointer;
+          padding: 2px;
+          display: flex;
+          transition: color 0.2s;
+        }
+        .sl-toggle-pass:hover { color: rgba(201,168,76,0.6); }
+
+        /* submit */
+        .sl-submit {
+          width: 100%;
+          margin-top: 8px;
+          padding: 15px 24px;
+          background: linear-gradient(135deg, #c9a84c 0%, #a87830 100%);
+          border: none;
+          border-radius: 10px;
+          color: #07090f;
+          font-family: 'Outfit', sans-serif;
+          font-size: 14px;
+          font-weight: 600;
           letter-spacing: 1.5px;
           text-transform: uppercase;
           cursor: pointer;
-          transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-          margin-top: 8px;
+          transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
           position: relative;
           overflow: hidden;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
         }
-
-        .ahq-btn::before {
+        .sl-submit::after {
           content: '';
           position: absolute;
           inset: 0;
-          background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+          background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent);
           opacity: 0;
           transition: opacity 0.2s;
         }
-
-        .ahq-btn:hover::before { opacity: 1; }
-
-        .ahq-btn:hover {
-          box-shadow: 0 8px 32px rgba(201,168,76,0.35);
-          transform: translateY(-1px);
+        .sl-submit:hover::after { opacity: 1; }
+        .sl-submit:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 30px rgba(201,168,76,0.38), 0 2px 8px rgba(0,0,0,0.4);
         }
+        .sl-submit:active { transform: scale(0.99); }
+        .sl-submit:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
 
-        .ahq-btn:active { transform: scale(0.99); }
-
-        .ahq-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
+        /* divider */
+        .sl-divider {
+          display: flex; align-items: center; gap: 12px;
+          margin: 28px 0 18px;
         }
+        .sl-divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.06); }
+        .sl-divider-text { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,0.18); }
 
-        /* Door icon on button */
-        .ahq-btn-icon {
-          width: 16px;
-          height: 16px;
-          flex-shrink: 0;
+        /* access roles */
+        .sl-roles { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sl-role {
+          font-size: 11px;
+          color: rgba(255,255,255,0.28);
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 100px;
+          padding: 5px 13px;
+          letter-spacing: 0.3px;
+          transition: border-color 0.2s, color 0.2s;
+          cursor: default;
         }
+        .sl-role:hover { border-color: rgba(201,168,76,0.28); color: rgba(201,168,76,0.55); }
 
-        .ahq-divider {
+        /* footer */
+        .sl-footer {
+          margin-top: 36px;
+          font-size: 11px;
+          color: rgba(255,255,255,0.13);
           display: flex;
           align-items: center;
           gap: 12px;
-          margin: 28px 0 20px;
-        }
-
-        .ahq-divider-line {
-          flex: 1;
-          height: 1px;
-          background: rgba(255,255,255,0.07);
-        }
-
-        .ahq-divider-text {
-          font-size: 11px;
-          color: rgba(255,255,255,0.2);
-          letter-spacing: 1px;
-          text-transform: uppercase;
-        }
-
-        .ahq-roles {
-          display: flex;
-          gap: 8px;
           flex-wrap: wrap;
         }
+        .sl-footer-dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink: 0; }
 
-        .ahq-role-badge {
-          font-size: 11px;
-          color: rgba(255,255,255,0.3);
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.07);
-          border-radius: 100px;
-          padding: 4px 12px;
-          letter-spacing: 0.5px;
-          cursor: default;
-          transition: border-color 0.2s, color 0.2s;
-        }
-
-        .ahq-role-badge:hover {
-          border-color: rgba(201,168,76,0.3);
-          color: rgba(201,168,76,0.6);
-        }
-
-        .ahq-footer {
-          margin-top: 32px;
-          font-size: 11px;
-          color: rgba(255,255,255,0.15);
-          letter-spacing: 0.5px;
-        }
-
-        /* Spinner for loading */
-        @keyframes ahq-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .ahq-spinner {
-          width: 16px;
-          height: 16px;
-          border: 2px solid rgba(7,9,15,0.3);
+        /* spinner */
+        @keyframes sl-spin { to { transform: rotate(360deg); } }
+        .sl-spinner {
+          width: 17px; height: 17px;
+          border: 2.5px solid rgba(7,9,15,0.3);
           border-top-color: #07090f;
           border-radius: 50%;
-          animation: ahq-spin 0.7s linear infinite;
+          animation: sl-spin 0.7s linear infinite;
+          flex-shrink: 0;
         }
       `}</style>
 
-      <div className="ahq-root">
-        <div className="ahq-layout">
+      <div className="sl-root">
+        <div className="sl-bg">
+          <div className="sl-bg-orb1" />
+          <div className="sl-bg-orb2" />
+          <div className="sl-bg-grid" />
+        </div>
 
-          {/* LEFT — DOOR SCENE */}
-          <div className="ahq-door-panel">
-            <div className="ahq-column-left" />
-            <div className="ahq-column-right" />
+        <div className="sl-wrap">
 
-            {/* Ambient stars */}
+          {/* ── LEFT — Door panel ── */}
+          <div className="sl-left">
+            <div className="sl-col sl-col-l" />
+            <div className="sl-col sl-col-r" />
+
+            {/* stars */}
             {[
-              { top: '12%', left: '18%' }, { top: '22%', left: '72%' },
-              { top: '38%', left: '88%' }, { top: '65%', left: '15%' },
-              { top: '78%', left: '80%' }, { top: '88%', left: '40%' },
-              { top: '8%', left: '55%' }, { top: '50%', left: '30%' },
-            ].map((pos, i) => (
-              <div key={i} className="ahq-star" style={{ top: pos.top, left: pos.left, opacity: 0.4 + (i % 3) * 0.2 }} />
+              {t:"10%",l:"22%",s:2,d:0},{t:"25%",l:"70%",s:1.5,d:1},
+              {t:"40%",l:"85%",s:2,d:2},{t:"60%",l:"18%",s:1.5,d:0.5},
+              {t:"75%",l:"78%",s:2,d:1.5},{t:"85%",l:"42%",s:1.5,d:2.5},
+              {t:"18%",l:"50%",s:1,d:1},{t:"55%",l:"60%",s:1.5,d:0.3},
+            ].map((s,i) => (
+              <div key={i} className="sl-star" style={{
+                top:s.t, left:s.l,
+                width:s.s+"px", height:s.s+"px",
+                animationDelay:s.d+"s",
+                animationDuration:(3+i%2)+"s"
+              }} />
             ))}
 
-            <div className="ahq-door-label">
-              <span className="ahq-door-label-text">Academia HQ</span>
-            </div>
+            <div className="sl-door-label">Academia HQ</div>
 
-            <div className="ahq-door-frame">
-              <div className="ahq-door-arch" />
-              <div className="ahq-door-arch-inner" />
-              <div className="ahq-door-surround">
-                <div className="ahq-door-surround-inner" />
+            <div className="sl-scene">
+              <div className="sl-arch" />
+              <div className="sl-arch-inner" />
+              <div className="sl-surround">
+                <div className="sl-surround-inner" />
               </div>
-
-              {/* Light glow behind door */}
-              <div className="ahq-door-glow" />
-              <div className="ahq-door-light" />
-
-              {/* The door itself */}
-              <div className="ahq-door">
-                <div className="ahq-door-panel-top" />
-                <div className="ahq-door-panel-bottom" />
-                <div className="ahq-keyhole">
-                  <div className="ahq-keyhole-circle" />
-                  <div className="ahq-keyhole-slot" />
+              <div className="sl-door-glow" />
+              <div className="sl-door-light" />
+              <div className="sl-door">
+                <div className="sl-door-p1" />
+                <div className="sl-door-p2" />
+                <div className="sl-keyhole">
+                  <div className="sl-kh-circle" />
+                  <div className="sl-kh-slot" />
                 </div>
               </div>
             </div>
 
-            <div className="ahq-floor" />
+            <div className="sl-floor" />
+            <div className="sl-tagline">Your platform awaits</div>
 
-            <div className="ahq-door-tagline">
-              <p>Your platform awaits</p>
+            <div className="sl-quote">
+              <p>"Empowering schools with intelligence, one login at a time."</p>
             </div>
           </div>
 
-          {/* RIGHT — FORM */}
-          <div className="ahq-form-panel">
-            <div className="ahq-brand">
-              <div className="ahq-brand-icon">A</div>
-              <span className="ahq-brand-name">Academia <span>HQ</span></span>
-            </div>
+          {/* ── RIGHT — Form ── */}
+          <div className="sl-right">
+            <div className="sl-form-inner">
 
-            <h1 className="ahq-heading">
-              Welcome<br />back.
-            </h1>
-            <p className="ahq-subheading">
-              Sign in to access your workspace — admin panel, school management, and more.
-            </p>
-
-            <form onSubmit={handleSubmit}>
-              <div className="ahq-field">
-                <label className="ahq-label">Email address</label>
-                <input
-                  type="email"
-                  className="ahq-input"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@academia.com"
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div className="ahq-field">
-                <label className="ahq-label">Password</label>
-                <input
-                  type="password"
-                  className="ahq-input"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••"
-                  required
-                  minLength={6}
-                  autoComplete="current-password"
-                />
+              {/* Brand */}
+              <div className="sl-mobile-brand">
+                <div className="sl-brand-icon">A</div>
+                <span className="sl-brand-text">Academia <span>HQ</span></span>
               </div>
 
-              <button type="submit" className="ahq-btn" disabled={submitting}>
-                {submitting ? (
-                  <div className="ahq-spinner" />
-                ) : (
-                  <>
-                    <svg className="ahq-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                      <polyline points="10 17 15 12 10 7"/>
-                      <line x1="15" y1="12" x2="3" y2="12"/>
-                    </svg>
-                    Open the door
-                  </>
-                )}
-              </button>
-            </form>
+              {/* Badge */}
+              <div className="sl-badge">
+                <div className="sl-badge-dot" />
+                Platform Access
+              </div>
 
-            <div className="ahq-divider">
-              <div className="ahq-divider-line" />
-              <span className="ahq-divider-text">Access levels</span>
-              <div className="ahq-divider-line" />
-            </div>
+              {/* Heading */}
+              <h1 className="sl-heading">
+                Welcome<br /><em>back.</em>
+              </h1>
+              <p className="sl-sub">
+                Sign in to your workspace — manage schools, officers, exams and more from one powerful dashboard.
+              </p>
 
-            <div className="ahq-roles">
-              {['Super Admin', 'School Admin', 'Teacher', 'Student', 'Parent'].map(r => (
-                <span key={r} className="ahq-role-badge">{r}</span>
-              ))}
-            </div>
+              <form onSubmit={handleSubmit}>
+                {/* Email */}
+                <div className="sl-field">
+                  <label className="sl-label">Email address</label>
+                  <div className="sl-input-wrap">
+                    <input
+                      type="email"
+                      className="sl-input"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      onFocus={() => setFocused("email")}
+                      onBlur={() => setFocused(null)}
+                      placeholder="you@academia.com"
+                      required
+                      autoComplete="email"
+                    />
+                    <span className="sl-input-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
 
-            <div className="ahq-footer">
-              © {new Date().getFullYear()} Academia HQ · CBT & School Management Platform
+                {/* Password */}
+                <div className="sl-field">
+                  <label className="sl-label">Password</label>
+                  <div className="sl-input-wrap">
+                    <input
+                      type={showPass ? "text" : "password"}
+                      className="sl-input"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      onFocus={() => setFocused("pass")}
+                      onBlur={() => setFocused(null)}
+                      placeholder="••••••••••"
+                      required
+                      minLength={6}
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      className="sl-toggle-pass"
+                      onClick={() => setShowPass(p => !p)}
+                      tabIndex={-1}
+                      aria-label={showPass ? "Hide password" : "Show password"}
+                    >
+                      {showPass ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit */}
+                <button type="submit" className="sl-submit" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <div className="sl-spinner" />
+                      Signing in…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                        <polyline points="10 17 15 12 10 7"/>
+                        <line x1="15" y1="12" x2="3" y2="12"/>
+                      </svg>
+                      Open the door
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="sl-divider">
+                <div className="sl-divider-line" />
+                <span className="sl-divider-text">Access levels</span>
+                <div className="sl-divider-line" />
+              </div>
+
+              {/* Role badges */}
+              <div className="sl-roles">
+                {["Super Admin","School Admin","Outreach Officer","Instructor","Student","Parent"].map(r => (
+                  <span key={r} className="sl-role">{r}</span>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="sl-footer">
+                <span>© {new Date().getFullYear()} Academia HQ</span>
+                <div className="sl-footer-dot" />
+                <span>CBT & School Management</span>
+                <div className="sl-footer-dot" />
+                <span>All rights reserved</span>
+              </div>
             </div>
           </div>
         </div>
