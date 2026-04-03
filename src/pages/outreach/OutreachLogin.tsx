@@ -15,7 +15,8 @@ export default function OutreachLogin() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (loading || (user && !role)) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (user && !role) return <Navigate to="/" replace />;
   if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
   if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
   if (user && role === "admin") return <Navigate to="/admin" replace />;
