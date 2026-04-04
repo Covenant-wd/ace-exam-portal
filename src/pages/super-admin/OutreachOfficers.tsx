@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Plus, Briefcase, Trash2, Link2 } from "lucide-react";
+import { sendOutreachOfficerWelcomeEmail } from "@/lib/email";
 
 interface Officer {
   user_id: string;
