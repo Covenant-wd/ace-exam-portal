@@ -187,8 +187,19 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
 
+        // Send welcome email
+        try {
+          await sendStudentWelcomeEmail({
+            to: form.email.trim(),
+            studentName: fullName,
+            schoolName: schoolName || "School",
+            loginUrl: `${window.location.origin}/student/login`,
+            password: form.password,
+            username: form.username || undefined,
+          });
+        } catch (e) { console.error("Student welcome email failed:", e); }
+
         toast.success("Student created");
-      }
       setDialogOpen(false);
       fetchStudents();
     } catch (err: any) {
