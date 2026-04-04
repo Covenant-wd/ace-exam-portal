@@ -1,8 +1,5 @@
-// Academia HQ Email Utility — powered by Resend
-// Sender: onboarding@resend.dev (Resend test sender)
-
-const RESEND_API_KEY = "re_J6HRzeeH_DWiTLFQscLNA4JwXZkYTW3pk";
-const FROM = "Academia HQ <onboarding@resend.dev>";
+// Academia HQ Email Utility — sends via secure edge function
+import { supabase } from "@/integrations/supabase/client";
 
 interface SendEmailParams {
   to: string | string[];
@@ -12,22 +9,34 @@ interface SendEmailParams {
 
 export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<boolean> {
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-      }),
+    const { data, error } = await supabase.functions.invoke("send-email", {
+      body: { to, subject, html },
     });
-    return res.ok;
-  } catch {
+    if (error) {
+      console.error("Email send error:", error);
+      return false;
+    }
+    return data?.success === true;
+  } catch (err) {
+    console.error("Email send exception:", err);
     return false;
+  }
+}
+
+// Helper to check if a notification type is enabled for a school
+export async function isNotificationEnabled(schoolId: string, key: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("school_settings")
+      .select("value")
+      .eq("school_id", schoolId)
+      .eq("key", key)
+      .maybeSingle();
+    // Default to true if no setting exists
+    if (!data) return true;
+    return data.value === "true";
+  } catch {
+    return true; // Default to enabled
   }
 }
 
