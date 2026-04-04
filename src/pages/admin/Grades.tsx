@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { sendGradesPublishedEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,6 +24,7 @@ interface StudentProfile { user_id: string; full_name: string; class_id: string 
 
 export default function Grades() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [classes, setClasses]     = useState<ClassItem[]>([]);
   const [subjects, setSubjects]   = useState<Subject[]>([]);
   const [terms, setTerms]         = useState<Term[]>([]);
@@ -144,6 +147,27 @@ export default function Grades() {
       );
       if (error) throw error;
       toast.success("Grades saved successfully");
+      // Send email notification
+      try {
+        const enabled = await isNotificationEnabled(schoolId, "notify_grades_published");
+        if (enabled) {
+          const userIds = students.map(s => s.user_id);
+          if (userIds.length > 0) {
+            const { data: emails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const emailList = (emails || []).map((e: any) => e.email).filter(Boolean);
+            const subjectName = subjects.find(s => s.id === selectedSubject)?.name || "—";
+            const categoryName = categories.find(c => c.id === selectedCategory)?.name || "—";
+            const className = classes.find(c => c.id === selectedClass)?.name || "—";
+            if (emailList.length > 0) {
+              await sendGradesPublishedEmail({
+                to: emailList, recipientName: "Student",
+                schoolName: schoolName || "School", subjectName, categoryName, className,
+                loginUrl: `${window.location.origin}/student/results`,
+              });
+            }
+          }
+        }
+      } catch (e) { console.error("Grades email failed:", e); }
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };

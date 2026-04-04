@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-
+import { sendStudentWelcomeEmail } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 interface Student {
   user_id: string;
@@ -42,6 +43,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -184,6 +186,18 @@ export default function Students() {
           gender:           form.gender || "",
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
+
+        // Send welcome email
+        try {
+          await sendStudentWelcomeEmail({
+            to: form.email.trim(),
+            studentName: fullName,
+            schoolName: schoolName || "School",
+            loginUrl: `${window.location.origin}/student/login`,
+            password: form.password,
+            username: form.username || undefined,
+          });
+        } catch (e) { console.error("Student welcome email failed:", e); }
 
         toast.success("Student created");
       }
