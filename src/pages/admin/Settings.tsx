@@ -28,7 +28,7 @@ export default function Settings() {
       const { data } = await supabase.from("school_settings")
         .select("key, value")
         .eq("school_id", schoolId)
-        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent"]);
+        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent", "notify_exam_published", "notify_grades_published"]);
       (data || []).forEach((s: any) => {
         const val = s.value === "true";
         if (s.key === "notify_announcement") setNotifyAnnouncement(val);
