@@ -18,6 +18,8 @@ export default function Settings() {
   const [notifyExamResult, setNotifyExamResult] = useState(true);
   const [notifyFeePayment, setNotifyFeePayment] = useState(true);
   const [notifyAttendanceAbsent, setNotifyAttendanceAbsent] = useState(true);
+  const [notifyExamPublished, setNotifyExamPublished] = useState(true);
+  const [notifyGradesPublished, setNotifyGradesPublished] = useState(true);
   const [notifySaving, setNotifySaving] = useState(false);
 
   useEffect(() => {
