@@ -213,6 +213,8 @@ export default function Settings() {
             { label: "Exam Result Available", desc: "Notify students and parents when exam results are published", value: notifyExamResult, key: "notify_exam_result", set: setNotifyExamResult },
             { label: "Fee Payment Recorded", desc: "Notify students and parents when a fee payment is recorded", value: notifyFeePayment, key: "notify_fee_payment", set: setNotifyFeePayment },
             { label: "Attendance Absent", desc: "Notify parents when their child is marked absent", value: notifyAttendanceAbsent, key: "notify_attendance_absent", set: setNotifyAttendanceAbsent },
+            { label: "Exam Published", desc: "Notify students when a new exam is published", value: notifyExamPublished, key: "notify_exam_published", set: setNotifyExamPublished },
+            { label: "Grades Published", desc: "Notify students when grades are entered", value: notifyGradesPublished, key: "notify_grades_published", set: setNotifyGradesPublished },
           ].map(item => (
             <div key={item.key} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
               <div>
