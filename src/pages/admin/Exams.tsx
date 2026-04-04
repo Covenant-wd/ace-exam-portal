@@ -39,6 +39,7 @@ interface ClassItem { id: string; name: string; }
 
 export default function Exams() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
