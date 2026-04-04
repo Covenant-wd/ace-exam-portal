@@ -147,7 +147,27 @@ export default function Grades() {
       );
       if (error) throw error;
       toast.success("Grades saved successfully");
-    } catch (err: any) { toast.error(err.message); }
+      // Send email notification
+      try {
+        const enabled = await isNotificationEnabled(schoolId, "notify_grades_published");
+        if (enabled) {
+          const userIds = students.map(s => s.user_id);
+          if (userIds.length > 0) {
+            const { data: emails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const emailList = (emails || []).map((e: any) => e.email).filter(Boolean);
+            const subjectName = subjects.find(s => s.id === selectedSubject)?.name || "—";
+            const categoryName = categories.find(c => c.id === selectedCategory)?.name || "—";
+            const className = classes.find(c => c.id === selectedClass)?.name || "—";
+            if (emailList.length > 0) {
+              await sendGradesPublishedEmail({
+                to: emailList, recipientName: "Student",
+                schoolName: schoolName || "School", subjectName, categoryName, className,
+                loginUrl: `${window.location.origin}/student/results`,
+              });
+            }
+          }
+        }
+      } catch (e) { console.error("Grades email failed:", e); }
     setSaving(false);
   };
 
