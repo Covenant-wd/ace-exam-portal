@@ -155,9 +155,11 @@ export default function TakeExam() {
     }).eq("id", attemptId);
 
     toast.success(isTimeout ? "Time\'s up! Exam auto-submitted." : "Exam submitted successfully!");
-    // Send result email to student and parents
+    // Send result email to student and parents (if enabled)
     try {
       const { data: examData } = await supabase.from("exams").select("title, school_id").eq("id", examId!).single();
+      const notifEnabled = examData?.school_id ? await isNotificationEnabled(examData.school_id, "notify_exam_result") : true;
+      if (!notifEnabled) throw new Error("skip");
       const { data: profile } = await supabase.from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
       const { data: userAuth } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
       const emails: string[] = [];
