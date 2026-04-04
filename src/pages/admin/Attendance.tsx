@@ -125,6 +125,7 @@ export default function Attendance() {
         const notifEnabled = await isNotificationEnabled(schoolId!, "notify_attendance_absent");
         if (!notifEnabled) throw new Error("skip");
         const absentStudents = Array.from(records.values()).filter(r => r.status === "absent");
+        for (const absent of absentStudents) {
           const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", absent.student_id);
           if (!parentLinks || parentLinks.length === 0) continue;
           const parentIds = parentLinks.map((p: any) => p.parent_id);
