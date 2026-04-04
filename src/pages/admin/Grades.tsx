@@ -24,6 +24,7 @@ interface StudentProfile { user_id: string; full_name: string; class_id: string 
 
 export default function Grades() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [classes, setClasses]     = useState<ClassItem[]>([]);
   const [subjects, setSubjects]   = useState<Subject[]>([]);
   const [terms, setTerms]         = useState<Term[]>([]);
