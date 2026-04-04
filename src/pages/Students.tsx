@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-
+import { sendStudentWelcomeEmail } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 interface Student {
   user_id: string;

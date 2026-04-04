@@ -91,6 +91,14 @@ export default function OutreachOfficers() {
         _school_id: null,
       } as any);
       if (error) throw error;
+      // Send welcome email
+      try {
+        await sendOutreachOfficerWelcomeEmail({
+          to: email, officerName: fullName,
+          loginUrl: `${window.location.origin}/outreach/login`,
+          password,
+        });
+      } catch (e) { console.error("Welcome email failed:", e); }
       toast.success("Outreach officer created");
       setCreateDialog(false);
       setFullName(""); setEmail(""); setPassword("");
