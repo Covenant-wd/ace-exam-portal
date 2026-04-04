@@ -107,7 +107,35 @@ export default function Exams() {
   };
 
   const togglePublish = async (exam: Exam) => {
-    await supabase.from("exams").update({ is_published: !exam.is_published }).eq("id", exam.id);
+    const newPublished = !exam.is_published;
+    await supabase.from("exams").update({ is_published: newPublished }).eq("id", exam.id);
+    // Send email notification when publishing
+    if (newPublished && schoolId) {
+      try {
+        const enabled = await isNotificationEnabled(schoolId, "notify_exam_published");
+        if (enabled) {
+          // Get students in the exam's class (or all students if no class)
+          const query = exam.class_id
+            ? supabase.rpc("get_school_students_only", { _school_id: schoolId }).then(r => (r.data || []).filter((s: any) => s.class_id === exam.class_id))
+            : supabase.rpc("get_school_students_only", { _school_id: schoolId }).then(r => r.data || []);
+          const students = await query;
+          const userIds = (students as any[]).map((s: any) => s.user_id);
+          if (userIds.length > 0) {
+            const { data: emails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const emailList = (emails || []).map((e: any) => e.email).filter(Boolean);
+            const subjectName = subjects.find(s => s.id === exam.subject_id)?.name || "—";
+            if (emailList.length > 0) {
+              await sendExamPublishedEmail({
+                to: emailList, schoolName: schoolName || "School",
+                examTitle: exam.title, subjectName,
+                durationMinutes: exam.duration_minutes,
+                loginUrl: `${window.location.origin}/student/exams`,
+              });
+            }
+          }
+        }
+      } catch (e) { console.error("Exam published email failed:", e); }
+    }
     fetchData();
   };
 
