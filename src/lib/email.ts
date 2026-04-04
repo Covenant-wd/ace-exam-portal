@@ -269,3 +269,93 @@ export async function sendAbsentNotificationEmail({
 
   return sendEmail({ to, subject: `${schoolName} — Absence Alert: ${studentName}`, html });
 }
+
+// ─────────────────────────────────────────────
+// 8. Welcome — New Student
+// ─────────────────────────────────────────────
+export async function sendStudentWelcomeEmail({
+  to, studentName, schoolName, loginUrl, password, username,
+}: { to: string; studentName: string; schoolName: string; loginUrl: string; password: string; username?: string }) {
+  const html = baseTemplate(`
+    ${heading(`Welcome to ${schoolName}! 🎓`)}
+    ${para(`Hi ${studentName}, your student account has been created on <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Role", value: "Student" },
+      { label: "Email", value: to },
+      ...(username ? [{ label: "Username", value: username }] : []),
+      { label: "Password", value: password },
+      { label: "School", value: schoolName },
+    ])}
+    ${para("Use the button below to log in and access your exams, grades, and timetable.")}
+    ${btn("Log In to Student Portal", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">Please change your password after your first login.</span>`)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `Welcome to ${schoolName} — Student Account Created`, html });
+}
+
+// ─────────────────────────────────────────────
+// 9. Exam Published — Notify Students
+// ─────────────────────────────────────────────
+export async function sendExamPublishedEmail({
+  to, schoolName, examTitle, subjectName, durationMinutes, loginUrl,
+}: { to: string[]; schoolName: string; examTitle: string; subjectName: string; durationMinutes: number; loginUrl: string }) {
+  if (to.length === 0) return true;
+  const html = baseTemplate(`
+    ${heading(`New Exam Available 📝`)}
+    ${para(`A new exam has been published on <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Exam", value: examTitle },
+      { label: "Subject", value: subjectName },
+      { label: "Duration", value: `${durationMinutes} minutes` },
+    ])}
+    ${para("Log in to your student portal to view and take the exam.")}
+    ${btn("View Exams", loginUrl)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `${schoolName} — New Exam: ${examTitle}`, html });
+}
+
+// ─────────────────────────────────────────────
+// 10. Grades Published — Notify Students/Parents
+// ─────────────────────────────────────────────
+export async function sendGradesPublishedEmail({
+  to, recipientName, schoolName, subjectName, categoryName, className, loginUrl,
+}: { to: string[]; recipientName: string; schoolName: string; subjectName: string; categoryName: string; className: string; loginUrl: string }) {
+  if (to.length === 0) return true;
+  const html = baseTemplate(`
+    ${heading(`Grades Updated 📊`)}
+    ${para(`Hi ${recipientName}, grades have been published for <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Subject", value: subjectName },
+      { label: "Category", value: categoryName },
+      { label: "Class", value: className },
+    ])}
+    ${para("Log in to view the detailed scores and report card.")}
+    ${btn("View Grades", loginUrl)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `${schoolName} — Grades Published: ${subjectName}`, html });
+}
+
+// ─────────────────────────────────────────────
+// 11. Welcome — New Outreach Officer
+// ─────────────────────────────────────────────
+export async function sendOutreachOfficerWelcomeEmail({
+  to, officerName, loginUrl, password,
+}: { to: string; officerName: string; loginUrl: string; password: string }) {
+  const html = baseTemplate(`
+    ${heading(`Welcome to Academia HQ! 🤝`)}
+    ${para(`Hi ${officerName}, you've been added as an <strong>Outreach Officer</strong> on Academia HQ.`)}
+    ${infoBox([
+      { label: "Role", value: "Outreach Officer" },
+      { label: "Email", value: to },
+      { label: "Password", value: password },
+    ])}
+    ${para("You can now manage school referrals, track your earnings, and communicate with schools.")}
+    ${btn("Log In to Outreach Portal", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">Please change your password after your first login.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({ to, subject: `Welcome to Academia HQ — Outreach Officer Account Created`, html });
+}
