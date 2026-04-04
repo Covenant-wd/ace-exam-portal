@@ -35,6 +35,8 @@ export default function Settings() {
         if (s.key === "notify_exam_result") setNotifyExamResult(val);
         if (s.key === "notify_fee_payment") setNotifyFeePayment(val);
         if (s.key === "notify_attendance_absent") setNotifyAttendanceAbsent(val);
+        if (s.key === "notify_exam_published") setNotifyExamPublished(val);
+        if (s.key === "notify_grades_published") setNotifyGradesPublished(val);
       });
     };
     loadNotifSettings();
