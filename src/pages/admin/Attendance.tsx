@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { sendAbsentNotificationEmail } from "@/lib/email";
+import { sendAbsentNotificationEmail, isNotificationEnabled } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -120,8 +120,10 @@ export default function Attendance() {
       if (error) throw error;
       toast.success("Attendance saved successfully");
       setExistingRecords(true);
-      // Send absent notifications to parents
+      // Send absent notifications to parents (if enabled)
       try {
+        const notifEnabled = await isNotificationEnabled(schoolId!, "notify_attendance_absent");
+        if (!notifEnabled) throw new Error("skip");
         const absentStudents = Array.from(records.values()).filter(r => r.status === "absent");
         for (const absent of absentStudents) {
           const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", absent.student_id);

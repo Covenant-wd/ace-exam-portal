@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { sendAnnouncementEmail } from "@/lib/email";
-import { supabase as sb } from "@/integrations/supabase/client";
+import { sendAnnouncementEmail, isNotificationEnabled } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,8 +60,10 @@ export default function Announcements() {
       } else {
         const { error } = await supabase.from("announcements").insert(payload);
         if (error) throw error;
-        // Send email notification to relevant users
+        // Send email notification to relevant users (if enabled)
         try {
+          const notifEnabled = await isNotificationEnabled(schoolId!, "notify_announcement");
+          if (!notifEnabled) throw new Error("skip");
           const targetRoles = targetRole === "all" ? ["student", "instructor", "parent"] : [targetRole];
           const { data: roleRows } = await supabase.from("user_roles").select("user_id").in("role", targetRoles as any).eq("school_id", schoolId!);
           const userIds = (roleRows || []).map((r: any) => r.user_id);

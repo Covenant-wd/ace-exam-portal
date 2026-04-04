@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { sendFeePaymentEmail } from "@/lib/email";
+import { sendFeePaymentEmail, isNotificationEnabled } from "@/lib/email";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -118,8 +118,10 @@ export default function Fees() {
       } as any);
       if (error) throw error;
       toast.success("Payment recorded");
-      // Send fee payment email to student and parents
+      // Send fee payment email (if enabled)
       try {
+        const notifEnabled = await isNotificationEnabled(schoolId!, "notify_fee_payment");
+        if (!notifEnabled) throw new Error("skip");
         const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", payStudent).single();
         const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: payStudent });
         const emails: string[] = [];
