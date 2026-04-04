@@ -168,6 +168,7 @@ export default function Grades() {
           }
         }
       } catch (e) { console.error("Grades email failed:", e); }
+    } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };
 
