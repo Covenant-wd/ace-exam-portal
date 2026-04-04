@@ -200,6 +200,7 @@ export default function Students() {
         } catch (e) { console.error("Student welcome email failed:", e); }
 
         toast.success("Student created");
+      }
       setDialogOpen(false);
       fetchStudents();
     } catch (err: any) {
