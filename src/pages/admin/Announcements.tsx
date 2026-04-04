@@ -60,8 +60,10 @@ export default function Announcements() {
       } else {
         const { error } = await supabase.from("announcements").insert(payload);
         if (error) throw error;
-        // Send email notification to relevant users
+        // Send email notification to relevant users (if enabled)
         try {
+          const notifEnabled = await isNotificationEnabled(schoolId!, "notify_announcement");
+          if (!notifEnabled) throw new Error("skip");
           const targetRoles = targetRole === "all" ? ["student", "instructor", "parent"] : [targetRole];
           const { data: roleRows } = await supabase.from("user_roles").select("user_id").in("role", targetRoles as any).eq("school_id", schoolId!);
           const userIds = (roleRows || []).map((r: any) => r.user_id);
