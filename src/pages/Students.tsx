@@ -43,6 +43,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
