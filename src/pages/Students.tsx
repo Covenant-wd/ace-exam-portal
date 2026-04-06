@@ -144,21 +144,27 @@ export default function Students() {
 
     try {
       if (editing) {
-        const { error } = await supabase.from("profiles").update({
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
-          subjects_offered: subjects,
-        }).eq("user_id", editing.user_id);
+        const { data, error } = await supabase.functions.invoke("manage-student", {
+          body: {
+            action: "update",
+            user_id: editing.user_id,
+            email: form.email,
+            password: form.password || undefined,
+            first_name: form.first_name,
+            middle_name: form.middle_name || "",
+            last_name: form.last_name,
+            username: form.username || null,
+            class_id: form.class_id || null,
+            date_of_birth: form.date_of_birth || null,
+            address: form.address || "",
+            parent_name: form.parent_name || "",
+            nationality: form.nationality || "",
+            gender: form.gender || "",
+            subjects_offered: subjects,
+          },
+        });
         if (error) throw error;
+        if (data?.error) throw new Error(data.error);
         toast.success("Student updated");
       } else {
         // Create user via SQL function — no edge function, no email confirmation issues
