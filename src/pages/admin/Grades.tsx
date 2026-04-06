@@ -147,23 +147,45 @@ export default function Grades() {
       );
       if (error) throw error;
       toast.success("Grades saved successfully");
-      // Send email notification
+      // Send email notification to students and parents
       try {
         const enabled = await isNotificationEnabled(schoolId, "notify_grades_published");
         if (enabled) {
           const userIds = students.map(s => s.user_id);
+          const subjectName = subjects.find(s => s.id === selectedSubject)?.name || "—";
+          const categoryName = categories.find(c => c.id === selectedCategory)?.name || "—";
+          const className = classes.find(c => c.id === selectedClass)?.name || "—";
+          const sName = schoolName || "School";
+
           if (userIds.length > 0) {
-            const { data: emails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
-            const emailList = (emails || []).map((e: any) => e.email).filter(Boolean);
-            const subjectName = subjects.find(s => s.id === selectedSubject)?.name || "—";
-            const categoryName = categories.find(c => c.id === selectedCategory)?.name || "—";
-            const className = classes.find(c => c.id === selectedClass)?.name || "—";
-            if (emailList.length > 0) {
+            // Notify students
+            const { data: studentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const studentEmailList = (studentEmails || []).map((e: any) => e.email).filter(Boolean);
+            if (studentEmailList.length > 0) {
               await sendGradesPublishedEmail({
-                to: emailList, recipientName: "Student",
-                schoolName: schoolName || "School", subjectName, categoryName, className,
+                to: studentEmailList, recipientName: "Student",
+                schoolName: sName, subjectName, categoryName, className,
                 loginUrl: `${window.location.origin}/student/results`,
               });
+            }
+
+            // Notify parents
+            const { data: parentLinks } = await supabase
+              .from("parent_students")
+              .select("parent_id")
+              .in("student_id", userIds)
+              .eq("school_id", schoolId);
+            const parentIds = [...new Set((parentLinks || []).map((p: any) => p.parent_id))];
+            if (parentIds.length > 0) {
+              const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+              const parentEmailList = (parentEmails || []).map((e: any) => e.email).filter(Boolean);
+              if (parentEmailList.length > 0) {
+                await sendGradesPublishedEmail({
+                  to: parentEmailList, recipientName: "Parent",
+                  schoolName: sName, subjectName, categoryName, className,
+                  loginUrl: `${window.location.origin}/parent/dashboard`,
+                });
+              }
             }
           }
         }
