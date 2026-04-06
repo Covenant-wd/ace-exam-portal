@@ -26,6 +26,7 @@ export default function SchoolLogin() {
   const { slug } = useParams<{ slug: string }>();
   const { user, role, loading: authLoading, signIn } = useAuth();
   const [school, setSchool] = useState<School | null>(null);
+  const [schoolLogo, setSchoolLogo] = useState<string>("");
   const [loadingSchool, setLoadingSchool] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeRole, setActiveRole] = useState<LoginRole>("student");
@@ -37,7 +38,18 @@ export default function SchoolLogin() {
   useEffect(() => {
     const fetchSchool = async () => {
       const { data, error } = await supabase.from("schools").select("*").eq("slug", slug).single();
-      if (error || !data) { setNotFound(true); } else { setSchool(data as School); }
+      if (error || !data) { setNotFound(true); setLoadingSchool(false); return; }
+      setSchool(data as School);
+
+      // Fetch logo from school_settings
+      const { data: logoSetting } = await supabase
+        .from("school_settings")
+        .select("value")
+        .eq("school_id", data.id)
+        .eq("key", "school_logo_url")
+        .maybeSingle();
+      if (logoSetting?.value) setSchoolLogo(logoSetting.value);
+
       setLoadingSchool(false);
     };
     if (slug) fetchSchool();
@@ -142,8 +154,8 @@ export default function SchoolLogin() {
             transition={{ duration: 0.5 }}
           >
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/5 border border-white/10 overflow-hidden shadow-xl">
-              {school?.logo_url ? (
-                <img src={school.logo_url} alt="School logo" className="h-full w-full object-contain" />
+              {schoolLogo ? (
+                <img src={schoolLogo} alt="School logo" className="h-full w-full object-contain" />
               ) : (
                 <GraduationCap className="h-10 w-10 text-white/40" />
               )}
