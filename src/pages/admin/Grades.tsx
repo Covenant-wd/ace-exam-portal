@@ -169,22 +169,25 @@ export default function Grades() {
               });
             }
 
-            // Notify parents
-            const { data: parentLinks } = await supabase
-              .from("parent_students")
-              .select("parent_id")
-              .in("student_id", userIds)
-              .eq("school_id", schoolId);
-            const parentIds = [...new Set((parentLinks || []).map((p: any) => p.parent_id))];
-            if (parentIds.length > 0) {
-              const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
-              const parentEmailList = (parentEmails || []).map((e: any) => e.email).filter(Boolean);
-              if (parentEmailList.length > 0) {
-                await sendGradesPublishedEmail({
-                  to: parentEmailList, recipientName: "Parent",
-                  schoolName: sName, subjectName, categoryName, className,
-                  loginUrl: `${window.location.origin}/parent/dashboard`,
-                });
+            // Notify parents (separate toggle)
+            const parentEnabled = await isNotificationEnabled(schoolId, "notify_grades_parent");
+            if (parentEnabled) {
+              const { data: parentLinks } = await supabase
+                .from("parent_students")
+                .select("parent_id")
+                .in("student_id", userIds)
+                .eq("school_id", schoolId);
+              const parentIds = [...new Set((parentLinks || []).map((p: any) => p.parent_id))];
+              if (parentIds.length > 0) {
+                const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+                const parentEmailList = (parentEmails || []).map((e: any) => e.email).filter(Boolean);
+                if (parentEmailList.length > 0) {
+                  await sendGradesPublishedEmail({
+                    to: parentEmailList, recipientName: "Parent",
+                    schoolName: sName, subjectName, categoryName, className,
+                    loginUrl: `${window.location.origin}/parent/dashboard`,
+                  });
+                }
               }
             }
           }
