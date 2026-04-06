@@ -154,8 +154,8 @@ export default function SchoolLogin() {
             transition={{ duration: 0.5 }}
           >
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/5 border border-white/10 overflow-hidden shadow-xl">
-              {school?.logo_url ? (
-                <img src={school.logo_url} alt="School logo" className="h-full w-full object-contain" />
+              {schoolLogo ? (
+                <img src={schoolLogo} alt="School logo" className="h-full w-full object-contain" />
               ) : (
                 <GraduationCap className="h-10 w-10 text-white/40" />
               )}
