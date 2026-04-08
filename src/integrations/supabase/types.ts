@@ -231,7 +231,9 @@ export type Database = {
           description: string | null
           duration_minutes: number
           end_date: string | null
+          exam_type: string
           id: string
+          instructions: string | null
           is_published: boolean
           school_id: string | null
           start_date: string | null
@@ -248,7 +250,9 @@ export type Database = {
           description?: string | null
           duration_minutes?: number
           end_date?: string | null
+          exam_type?: string
           id?: string
+          instructions?: string | null
           is_published?: boolean
           school_id?: string | null
           start_date?: string | null
@@ -265,7 +269,9 @@ export type Database = {
           description?: string | null
           duration_minutes?: number
           end_date?: string | null
+          exam_type?: string
           id?: string
+          instructions?: string | null
           is_published?: boolean
           school_id?: string | null
           start_date?: string | null
@@ -1051,6 +1057,47 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      theory_questions: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          marks: number
+          question_number: string
+          question_order: number
+          question_text: string
+          sub_label: string | null
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          marks?: number
+          question_number: string
+          question_order?: number
+          question_text: string
+          sub_label?: string | null
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          marks?: number
+          question_number?: string
+          question_order?: number
+          question_text?: string
+          sub_label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "theory_questions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
             referencedColumns: ["id"]
           },
         ]
