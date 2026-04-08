@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,8 @@ interface Exam {
   subject_id: string;
   term_id: string | null;
   class_id: string | null;
+  exam_type: string;
+  instructions: string;
   subjects?: { name: string };
   terms?: { name: string } | null;
   classes?: { name: string } | null;
@@ -40,6 +42,8 @@ interface ClassItem { id: string; name: string; }
 export default function Exams() {
   const { user, schoolId } = useAuth();
   const { schoolName } = useSchoolName();
+  const location = useLocation();
+  const basePath = location.pathname.startsWith("/instructor") ? "/instructor" : "/admin";
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
@@ -57,6 +61,8 @@ export default function Exams() {
   const [termId, setTermId] = useState("");
   const [classId, setClassId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [examType, setExamType] = useState("mcq");
+  const [instructions, setInstructions] = useState("");
 
   const fetchData = async () => {
     if (!schoolId) return;
@@ -89,6 +95,8 @@ export default function Exams() {
       term_id: termId || null,
       class_id: classId || null,
       school_id: schoolId,
+      exam_type: examType,
+      instructions,
     };
     if (editing) {
       const { error } = await supabase.from("exams").update(payload).eq("id", editing.id);
@@ -139,12 +147,12 @@ export default function Exams() {
     fetchData();
   };
 
-  const reset = () => { setEditing(null); setTitle(""); setDescription(""); setSubjectId(""); setDuration("30"); setIsPublished(false); setTermId(""); setClassId(""); };
+  const reset = () => { setEditing(null); setTitle(""); setDescription(""); setSubjectId(""); setDuration("30"); setIsPublished(false); setTermId(""); setClassId(""); setExamType("mcq"); setInstructions(""); };
 
   const openEdit = (e: Exam) => {
     setEditing(e); setTitle(e.title); setDescription(e.description || ""); setSubjectId(e.subject_id);
     setDuration(String(e.duration_minutes)); setIsPublished(e.is_published); setAllowRetake(e.allow_retake ?? false);
-    setTermId(e.term_id || ""); setClassId(e.class_id || ""); setOpen(true);
+    setTermId(e.term_id || ""); setClassId(e.class_id || ""); setExamType(e.exam_type || "mcq"); setInstructions(e.instructions || ""); setOpen(true);
   };
 
   const getTermLabel = (termId: string | null) => {
@@ -163,7 +171,17 @@ export default function Exams() {
           <DialogTrigger asChild><Button onClick={reset}><Plus className="mr-2 h-4 w-4" />Create Exam</Button></DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle>{editing ? "Edit Exam" : "New Exam"}</DialogTitle></DialogHeader>
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="space-y-2"><Label>Exam Type</Label>
+                <Select value={examType} onValueChange={setExamType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mcq">MCQ (Multiple Choice)</SelectItem>
+                    <SelectItem value="theory">Theory (Display Only)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {examType === "theory" && <p className="text-xs text-muted-foreground">Theory exams display questions on screen. Students write answers on paper.</p>}
+              </div>
               <div className="space-y-2"><Label>Subject</Label>
                 <Select value={subjectId} onValueChange={setSubjectId}>
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
@@ -193,6 +211,7 @@ export default function Exams() {
               </div>
               <div className="space-y-2"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Mid-term Exam" /></div>
               <div className="space-y-2"><Label>Description</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+              <div className="space-y-2"><Label>Instructions</Label><Textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="General instructions for students (optional)" rows={3} /></div>
               <div className="space-y-2"><Label>Duration (minutes)</Label><Input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} min="1" /></div>
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>
@@ -217,12 +236,13 @@ export default function Exams() {
           ) : (
             <Table>
               <TableHeader><TableRow>
-                <TableHead>Title</TableHead><TableHead>Subject</TableHead><TableHead>Class</TableHead><TableHead>Term</TableHead><TableHead>Duration</TableHead><TableHead>Status</TableHead><TableHead className="w-32">Actions</TableHead>
+                <TableHead>Title</TableHead><TableHead>Type</TableHead><TableHead>Subject</TableHead><TableHead>Class</TableHead><TableHead>Term</TableHead><TableHead>Duration</TableHead><TableHead>Status</TableHead><TableHead className="w-32">Actions</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {exams.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell className="font-medium">{e.title}</TableCell>
+                    <TableCell><Badge variant={(e as any).exam_type === "theory" ? "outline" : "secondary"}>{(e as any).exam_type === "theory" ? "Theory" : "MCQ"}</Badge></TableCell>
                     <TableCell>{(e as any).subjects?.name || "—"}</TableCell>
                     <TableCell>{(e as any).classes?.name || "All"}</TableCell>
                     <TableCell className="text-sm">{getTermLabel(e.term_id)}</TableCell>
@@ -244,7 +264,11 @@ export default function Exams() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" asChild><Link to={`/admin/exams/${e.id}/questions`}><FileQuestion className="h-4 w-4" /></Link></Button>
+                        <Button variant="ghost" size="icon" asChild>
+                          <Link to={`${basePath}/exams/${e.id}/${(e as any).exam_type === "theory" ? "theory-questions" : "questions"}`}>
+                            <FileQuestion className="h-4 w-4" />
+                          </Link>
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(e)}><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
