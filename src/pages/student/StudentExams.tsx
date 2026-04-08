@@ -113,44 +113,51 @@ export default function StudentExams() {
           <div key={subject} className="mb-8">
             <h2 className="mb-3 flex items-center gap-2 text-xl font-semibold"><BookOpen className="h-5 w-5 text-primary" />{subject}</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {exams.map((exam) => {
-                const attempt = attempts[exam.id];
-                const completed = attempt?.is_submitted;
-                return (
-                  <Card key={exam.id} className="border-0 shadow-md transition-shadow hover:shadow-lg">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg">{exam.title}</CardTitle>
-                        {completed && (
-                          <Badge variant={exam.allow_retake ? "outline" : "secondary"}>
-                            {exam.allow_retake ? "Retake Available" : "Completed"}
-                          </Badge>
-                        )}
-                      </div>
-                      {exam.description && <CardDescription>{exam.description}</CardDescription>}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="h-4 w-4" />{exam.duration_minutes} minutes
-                      </div>
-                      {completed ? (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Score: {attempt.score}/{attempt.total_questions} ({Math.round((attempt.score / attempt.total_questions) * 100)}%)</p>
-                          {exam.allow_retake ? (
-                            <Button asChild variant="outline" className="w-full">
-                              <Link to={`/student/exam/${exam.id}`}>Retake Exam</Link>
-                            </Button>
-                          ) : (
-                            <p className="text-xs text-muted-foreground text-center">Retake not allowed</p>
-                          )}
+                {exams.map((exam) => {
+                  const attempt = attempts[exam.id];
+                  const completed = attempt?.is_submitted;
+                  const isTheory = (exam as any).exam_type === "theory";
+                  const examLink = isTheory ? `/student/theory-exam/${exam.id}` : `/student/exam/${exam.id}`;
+                  return (
+                    <Card key={exam.id} className="border-0 shadow-md transition-shadow hover:shadow-lg">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-lg">{exam.title}</CardTitle>
+                          <div className="flex gap-1">
+                            <Badge variant={isTheory ? "outline" : "secondary"} className="text-xs">{isTheory ? "Theory" : "MCQ"}</Badge>
+                            {completed && !isTheory && (
+                              <Badge variant={exam.allow_retake ? "outline" : "secondary"}>
+                                {exam.allow_retake ? "Retake Available" : "Completed"}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <Button asChild className="w-full"><Link to={`/student/exam/${exam.id}`}>Start Exam</Link></Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                        {exam.description && <CardDescription>{exam.description}</CardDescription>}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="h-4 w-4" />{exam.duration_minutes} minutes
+                        </div>
+                        {isTheory ? (
+                          <Button asChild className="w-full"><Link to={examLink}>{completed ? "View Again" : "Start Exam"}</Link></Button>
+                        ) : completed ? (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Score: {attempt.score}/{attempt.total_questions} ({Math.round((attempt.score / attempt.total_questions) * 100)}%)</p>
+                            {exam.allow_retake ? (
+                              <Button asChild variant="outline" className="w-full">
+                                <Link to={examLink}>Retake Exam</Link>
+                              </Button>
+                            ) : (
+                              <p className="text-xs text-muted-foreground text-center">Retake not allowed</p>
+                            )}
+                          </div>
+                        ) : (
+                          <Button asChild className="w-full"><Link to={examLink}>Start Exam</Link></Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
             </div>
           </div>
         ))
