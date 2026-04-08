@@ -1,79 +1,95 @@
 
 
-# Add School Outreach Officer Role
+# Add Theory Exam Mode (Display-Only Questions)
 
 ## Overview
-Add a new **"outreach_officer"** role to the platform. These are platform-level workers who refer schools to Academia. They earn per school referred, can manage and communicate with their referred schools, and have a dedicated dashboard showing their referrals and earnings.
+Add a new exam type called **"Theory"** alongside the existing MCQ type. Theory exams display questions set by admins/instructors (with instructions, sub-questions like 1a, 1b, 1c, 1a(i), etc.) on the student's screen with a countdown timer. Students write answers on physical answer sheets — the system only displays questions, no online answer submission.
 
-## What Gets Built
+## What Changes
 
-### 1. Database Changes
+### 1. Database Migration
+- Add `exam_type` column to `exams` table: `'mcq'` (default) or `'theory'`
+- Create new `theory_questions` table:
+  - `id` (uuid, PK)
+  - `exam_id` (uuid, references exams)
+  - `question_number` (text) — e.g. "1", "2", "3"
+  - `sub_label` (text, nullable) — e.g. "a", "b", "c", "a(i)", "a(ii)"
+  - `question_text` (text) — rich text content
+  - `marks` (integer, default 1)
+  - `question_order` (integer)
+  - `created_at` (timestamptz)
+- Add `instructions` column to `exams` table (text, nullable) — general exam instructions displayed to students
+- RLS: same pattern as `questions` table (admin/instructor manage, students read published)
 
-**Add `outreach_officer` to the `app_role` enum**
-- Alter the existing `app_role` enum to include `outreach_officer`
+### 2. Admin: Exam Creation (Exams.tsx)
+- Add **Exam Type** selector (MCQ / Theory) in the create/edit exam dialog
+- Add **Instructions** textarea field (shown for both types but especially useful for theory)
+- "Manage Questions" link routes to different pages based on exam type
 
-**New table: `school_referrals`**
-- Tracks which outreach officer referred which school
-- Columns: `id`, `officer_id` (uuid), `school_id` (uuid), `commission_amount` (numeric), `commission_paid` (boolean), `created_at`
-- RLS: Officers see only their own referrals; Super Admins see all
+### 3. Admin: Theory Questions Page (new: TheoryQuestions.tsx)
+- Route: `/admin/exams/:examId/theory-questions`
+- Form to add questions with:
+  - **Question Number** (text input: "1", "2", etc.)
+  - **Sub-label** (optional: "a", "b", "a(i)", etc.)
+  - **Question Text** (rich text editor — supports images, math, phonics)
+  - **Marks** (number input)
+- Display questions grouped by number, with sub-questions indented
+- Edit and delete support
 
-**New table: `officer_earnings`** (optional — can be derived from `school_referrals`, but a summary table simplifies queries)
-- Or we calculate earnings dynamically from `school_referrals`
+### 4. Student: Exam List (StudentExams.tsx)
+- Show a badge indicating exam type (MCQ / Theory)
+- Both types link to their respective exam pages
 
-**Update `get_all_school_users` function** to include outreach officers (currently excludes only `super_admin`)
+### 5. Student: View Theory Exam (new: ViewTheoryExam.tsx)
+- Route: `/student/theory-exam/:examId`
+- Display-only page — no answer input fields
+- Shows:
+  - Exam title and subject at top
+  - General instructions (if set)
+  - Countdown timer (same as MCQ)
+  - All questions displayed in order with numbering (1a, 1b, 1c, 2a, etc.)
+  - Marks per question shown beside each
+- Timer auto-ends the exam (shows "Time's Up" message)
+- No submission logic — student simply views questions and writes on paper
+- Creates an `exam_attempt` record to track that the student viewed/took the exam
 
-**Update `create_school_user` function** to support the new role (it already accepts any `app_role` text, so this should work after the enum update)
-
-### 2. Super Admin Dashboard Updates
-
-**Outreach Officers management page** (`/super-admin/outreach-officers`)
-- Create outreach officer accounts (name, email, password)
-- View list of all officers with their referral counts and total earnings
-- Set commission amount per referral
-- Assign/link schools to officers as referrals
-
-**Add nav link** in `SuperAdminLayout` for "Outreach Officers"
-
-### 3. Outreach Officer Dashboard
-
-**New layout**: `OutreachOfficerLayout` (similar to `SuperAdminLayout` but branded for the officer role)
-
-**Login**: Officers log in via `/super-admin/login` or a new `/outreach/login` page
-
-**Dashboard page** (`/outreach`):
-- Summary cards: Total schools referred, total earnings, pending payouts
-- List of referred schools with stats (student count, status)
-- Ability to view school details
-
-**Routes and protected pages**:
-- `/outreach` — Dashboard
-- `/outreach/schools` — Manage referred schools
-- `/outreach/earnings` — Earnings breakdown
-
-### 4. Auth & Routing Updates
-
-- Add `outreach_officer` to the `AppRole` type in `auth.tsx`
-- Add `ProtectedRoute` entries for the outreach officer routes in `App.tsx`
-- Update the `ProtectedRoute` component to redirect outreach officers to their login page
-
-### 5. Fix Existing Build Errors
-
-- **Settings.tsx**: Remove duplicate imports (`useState`, `useEffect` imported twice)
-- **Announcements.tsx**: Cast the role array to the proper type
+### 6. Routing (App.tsx)
+- Add routes:
+  - `/admin/exams/:examId/theory-questions` → TheoryQuestions
+  - `/instructor/exams/:examId/theory-questions` → TheoryQuestions
+  - `/student/theory-exam/:examId` → ViewTheoryExam
 
 ## Technical Details
 
-- The `app_role` Postgres enum needs `ALTER TYPE app_role ADD VALUE 'outreach_officer'`
-- The `school_referrals` table links officers to schools with commission tracking
-- Earnings are computed as `SUM(commission_amount)` from `school_referrals` where `commission_paid = true`
-- RLS on `school_referrals`: officer sees own rows, super_admin sees all
-- The outreach officer has **no direct access** to school admin features — they only see aggregate data about their referred schools
+```text
+New DB columns:
+  exams.exam_type       text  DEFAULT 'mcq'
+  exams.instructions    text  DEFAULT ''
+
+New table: theory_questions
+  id                uuid  PK  DEFAULT gen_random_uuid()
+  exam_id           uuid  NOT NULL
+  question_number   text  NOT NULL  (e.g. "1", "2")
+  sub_label         text  DEFAULT ''  (e.g. "a", "b", "a(i)")
+  question_text     text  NOT NULL
+  marks             integer  DEFAULT 1
+  question_order    integer  DEFAULT 0
+  created_at        timestamptz  DEFAULT now()
+```
+
+**New files:**
+- `src/pages/admin/TheoryQuestions.tsx` — admin question management
+- `src/pages/student/ViewTheoryExam.tsx` — student display-only view
+
+**Modified files:**
+- `src/pages/admin/Exams.tsx` — exam type selector, instructions field, conditional routing
+- `src/pages/student/StudentExams.tsx` — type badge, conditional link
+- `src/App.tsx` — new routes
 
 ## Implementation Order
-
-1. Fix existing build errors (Settings.tsx, Announcements.tsx)
-2. Database migration: add enum value, create `school_referrals` table with RLS
-3. Create Outreach Officer layout and dashboard pages
-4. Add Super Admin management UI for outreach officers
-5. Update auth types and routing
+1. Database migration (add columns + new table + RLS)
+2. Update exam creation UI with type selector and instructions
+3. Build theory questions management page
+4. Build student theory exam view page
+5. Update routing and exam list
 
