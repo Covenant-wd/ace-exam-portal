@@ -40,7 +40,9 @@ const Announcements = lazy(() => import("./pages/admin/Announcements"));
 const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
 const StudentExams = lazy(() => import("./pages/student/StudentExams"));
 const TakeExam = lazy(() => import("./pages/student/TakeExam"));
+const ViewTheoryExam = lazy(() => import("./pages/student/ViewTheoryExam"));
 const StudentResults = lazy(() => import("./pages/student/StudentResults"));
+const TheoryQuestions = lazy(() => import("./pages/admin/TheoryQuestions"));
 const InstructorDashboard = lazy(() => import("./pages/instructor/InstructorDashboard"));
 const Parents = lazy(() => import("./pages/admin/Parents"));
 const ParentDashboard = lazy(() => import("./pages/parent/ParentDashboard"));
@@ -118,6 +120,7 @@ function AppRoutes() {
         <Route path="/admin/subjects" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/results" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/attendance" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
@@ -132,6 +135,7 @@ function AppRoutes() {
         <Route path="/instructor/subjects" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/exams" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/results" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/attendance" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
@@ -144,6 +148,7 @@ function AppRoutes() {
         <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentDashboard /></DashboardLayout></ProtectedRoute>} />
         <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
         <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><TakeExam /></ProtectedRoute>} />
+        <Route path="/student/theory-exam/:examId" element={<ProtectedRoute requiredRole="student"><ViewTheoryExam /></ProtectedRoute>} />
         <Route path="/student/results" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentResults /></DashboardLayout></ProtectedRoute>} />
 
         {/* Parent routes */}
