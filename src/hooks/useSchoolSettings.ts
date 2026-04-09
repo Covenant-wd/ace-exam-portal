@@ -1,22 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import { useEffect } from "react";
 
 const DEFAULT_SCHOOL_NAME = "CBT Portal";
 
 export function useSchoolName() {
+  const { schoolId } = useAuth();
   const { data: schoolName = DEFAULT_SCHOOL_NAME, isLoading } = useQuery({
-    queryKey: ["school_settings", "school_name"],
+    queryKey: ["school_settings", "school_name", schoolId],
     queryFn: async () => {
+      if (!schoolId) return DEFAULT_SCHOOL_NAME;
+      
       const { data, error } = await supabase
         .from("school_settings")
         .select("value")
+        .eq("school_id", schoolId)
         .eq("key", "school_name")
         .single();
       if (error || !data) return DEFAULT_SCHOOL_NAME;
       return data.value || DEFAULT_SCHOOL_NAME;
     },
     staleTime: 30 * 1000,
+    enabled: !!schoolId,
   });
 
   useEffect(() => {
@@ -27,18 +33,23 @@ export function useSchoolName() {
 }
 
 export function useSchoolLogo() {
+  const { schoolId } = useAuth();
   const { data: logoUrl = "", isLoading } = useQuery({
-    queryKey: ["school_settings", "school_logo_url"],
+    queryKey: ["school_settings", "school_logo_url", schoolId],
     queryFn: async () => {
+      if (!schoolId) return "";
+      
       const { data, error } = await supabase
         .from("school_settings")
         .select("value")
+        .eq("school_id", schoolId)
         .eq("key", "school_logo_url")
         .single();
       if (error || !data) return "";
       return data.value || "";
     },
     staleTime: 30 * 1000,
+    enabled: !!schoolId,
   });
 
   // Update favicon when logo changes
@@ -56,12 +67,15 @@ export function useSchoolLogo() {
 }
 
 export function useUpdateSchoolName() {
+  const { schoolId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (newName: string) => {
+      if (!schoolId) throw new Error("No school ID available");
       const { error } = await supabase
         .from("school_settings")
         .update({ value: newName })
+        .eq("school_id", schoolId)
         .eq("key", "school_name");
       if (error) throw error;
     },
@@ -72,11 +86,13 @@ export function useUpdateSchoolName() {
 }
 
 export function useUpdateSchoolLogo() {
+  const { schoolId } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
+      if (!schoolId) throw new Error("No school ID available");
       const ext = file.name.split(".").pop();
-      const fileName = `logo.${ext}`;
+      const fileName = `${schoolId}/logo.${ext}`;
 
       // Upload to storage (overwrite existing)
       const { error: uploadError } = await supabase.storage
@@ -95,6 +111,7 @@ export function useUpdateSchoolLogo() {
       const { error: settingsError } = await supabase
         .from("school_settings")
         .update({ value: publicUrl })
+        .eq("school_id", schoolId)
         .eq("key", "school_logo_url");
       if (settingsError) throw settingsError;
 
