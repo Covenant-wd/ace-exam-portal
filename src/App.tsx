@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
@@ -85,6 +85,12 @@ function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode;
   return <>{children}</>;
 }
 
+// Redirects /:slug → /school/:slug so short URLs work
+function SlugRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  return <Navigate to={`/school/${slug}`} replace />;
+}
+
 function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -153,6 +159,9 @@ function AppRoutes() {
 
         {/* Parent routes */}
         <Route path="/parent" element={<ProtectedRoute requiredRole="parent"><DashboardLayout><ParentDashboard /></DashboardLayout></ProtectedRoute>} />
+
+        {/* Short school slug redirect: /:slug → /school/:slug */}
+        <Route path="/:slug" element={<SlugRedirect />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>
