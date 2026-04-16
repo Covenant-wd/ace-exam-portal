@@ -191,6 +191,7 @@ export type Database = {
           student_id: string
           submitted_at: string | null
           total_questions: number | null
+          violations: number
         }
         Insert: {
           exam_id: string
@@ -201,6 +202,7 @@ export type Database = {
           student_id: string
           submitted_at?: string | null
           total_questions?: number | null
+          violations?: number
         }
         Update: {
           exam_id?: string
