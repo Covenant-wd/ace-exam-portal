@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, School, ImagePlus, Trash2, Bell } from "lucide-react";
+import { Loader2, Save, School, ImagePlus, Trash2, Bell, ShieldAlert } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -212,6 +212,58 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+      {/* Anti-Cheat Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Anti-Cheat Settings</CardTitle>
+              <CardDescription>Configure how the CBT exam system monitors and responds to cheating behaviour.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">Max Violations Before Auto-Submit</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How many times a student can switch tabs or exit fullscreen before the exam is automatically submitted. Default: 3.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 ml-6 shrink-0">
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={maxViolations}
+                onChange={e => setMaxViolations(e.target.value)}
+                className="w-20 text-center"
+              />
+              <Button size="sm" onClick={handleSaveMaxViolations} disabled={violationSaving}>
+                {violationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Active Protections</p>
+            {[
+              "Students are forced into fullscreen mode when the exam starts",
+              "Tab switching and window blur are detected instantly",
+              "Right-click, copy, paste and keyboard shortcuts are blocked",
+              "Each violation is recorded and visible in exam results",
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <span className="text-green-600 font-bold mt-0.5">✓</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Email Notifications */}
       <Card>
         <CardHeader>
