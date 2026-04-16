@@ -22,6 +22,8 @@ export default function Settings() {
   const [notifyGradesPublished, setNotifyGradesPublished] = useState(true);
   const [notifyGradesParent, setNotifyGradesParent] = useState(true);
   const [notifySaving, setNotifySaving] = useState(false);
+  const [maxViolations, setMaxViolations] = useState("3");
+  const [violationSaving, setViolationSaving] = useState(false);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -29,7 +31,7 @@ export default function Settings() {
       const { data } = await supabase.from("school_settings")
         .select("key, value")
         .eq("school_id", schoolId)
-        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent", "notify_exam_published", "notify_grades_published", "notify_grades_parent"]);
+        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent", "notify_exam_published", "notify_grades_published", "notify_grades_parent", "max_exam_violations"]);
       (data || []).forEach((s: any) => {
         const val = s.value === "true";
         if (s.key === "notify_announcement") setNotifyAnnouncement(val);
@@ -39,6 +41,7 @@ export default function Settings() {
         if (s.key === "notify_exam_published") setNotifyExamPublished(val);
         if (s.key === "notify_grades_published") setNotifyGradesPublished(val);
         if (s.key === "notify_grades_parent") setNotifyGradesParent(val);
+        if (s.key === "max_exam_violations") setMaxViolations(s.value || "3");
       });
     };
     loadNotifSettings();
@@ -51,6 +54,19 @@ export default function Settings() {
       { onConflict: "school_id,key" }
     );
   };
+  const handleSaveMaxViolations = async () => {
+    if (!schoolId) return;
+    const val = parseInt(maxViolations);
+    if (isNaN(val) || val < 1) { toast.error("Must be at least 1"); return; }
+    setViolationSaving(true);
+    await supabase.from("school_settings").upsert(
+      { key: "max_exam_violations", value: String(val), school_id: schoolId },
+      { onConflict: "school_id,key" }
+    );
+    setViolationSaving(false);
+    toast.success("Anti-cheat setting saved");
+  };
+
   const { logoUrl, isLoading: logoLoading } = useSchoolLogo();
   const updateNameMutation = useUpdateSchoolName();
   const updateLogoMutation = useUpdateSchoolLogo();
