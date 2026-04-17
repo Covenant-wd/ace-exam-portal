@@ -47,6 +47,7 @@ export default function TakeExam() {
   // Header info
   const [studentName, setStudentName] = useState("");
   const [schoolName, setSchoolName]   = useState("");
+  const [schoolLogo, setSchoolLogo]   = useState("");
 
   // Anti-cheat
   const [violations, setViolations]         = useState(0);
@@ -81,13 +82,16 @@ export default function TakeExam() {
         .from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
       if (profileData?.full_name) setStudentName(profileData.full_name);
 
-      // Fetch school name + max violations setting
+      // Fetch school name, logo + max violations setting
       if (profileData?.school_id) {
-        const [schoolRes, settingRes] = await Promise.all([
+        const [schoolRes, settingRes, logoRes] = await Promise.all([
           supabase.from("schools").select("name").eq("id", profileData.school_id).single(),
           supabase.from("school_settings")
             .select("value").eq("school_id", profileData.school_id)
             .eq("key", "max_exam_violations").maybeSingle(),
+          supabase.from("school_settings")
+            .select("value").eq("school_id", profileData.school_id)
+            .eq("key", "school_logo_url").maybeSingle(),
         ]);
         if (schoolRes.data?.name) setSchoolName(schoolRes.data.name);
         if (settingRes.data?.value) {
@@ -95,6 +99,7 @@ export default function TakeExam() {
           setMaxViolations(mv);
           maxViolationsRef.current = mv;
         }
+        if (logoRes.data?.value) setSchoolLogo(logoRes.data.value);
       }
 
       // Calculator check
@@ -423,9 +428,13 @@ export default function TakeExam() {
       <div className="sticky top-0 z-10 border-b bg-card shadow-sm">
         {/* Row 1: School + Student + Timer */}
         <div className="flex items-center justify-between px-4 py-2.5">
-          {/* School name */}
+          {/* School name + logo */}
           <div className="flex items-center gap-2 min-w-0">
-            <GraduationCap className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 overflow-hidden border border-primary/20">
+              {schoolLogo
+                ? <img src={schoolLogo} alt="School logo" className="h-full w-full object-contain p-0.5" />
+                : <GraduationCap className="h-4 w-4 text-primary" />}
+            </div>
             <span className="font-semibold text-sm truncate">{schoolName || "Academia HQ"}</span>
           </div>
 
