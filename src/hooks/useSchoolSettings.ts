@@ -74,9 +74,10 @@ export function useUpdateSchoolName() {
       if (!schoolId) throw new Error("No school ID available");
       const { error } = await supabase
         .from("school_settings")
-        .update({ value: newName })
-        .eq("school_id", schoolId)
-        .eq("key", "school_name");
+        .upsert(
+          { school_id: schoolId, key: "school_name", value: newName },
+          { onConflict: "school_id,key" }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
@@ -107,12 +108,13 @@ export function useUpdateSchoolLogo() {
 
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-      // Save URL to settings
+      // Save URL to settings (upsert handles both new and existing rows)
       const { error: settingsError } = await supabase
         .from("school_settings")
-        .update({ value: publicUrl })
-        .eq("school_id", schoolId)
-        .eq("key", "school_logo_url");
+        .upsert(
+          { school_id: schoolId, key: "school_logo_url", value: publicUrl },
+          { onConflict: "school_id,key" }
+        );
       if (settingsError) throw settingsError;
 
       return publicUrl;
