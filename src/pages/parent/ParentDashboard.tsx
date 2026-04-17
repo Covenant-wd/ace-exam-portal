@@ -35,32 +35,43 @@ export default function ParentDashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data: links } = await supabase
-        .from("parent_students")
-        .select("student_id")
-        .eq("parent_id", user.id);
+      try {
+        const { data: links, error: linksErr } = await supabase
+          .from("parent_students")
+          .select("student_id")
+          .eq("parent_id", user.id);
 
-      if (links && links.length > 0) {
-        const ids = links.map((l: any) => l.student_id);
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("user_id, full_name")
-          .in("user_id", ids)
-          .order("full_name");
-        const childList = (profiles || []).map((p: any) => ({ student_id: p.user_id, full_name: p.full_name }));
-        setChildren(childList);
-        if (childList.length > 0) setSelectedChild(childList[0].student_id);
+        if (linksErr) console.error("parent_students error:", linksErr);
+
+        if (links && links.length > 0) {
+          const ids = links.map((l: any) => l.student_id);
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, full_name, school_id")
+            .in("user_id", ids)
+            .order("full_name");
+          const childList = (profiles || []).map((p: any) => ({ student_id: p.user_id, full_name: p.full_name }));
+          setChildren(childList);
+          if (childList.length > 0) setSelectedChild(childList[0].student_id);
+
+          // Derive schoolId from first child if context is missing
+          const effectiveSchoolId = schoolId || (profiles?.[0] as any)?.school_id;
+
+          // Load active session & term
+          if (effectiveSchoolId) {
+            const [sessRes, termRes] = await Promise.all([
+              supabase.from("sessions").select("name").eq("school_id", effectiveSchoolId).eq("is_active", true).maybeSingle(),
+              supabase.from("terms").select("name").eq("school_id", effectiveSchoolId).eq("is_active", true).maybeSingle(),
+            ]);
+            if (sessRes.data) setActiveSession(sessRes.data.name);
+            if (termRes.data) setActiveTerm(termRes.data.name);
+          }
+        }
+      } catch (err: any) {
+        console.error("ParentDashboard load error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      // Load active session & term
-      if (schoolId) {
-        const { data: sess } = await supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single();
-        if (sess) setActiveSession(sess.name);
-        const { data: term } = await supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single();
-        if (term) setActiveTerm(term.name);
-      }
-
-      setLoading(false);
     };
     load();
   }, [user, schoolId]);
