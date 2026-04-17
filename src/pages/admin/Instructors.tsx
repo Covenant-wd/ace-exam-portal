@@ -72,7 +72,8 @@ export default function Instructors() {
       if (instrIds.length === 0) { setInstructors([]); setLoading(false); return; }
 
       const [profilesRes, permsRes, classLinksRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name, first_name, last_name").in("user_id", instrIds).order("full_name"),
+        // Include email column (added by fix migration)
+        supabase.from("profiles").select("user_id, full_name, first_name, last_name, email").in("user_id", instrIds).order("full_name"),
         supabase.from("instructor_permissions").select("*").in("instructor_id", instrIds),
         supabase.from("instructor_classes").select("instructor_id, class_id").in("instructor_id", instrIds),
       ]);
@@ -87,7 +88,8 @@ export default function Instructors() {
       setInstructors((profilesRes.data || []).map((p: any) => ({
         user_id: p.user_id,
         full_name: p.full_name,
-        email: "",
+        // Use email stored in profiles (populated by create_school_user)
+        email: p.email || "",
         permissions: permsMap.get(p.user_id) || {},
         assigned_classes: classMap.get(p.user_id) || [],
       })));
@@ -105,11 +107,14 @@ export default function Instructors() {
     setSaving(true);
     try {
       if (editing) {
-        await supabase.from("profiles").update({
-          full_name: fullName,
+        // Update profile — include email so the column stays in sync
+        const { error: profileErr } = await supabase.from("profiles").update({
+          full_name:  fullName,
           first_name: fullName.split(" ")[0] || "",
-          last_name: fullName.split(" ").slice(1).join(" ") || "",
-        }).eq("user_id", editing.user_id);
+          last_name:  fullName.split(" ").slice(1).join(" ") || "",
+          email:      email.trim().toLowerCase(),
+        } as any).eq("user_id", editing.user_id);
+        if (profileErr) throw profileErr;
         toast.success("Instructor updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
@@ -123,9 +128,22 @@ export default function Instructors() {
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create instructor account.");
 
-        await supabase.from("instructor_permissions").upsert({
-          instructor_id: newUserId, school_id: schoolId!,
+        // Upsert a fully-populated permissions row so the row always exists
+        // with the correct school_id and all columns explicit (no partial defaults).
+        const { error: permErr } = await supabase.from("instructor_permissions").upsert({
+          instructor_id:          newUserId,
+          school_id:              schoolId!,
+          can_manage_exams:       false,
+          can_view_results:       false,
+          can_manage_students:    false,
+          can_manage_subjects:    false,
+          can_mark_attendance:    false,
+          can_manage_grades:      false,
+          can_manage_timetable:   false,
+          can_manage_fees:        false,
+          can_post_announcements: false,
         } as any, { onConflict: "instructor_id" });
+        if (permErr) throw permErr;
 
         // Fire-and-forget welcome email
         sendInstructorWelcomeEmail({
@@ -146,12 +164,24 @@ export default function Instructors() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm("Delete this instructor?")) return;
+    if (!confirm("Delete this instructor? This cannot be undone.")) return;
     try {
-      await supabase.from("instructor_permissions").delete().eq("instructor_id", userId);
-      await supabase.from("instructor_classes").delete().eq("instructor_id", userId);
-      await supabase.from("user_roles").delete().eq("user_id", userId);
-      await supabase.from("profiles").delete().eq("user_id", userId);
+      // Delete in FK-safe order: dependent rows first, then the role, then profile.
+      // instructor_permissions and instructor_classes now have ON DELETE CASCADE FKs
+      // but we delete explicitly for clarity and to avoid RLS-bypass surprises.
+      const deletes = await Promise.all([
+        supabase.from("instructor_permissions").delete().eq("instructor_id", userId),
+        supabase.from("instructor_classes").delete().eq("instructor_id", userId),
+      ]);
+      const deleteErr = deletes.find(r => r.error)?.error;
+      if (deleteErr) throw deleteErr;
+
+      const { error: roleErr } = await supabase.from("user_roles").delete().eq("user_id", userId);
+      if (roleErr) throw roleErr;
+
+      const { error: profileErr } = await supabase.from("profiles").delete().eq("user_id", userId);
+      if (profileErr) throw profileErr;
+
       toast.success("Instructor deleted");
       fetchData();
     } catch (err: any) {
@@ -161,22 +191,26 @@ export default function Instructors() {
 
   const handleSavePerms = async () => {
     if (!permsInstructor) return;
+    if (!schoolId) { toast.error("School context missing — please reload."); return; }
     setSaving(true);
     try {
+      // school_id must match the admin's school (enforced by the fixed RLS WITH CHECK).
+      // updated_at is handled by the trigger (fix migration added it), but we pass it
+      // explicitly here as a belt-and-suspenders measure.
       const { error } = await supabase.from("instructor_permissions").upsert({
-        instructor_id: permsInstructor.user_id,
-        school_id: schoolId,
-        can_manage_exams: perms.can_manage_exams,
-        can_view_results: perms.can_view_results,
-        can_manage_students: perms.can_manage_students,
-        can_manage_subjects: perms.can_manage_subjects,
-        can_mark_attendance: perms.can_mark_attendance,
-        can_manage_grades: perms.can_manage_grades,
-        can_manage_timetable: perms.can_manage_timetable,
-        can_manage_fees: perms.can_manage_fees,
+        instructor_id:          permsInstructor.user_id,
+        school_id:              schoolId,
+        can_manage_exams:       perms.can_manage_exams,
+        can_view_results:       perms.can_view_results,
+        can_manage_students:    perms.can_manage_students,
+        can_manage_subjects:    perms.can_manage_subjects,
+        can_mark_attendance:    perms.can_mark_attendance,
+        can_manage_grades:      perms.can_manage_grades,
+        can_manage_timetable:   perms.can_manage_timetable,
+        can_manage_fees:        perms.can_manage_fees,
         can_post_announcements: perms.can_post_announcements,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "instructor_id" });
+        updated_at:             new Date().toISOString(),
+      } as any, { onConflict: "instructor_id" });
       if (error) throw error;
       toast.success("Permissions updated");
       setPermsOpen(false);
@@ -189,13 +223,26 @@ export default function Instructors() {
 
   const handleSaveClasses = async () => {
     if (!classesInstructor) return;
+    if (!schoolId) { toast.error("School context missing — please reload."); return; }
     setSaving(true);
     try {
-      await supabase.from("instructor_classes").delete().eq("instructor_id", classesInstructor.user_id);
+      // Remove existing class assignments for this instructor
+      const { error: delErr } = await supabase
+        .from("instructor_classes")
+        .delete()
+        .eq("instructor_id", classesInstructor.user_id);
+      if (delErr) throw delErr;
+
+      // Insert the newly selected set (WITH CHECK in the fixed RLS ensures school_id matches)
       if (selectedClasses.length > 0) {
-        await supabase.from("instructor_classes").insert(
-          selectedClasses.map(classId => ({ instructor_id: classesInstructor.user_id, class_id: classId, school_id: schoolId! }))
+        const { error: insErr } = await supabase.from("instructor_classes").insert(
+          selectedClasses.map(classId => ({
+            instructor_id: classesInstructor.user_id,
+            class_id:      classId,
+            school_id:     schoolId,
+          }))
         );
+        if (insErr) throw insErr;
       }
       toast.success("Classes assigned");
       setClassesOpen(false);
