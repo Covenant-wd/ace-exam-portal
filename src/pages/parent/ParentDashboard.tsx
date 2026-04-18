@@ -81,58 +81,97 @@ export default function ParentDashboard() {
     load();
   }, [user, schoolId]);
 
-  // Load child's data when selection changes
+  // Load child's data when selected child or resolved school changes
   useEffect(() => {
-    if (!selectedChild) return;
+    // Wait until both the child and the school context are resolved.
+    // childSchoolId is set in the first useEffect after profiles are fetched.
+    // Running before it's set would query announcements with school_id=null.
+    if (!selectedChild || !childSchoolId) return;
+
     const loadChildData = async () => {
       setDataLoading(true);
+      try {
+        const [attRes, gradesRes, feesRes, resultsRes, annRes] = await Promise.all([
+          supabase
+            .from("attendance")
+            .select("date, status")
+            .eq("student_id", selectedChild)
+            .order("date", { ascending: false })
+            .limit(50),
 
-      const [attRes, gradesRes, feesRes, resultsRes, annRes] = await Promise.all([
-        supabase.from("attendance").select("date, status").eq("student_id", selectedChild).order("date", { ascending: false }).limit(50),
-        supabase.from("grades").select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
-        supabase.from("fee_payments").select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
-        supabase.from("exam_attempts").select("score, total_questions, submitted_at, exams:exam_id(title)").eq("student_id", selectedChild).eq("is_submitted", true).order("submitted_at", { ascending: false }),
-        // Use childSchoolId derived from child's profile — schoolId from useAuth()
-        // may be null for parents whose user_roles row lacks school_id
-        ...(childSchoolId
-          ? [supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).eq("school_id", childSchoolId).order("created_at", { ascending: false }).limit(10)]
-          : [supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).order("created_at", { ascending: false }).limit(10)]
-        )[0],
-      ]);
+          supabase
+            .from("grades")
+            .select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)")
+            .eq("student_id", selectedChild)
+            .order("created_at", { ascending: false }),
 
-      const attRecords = (attRes.data || []) as AttendanceRecord[];
-      setAttendance(attRecords);
-      setAttendanceStats({
-        present: attRecords.filter(a => a.status === "present").length,
-        absent: attRecords.filter(a => a.status === "absent").length,
-        late: attRecords.filter(a => a.status === "late").length,
-      });
+          supabase
+            .from("fee_payments")
+            .select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)")
+            .eq("student_id", selectedChild)
+            .order("created_at", { ascending: false }),
 
-      setGrades((gradesRes.data || []).map((g: any) => ({
-        subject_name: g.subjects?.name || "—",
-        category_name: g.grade_categories?.name || "—",
-        category_max_score: g.grade_categories?.max_score ?? g.max_score,
-        score: g.score,
-      })));
+          supabase
+            .from("exam_attempts")
+            .select("score, total_questions, submitted_at, exams:exam_id(title)")
+            .eq("student_id", selectedChild)
+            .eq("is_submitted", true)
+            .order("submitted_at", { ascending: false }),
 
-      setFees((feesRes.data || []).map((f: any) => ({
-        fee_name: f.fee_types?.name || "—",
-        amount_paid: f.amount_paid,
-        payment_date: f.payment_date,
-      })));
+          supabase
+            .from("announcements")
+            .select("id, title, content, created_at")
+            .eq("is_active", true)
+            .eq("school_id", childSchoolId)
+            .order("created_at", { ascending: false })
+            .limit(10),
+        ]);
 
-      setResults((resultsRes.data || []).map((r: any) => ({
-        exam_title: r.exams?.title || "—",
-        score: r.score,
-        total_questions: r.total_questions,
-        submitted_at: r.submitted_at,
-      })));
+        // Log any errors so failures are visible in the browser console
+        if (attRes.error)     console.error("attendance error:",    attRes.error);
+        if (gradesRes.error)  console.error("grades error:",        gradesRes.error);
+        if (feesRes.error)    console.error("fee_payments error:",   feesRes.error);
+        if (resultsRes.error) console.error("exam_attempts error:",  resultsRes.error);
+        if (annRes.error)     console.error("announcements error:",  annRes.error);
 
-      setAnnouncements((annRes.data as AnnouncementItem[]) || []);
-      setDataLoading(false);
+        const attRecords = (attRes.data || []) as AttendanceRecord[];
+        setAttendance(attRecords);
+        setAttendanceStats({
+          present: attRecords.filter(a => a.status === "present").length,
+          absent:  attRecords.filter(a => a.status === "absent").length,
+          late:    attRecords.filter(a => a.status === "late").length,
+        });
+
+        setGrades((gradesRes.data || []).map((g: any) => ({
+          subject_name:       g.subjects?.name           || "—",
+          category_name:      g.grade_categories?.name   || "—",
+          category_max_score: g.grade_categories?.max_score ?? g.max_score,
+          score: g.score,
+        })));
+
+        setFees((feesRes.data || []).map((f: any) => ({
+          fee_name:     f.fee_types?.name || "—",
+          amount_paid:  f.amount_paid,
+          payment_date: f.payment_date,
+        })));
+
+        setResults((resultsRes.data || []).map((r: any) => ({
+          exam_title:      r.exams?.title || "—",
+          score:           r.score,
+          total_questions: r.total_questions,
+          submitted_at:    r.submitted_at,
+        })));
+
+        setAnnouncements((annRes.data as AnnouncementItem[]) || []);
+      } catch (err: any) {
+        console.error("ParentDashboard loadChildData error:", err);
+      } finally {
+        setDataLoading(false);
+      }
     };
+
     loadChildData();
-  }, [selectedChild, schoolId, childSchoolId]);
+  }, [selectedChild, childSchoolId]);
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
