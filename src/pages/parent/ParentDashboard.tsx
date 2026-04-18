@@ -30,6 +30,9 @@ export default function ParentDashboard() {
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, late: 0 });
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
+  // School ID derived from child's profile — more reliable than useAuth() for parents
+  // because parents look up school via their child, not their own user_roles row
+  const [childSchoolId, setChildSchoolId] = useState<string | null>(null);
 
   // Load children linked to this parent
   useEffect(() => {
@@ -54,8 +57,10 @@ export default function ParentDashboard() {
           setChildren(childList);
           if (childList.length > 0) setSelectedChild(childList[0].student_id);
 
-          // Derive schoolId from first child if context is missing
-          const effectiveSchoolId = schoolId || (profiles?.[0] as any)?.school_id;
+          // Derive schoolId from first child's profile — parents may not have
+          // school_id populated in user_roles if created before that column was added
+          const effectiveSchoolId = schoolId || (profiles?.[0] as any)?.school_id || null;
+          setChildSchoolId(effectiveSchoolId);
 
           // Load active session & term
           if (effectiveSchoolId) {
@@ -87,7 +92,12 @@ export default function ParentDashboard() {
         supabase.from("grades").select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
         supabase.from("fee_payments").select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)").eq("student_id", selectedChild).order("created_at", { ascending: false }),
         supabase.from("exam_attempts").select("score, total_questions, submitted_at, exams:exam_id(title)").eq("student_id", selectedChild).eq("is_submitted", true).order("submitted_at", { ascending: false }),
-        supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).eq("school_id", schoolId!).order("created_at", { ascending: false }).limit(10),
+        // Use childSchoolId derived from child's profile — schoolId from useAuth()
+        // may be null for parents whose user_roles row lacks school_id
+        ...(childSchoolId
+          ? [supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).eq("school_id", childSchoolId).order("created_at", { ascending: false }).limit(10)]
+          : [supabase.from("announcements").select("id, title, content, created_at").eq("is_active", true).order("created_at", { ascending: false }).limit(10)]
+        )[0],
       ]);
 
       const attRecords = (attRes.data || []) as AttendanceRecord[];
@@ -122,7 +132,7 @@ export default function ParentDashboard() {
       setDataLoading(false);
     };
     loadChildData();
-  }, [selectedChild, schoolId]);
+  }, [selectedChild, schoolId, childSchoolId]);
 
   if (loading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
