@@ -47,6 +47,18 @@ export default function Fees() {
   const [payNotes, setPayNotes] = useState("");
   const [paySaving, setPaySaving] = useState(false);
 
+  // Pre-fill payment dialog when navigated from debtors page (?student=<id>)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const preStudent = params.get("student");
+    if (preStudent) {
+      setPayStudent(preStudent);
+      setPayDialog(true);
+      // Clean URL without reload
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   useEffect(() => {
     if (!schoolId) return;
     const init = async () => {

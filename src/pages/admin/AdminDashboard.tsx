@@ -7,6 +7,7 @@ import { Users, BookOpen, FileText, ClipboardList, UserCheck, Heart, TrendingUp,
 export default function AdminDashboard() {
   const { schoolId } = useAuth();
   const [stats, setStats] = useState({ students: 0, subjects: 0, exams: 0, attempts: 0, instructors: 0, parents: 0, classes: 0 });
+  const [feeStats, setFeeStats] = useState({ total_expected: 0, total_collected: 0, total_outstanding: 0, non_payers: 0 });
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,24 @@ export default function AdminDashboard() {
       });
       if (sess.data) setActiveSession(sess.data.name);
       if (term.data) setActiveTerm(term.data.name);
+
+      // Fetch active term id for fee totals
+      const activeTerm = await supabase
+        .from("terms").select("id").eq("school_id", schoolId).eq("is_active", true).maybeSingle();
+      const termId = activeTerm.data?.id ?? null;
+      const feeRes = await supabase.rpc("get_school_fee_totals", {
+        _school_id: schoolId,
+        _term_id:   termId,
+      } as any);
+      if (feeRes.data && (feeRes.data as any[]).length > 0) {
+        const f = (feeRes.data as any[])[0];
+        setFeeStats({
+          total_expected:    Number(f.total_expected)    || 0,
+          total_collected:   Number(f.total_collected)   || 0,
+          total_outstanding: Number(f.total_outstanding) || 0,
+          non_payers:        Number(f.non_payers)        || 0,
+        });
+      }
       setLoading(false);
     };
     fetchStats();
@@ -50,6 +69,33 @@ export default function AdminDashboard() {
     { label: "Exams", value: stats.exams, icon: FileText, color: "bg-cyan-500", light: "bg-cyan-50 dark:bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400", to: "/admin/exams" },
     { label: "Submissions", value: stats.attempts, icon: ClipboardList, color: "bg-orange-500", light: "bg-orange-50 dark:bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", to: "/admin/results" },
     { label: "Growth", value: `${stats.students > 0 ? "+" + stats.students : "0"}`, icon: TrendingUp, color: "bg-teal-500", light: "bg-teal-50 dark:bg-teal-500/10", text: "text-teal-600 dark:text-teal-400", to: "/admin/students" },
+  ];
+
+  const feeCards = [
+    {
+      label: "Expected",
+      value: feeStats.total_expected >= 1000
+        ? `₦${(feeStats.total_expected / 1000).toFixed(0)}k`
+        : `₦${feeStats.total_expected.toLocaleString()}`,
+      sub: "Total fees this term",
+      colorClass: "from-blue-600 to-cyan-600",
+    },
+    {
+      label: "Collected",
+      value: feeStats.total_collected >= 1000
+        ? `₦${(feeStats.total_collected / 1000).toFixed(0)}k`
+        : `₦${feeStats.total_collected.toLocaleString()}`,
+      sub: "Payments received",
+      colorClass: "from-emerald-600 to-teal-600",
+    },
+    {
+      label: "Outstanding",
+      value: feeStats.total_outstanding >= 1000
+        ? `₦${(feeStats.total_outstanding / 1000).toFixed(0)}k`
+        : `₦${feeStats.total_outstanding.toLocaleString()}`,
+      sub: `${feeStats.non_payers} students unpaid`,
+      colorClass: "from-red-600 to-rose-600",
+    },
   ];
 
   const quickLinks = [
@@ -104,6 +150,23 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground mt-0.5 font-medium">{stat.label}</p>
           </Link>
         ))}
+      </div>
+
+      {/* Fee Financial Overview */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-foreground">Financial Overview</h2>
+          <a href="/admin/debtors" className="text-xs text-primary hover:underline">View debtors →</a>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {feeCards.map(card => (
+            <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.colorClass} p-4 text-white shadow-sm`}>
+              <p className="text-xl font-extrabold leading-none">{loading ? "—" : card.value}</p>
+              <p className="text-xs font-medium opacity-80 mt-1">{card.label}</p>
+              <p className="text-xs opacity-60 mt-0.5">{card.sub}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Quick Actions */}
