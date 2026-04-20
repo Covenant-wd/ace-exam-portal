@@ -36,6 +36,7 @@ const Attendance = lazy(() => import("./pages/admin/Attendance"));
 const Timetable = lazy(() => import("./pages/admin/Timetable"));
 const Grades = lazy(() => import("./pages/admin/Grades"));
 const Fees = lazy(() => import("./pages/admin/Fees"));
+const Debtors = lazy(() => import("./pages/admin/Debtors"));
 const Announcements = lazy(() => import("./pages/admin/Announcements"));
 const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
 const StudentExams = lazy(() => import("./pages/student/StudentExams"));
@@ -133,6 +134,7 @@ function AppRoutes() {
         <Route path="/admin/timetable" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/grades" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/fees" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Fees /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/debtors" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Debtors /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Announcements /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/parents" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Parents /></DashboardLayout></ProtectedRoute>} />
 
