@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
@@ -24,6 +24,7 @@ const adminLinks = [
   { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
   { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
   { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
+  { to: "/admin/debtors", label: "Debtors", icon: AlertTriangle, group: "Records" },
   { to: "/admin/announcements", label: "Announcements", icon: Megaphone, group: "Records" },
   { to: "/admin/settings", label: "Settings", icon: Settings, group: "System" },
 ];
