@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useSubscription } from "@/hooks/useSubscription";
+import { SubscriptionGuard } from "@/components/SubscriptionComponents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +44,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { info: subInfo } = useSubscription(schoolId);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -271,7 +274,7 @@ export default function Students() {
           <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }}>
             Bulk Promote
           </Button>
-          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button>
+          <SubscriptionGuard info={subInfo} action="add_student"><Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button></SubscriptionGuard>
         </div>
       </div>
 

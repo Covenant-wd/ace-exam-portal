@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useSubscription } from "@/hooks/useSubscription";
+import { SubscriptionGuard } from "@/components/SubscriptionComponents";
 import { useAuth } from "@/lib/auth";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -41,6 +43,7 @@ interface ClassItem { id: string; name: string; }
 
 export default function Exams() {
   const { user, schoolId } = useAuth();
+  const { info: subInfo } = useSubscription(schoolId);
   const { schoolName } = useSchoolName();
   const location = useLocation();
   const basePath = location.pathname.startsWith("/instructor") ? "/instructor" : "/admin";
@@ -85,6 +88,11 @@ export default function Exams() {
 
   const handleSave = async () => {
     if (!title.trim() || !subjectId || !schoolId) { toast.error("Title and subject are required"); return; }
+    // Subscription guard: block new exam creation when restricted/suspended
+    if (!editing && subInfo && !subInfo.canCreate) {
+      toast.warning("Feature restricted", { description: "Creating exams is disabled. Please renew your subscription." });
+      return;
+    }
     setSaving(true);
     const payload: any = {
       title, description, subject_id: subjectId,
@@ -116,6 +124,10 @@ export default function Exams() {
 
   const togglePublish = async (exam: Exam) => {
     const newPublished = !exam.is_published;
+    if (newPublished && subInfo && !subInfo.canPublish) {
+      toast.warning("Publishing restricted", { description: "Publishing exams is disabled. Please renew your subscription." });
+      return;
+    }
     await supabase.from("exams").update({ is_published: newPublished }).eq("id", exam.id);
     // Send email notification when publishing
     if (newPublished && schoolId) {
