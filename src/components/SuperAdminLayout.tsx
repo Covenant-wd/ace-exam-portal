@@ -2,13 +2,14 @@ import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, LogOut, Menu, School, ShieldCheck, Users, Briefcase } from "lucide-react";
+import { LogOut, Menu, School, ShieldCheck, Users, Briefcase, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/super-admin", label: "Schools", icon: School },
-  { to: "/super-admin/users", label: "All Users", icon: Users },
-  { to: "/super-admin/outreach-officers", label: "Outreach Officers", icon: Briefcase },
+  { to: "/super-admin",                  label: "Schools",           icon: School      },
+  { to: "/super-admin/subscriptions",    label: "Subscriptions",     icon: CreditCard  },
+  { to: "/super-admin/users",            label: "All Users",         icon: Users       },
+  { to: "/super-admin/outreach-officers",label: "Outreach Officers", icon: Briefcase   },
 ];
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
