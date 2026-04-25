@@ -17,6 +17,7 @@ const SuperAdminLogin = lazy(() => import("./pages/super-admin/SuperAdminLogin")
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard"));
 const SuperAdminUsers = lazy(() => import("./pages/super-admin/SuperAdminUsers"));
 const OutreachOfficers = lazy(() => import("./pages/super-admin/OutreachOfficers"));
+const SuperAdminSubscriptions = lazy(() => import("./pages/super-admin/SuperAdminSubscriptions"));
 const OutreachLogin = lazy(() => import("./pages/outreach/OutreachLogin"));
 const OutreachDashboard = lazy(() => import("./pages/outreach/OutreachDashboard"));
 const OutreachSchools = lazy(() => import("./pages/outreach/OutreachSchools"));
@@ -104,6 +105,7 @@ function AppRoutes() {
         {/* Super Admin */}
         <Route path="/super-admin/login" element={<SuperAdminLogin />} />
         <Route path="/super-admin" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
+        <Route path="/super-admin/subscriptions" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminSubscriptions /></SuperAdminLayout></ProtectedRoute>} />
         <Route path="/super-admin/users" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><SuperAdminUsers /></SuperAdminLayout></ProtectedRoute>} />
         <Route path="/super-admin/outreach-officers" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLayout><OutreachOfficers /></SuperAdminLayout></ProtectedRoute>} />
 
