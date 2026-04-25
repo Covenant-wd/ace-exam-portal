@@ -892,6 +892,11 @@ export type Database = {
           logo_url: string | null
           name: string
           slug: string
+          subscription_plan: string
+          subscription_status: Database["public"]["Enums"]["subscription_status"]
+          expiry_date: string | null
+          last_payment_date: string | null
+          monthly_fee: number | null
         }
         Insert: {
           created_at?: string
@@ -899,6 +904,11 @@ export type Database = {
           logo_url?: string | null
           name: string
           slug: string
+          subscription_plan?: string
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          expiry_date?: string | null
+          last_payment_date?: string | null
+          monthly_fee?: number | null
         }
         Update: {
           created_at?: string
@@ -906,8 +916,63 @@ export type Database = {
           logo_url?: string | null
           name?: string
           slug?: string
+          subscription_plan?: string
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          expiry_date?: string | null
+          last_payment_date?: string | null
+          monthly_fee?: number | null
         }
         Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          school_id: string
+          plan: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          amount_paid: number | null
+          payment_reference: string | null
+          payment_date: string
+          expiry_date: string
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          school_id: string
+          plan?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          amount_paid?: number | null
+          payment_reference?: string | null
+          payment_date?: string
+          expiry_date: string
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          school_id?: string
+          plan?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          amount_paid?: number | null
+          payment_reference?: string | null
+          payment_date?: string
+          expiry_date?: string
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sessions: {
         Row: {
@@ -1400,6 +1465,7 @@ export type Database = {
         | "parent"
         | "outreach_officer"
       attendance_status: "present" | "absent" | "late" | "excused"
+      subscription_status: "active" | "grace" | "restricted" | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never
