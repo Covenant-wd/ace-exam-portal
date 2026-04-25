@@ -79,8 +79,25 @@ export default function SuperAdminDashboard() {
     setLoading(true);
     const { data, error } = await supabase.rpc("get_all_schools_with_subscription") as any;
     if (error) {
-      // Fallback: old schools query without subscription columns (backward-compatible)
-      const { data: plain } = await supabase.from("schools").select("*").order("created_at", { ascending: false });
+      // Fallback: query schools + count students via user_roles
+      const { data: plain } = await supabase
+        .from("schools")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      // Count students per school from user_roles (role = 'student')
+      const { data: roleCounts } = await supabase
+        .from("user_roles")
+        .select("school_id")
+        .eq("role", "student");
+
+      const countBySchool: Record<string, number> = {};
+      (roleCounts || []).forEach((r: any) => {
+        if (r.school_id) {
+          countBySchool[r.school_id] = (countBySchool[r.school_id] ?? 0) + 1;
+        }
+      });
+
       setSchools((plain || []).map((s: any) => ({
         ...s,
         subscription_plan: s.subscription_plan ?? "trial",
@@ -89,7 +106,7 @@ export default function SuperAdminDashboard() {
         last_amount_paid:  s.last_amount_paid ?? 0,
         payment_reference: s.payment_reference ?? null,
         days_past_expiry:  0,
-        student_count:     0,
+        student_count:     countBySchool[s.id] ?? 0,  // ← real count, not hardcoded 0
       })));
     } else {
       setSchools((data as SchoolItem[]) || []);
