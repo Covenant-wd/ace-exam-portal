@@ -896,7 +896,8 @@ export type Database = {
           subscription_status: Database["public"]["Enums"]["subscription_status"]
           expiry_date: string | null
           last_payment_date: string | null
-          monthly_fee: number | null
+          last_amount_paid: number | null
+          payment_reference: string | null
         }
         Insert: {
           created_at?: string
@@ -908,7 +909,8 @@ export type Database = {
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
           expiry_date?: string | null
           last_payment_date?: string | null
-          monthly_fee?: number | null
+          last_amount_paid?: number | null
+          payment_reference?: string | null
         }
         Update: {
           created_at?: string
@@ -920,7 +922,8 @@ export type Database = {
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
           expiry_date?: string | null
           last_payment_date?: string | null
-          monthly_fee?: number | null
+          last_amount_paid?: number | null
+          payment_reference?: string | null
         }
         Relationships: []
       }
