@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useSubscription } from "@/hooks/useSubscription";
-import { SubscriptionGuard } from "@/components/SubscriptionComponents";
 import { useAuth } from "@/lib/auth";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, FileQuestion } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, FileQuestion, Lock } from "lucide-react";
 import { sendExamPublishedEmail, isNotificationEnabled } from "@/lib/email";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface Exam {
   id: string;
@@ -43,8 +42,8 @@ interface ClassItem { id: string; name: string; }
 
 export default function Exams() {
   const { user, schoolId } = useAuth();
-  const { info: subInfo } = useSubscription(schoolId);
   const { schoolName } = useSchoolName();
+  const { canCreateExam, canPublishExam, isRestricted, isSuspended } = useSubscription();
   const location = useLocation();
   const basePath = location.pathname.startsWith("/instructor") ? "/instructor" : "/admin";
   const [exams, setExams] = useState<Exam[]>([]);
@@ -87,12 +86,8 @@ export default function Exams() {
   useEffect(() => { fetchData(); }, [schoolId]);
 
   const handleSave = async () => {
+    if (!canCreateExam()) return;
     if (!title.trim() || !subjectId || !schoolId) { toast.error("Title and subject are required"); return; }
-    // Subscription guard: block new exam creation when restricted/suspended
-    if (!editing && subInfo && !subInfo.canCreate) {
-      toast.warning("Feature restricted", { description: "Creating exams is disabled. Please renew your subscription." });
-      return;
-    }
     setSaving(true);
     const payload: any = {
       title, description, subject_id: subjectId,
@@ -124,10 +119,7 @@ export default function Exams() {
 
   const togglePublish = async (exam: Exam) => {
     const newPublished = !exam.is_published;
-    if (newPublished && subInfo && !subInfo.canPublish) {
-      toast.warning("Publishing restricted", { description: "Publishing exams is disabled. Please renew your subscription." });
-      return;
-    }
+    if (newPublished && !canPublishExam()) return;
     await supabase.from("exams").update({ is_published: newPublished }).eq("id", exam.id);
     // Send email notification when publishing
     if (newPublished && schoolId) {
@@ -180,7 +172,18 @@ export default function Exams() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold">Exams</h1>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button onClick={reset}><Plus className="mr-2 h-4 w-4" />Create Exam</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button
+              onClick={reset}
+              disabled={isRestricted || isSuspended}
+              title={isRestricted || isSuspended ? "Subscription expired — renew to create exams" : undefined}
+            >
+              {isRestricted || isSuspended
+                ? <><Lock className="mr-2 h-4 w-4" />Create Exam</>
+                : <><Plus className="mr-2 h-4 w-4" />Create Exam</>
+              }
+            </Button>
+          </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle>{editing ? "Edit Exam" : "New Exam"}</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto pr-1">

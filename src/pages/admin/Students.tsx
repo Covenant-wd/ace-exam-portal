@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useSubscription } from "@/hooks/useSubscription";
-import { SubscriptionGuard } from "@/components/SubscriptionComponents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useSubscription } from "@/hooks/useSubscription";
 
 
 interface Student {
@@ -44,7 +43,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
-  const { info: subInfo } = useSubscription(schoolId);
+  const { canAddStudent, isRestricted, isSuspended } = useSubscription();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -138,6 +137,7 @@ export default function Students() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAddStudent()) return;
     if (!form.first_name || !form.last_name || !form.email) { toast.error("First name, last name and email are required"); return; }
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
@@ -224,6 +224,7 @@ export default function Students() {
   };
 
   const handleBulkPromote = async () => {
+    if (!canAddStudent()) return;
     if (!promoFrom || !promoTo) { toast.error("Select both classes"); return; }
     if (promoFrom === promoTo) { toast.error("Source and destination must differ"); return; }
     setPromoSaving(true);
@@ -236,6 +237,7 @@ export default function Students() {
   };
 
   const handleMoveStudents = async () => {
+    if (!canAddStudent()) return;
     if (!moveToClass || selectedStudents.length === 0) { toast.error("Select students and target class"); return; }
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents).eq("school_id", schoolId!);
@@ -268,13 +270,16 @@ export default function Students() {
           <p className="text-muted-foreground">{students.length} student{students.length !== 1 ? "s" : ""} registered</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }}>
+          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }} disabled={isRestricted || isSuspended}>
             <ArrowRightLeft className="mr-2 h-4 w-4" />Move Students
           </Button>
-          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }}>
+          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }} disabled={isRestricted || isSuspended}>
             Bulk Promote
           </Button>
-          <SubscriptionGuard info={subInfo} action="add_student"><Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button></SubscriptionGuard>
+          <Button onClick={openCreate} disabled={isRestricted || isSuspended}>
+            {isRestricted || isSuspended ? <Lock className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+            Add Student
+          </Button>
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendAnnouncementEmail, isNotificationEnabled } from "@/lib/email";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,13 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Megaphone, Trash2, Edit } from "lucide-react";
+import { Loader2, Plus, Megaphone, Trash2, Edit, Lock } from "lucide-react";
 
 interface Announcement { id: string; title: string; content: string; target_role: string; target_class_id: string | null; is_active: boolean; created_at: string; }
 interface ClassItem { id: string; name: string; }
 
 export default function Announcements() {
   const { user, schoolId } = useAuth();
+  const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [items, setItems] = useState<Announcement[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,7 @@ export default function Announcements() {
   };
 
   const handleSave = async () => {
+    if (!canWrite()) return;
     if (!title || !schoolId || !user) return;
     setSaving(true);
     try {
@@ -90,6 +93,7 @@ export default function Announcements() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canWrite()) return;
     if (!confirm("Delete this announcement?")) return;
     await supabase.from("announcements").delete().eq("id", id);
     setItems(items.filter((a) => a.id !== id));
@@ -97,6 +101,7 @@ export default function Announcements() {
   };
 
   const toggleActive = async (item: Announcement) => {
+    if (!canWrite()) return;
     await supabase.from("announcements").update({ is_active: !item.is_active } as any).eq("id", item.id);
     setItems(items.map((a) => a.id === item.id ? { ...a, is_active: !a.is_active } : a));
   };
@@ -110,7 +115,13 @@ export default function Announcements() {
           <h1 className="text-3xl font-bold">Announcements</h1>
           <p className="text-muted-foreground">Publish announcements for students and staff</p>
         </div>
-        <Button onClick={() => { setEditing(null); setTitle(""); setContent(""); setTargetRole("all"); setTargetClass(""); setDialog(true); }}><Plus className="mr-2 h-4 w-4" /> New Announcement</Button>
+        <Button
+          disabled={isRestricted || isSuspended}
+          onClick={() => { setEditing(null); setTitle(""); setContent(""); setTargetRole("all"); setTargetClass(""); setDialog(true); }}
+        >
+          {isRestricted || isSuspended ? <Lock className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+          New Announcement
+        </Button>
       </div>
 
       {items.length === 0 ? (
@@ -129,9 +140,9 @@ export default function Announcements() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</Button>
-                  <Button variant="ghost" size="sm" onClick={() => { setEditing(item); setTitle(item.title); setContent(item.content); setTargetRole(item.target_role); setTargetClass(item.target_class_id || ""); setDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
-                  <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="sm" disabled={isRestricted || isSuspended} onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</Button>
+                  <Button variant="ghost" size="sm" disabled={isRestricted || isSuspended} onClick={() => { setEditing(item); setTitle(item.title); setContent(item.content); setTargetRole(item.target_role); setTargetClass(item.target_class_id || ""); setDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="sm" disabled={isRestricted || isSuspended} className="text-destructive" onClick={() => handleDelete(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
               </CardHeader>
               <CardContent><p className="text-sm text-muted-foreground whitespace-pre-wrap">{item.content}</p></CardContent>

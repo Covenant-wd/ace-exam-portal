@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendFeePaymentEmail, isNotificationEnabled } from "@/lib/email";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit } from "lucide-react";
+import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit, Lock } from "lucide-react";
 
 interface FeeType { id: string; name: string; amount: number; term_id: string | null; class_id: string | null; description: string; is_active: boolean; }
 interface FeePayment { id: string; student_id: string; fee_type_id: string; amount_paid: number; payment_date: string; payment_method: string; receipt_number: string; notes: string; }
@@ -22,6 +23,7 @@ interface StudentProfile { user_id: string; full_name: string; }
 
 export default function Fees() {
   const { user, schoolId } = useAuth();
+  const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -91,6 +93,7 @@ export default function Fees() {
   };
 
   const handleSaveFeeType = async () => {
+    if (!canWrite()) return;
     if (!feeName || !feeAmount || !schoolId) { toast.error("Name and amount required"); return; }
     setSaving(true);
     try {
@@ -113,6 +116,7 @@ export default function Fees() {
   };
 
   const handleDeleteFeeType = async (id: string) => {
+    if (!canWrite()) return;
     if (!confirm("Delete this fee type?")) return;
     await supabase.from("fee_types").delete().eq("id", id);
     setFeeTypes(feeTypes.filter((f) => f.id !== id));
@@ -120,6 +124,7 @@ export default function Fees() {
   };
 
   const handleRecordPayment = async () => {
+    if (!canWrite()) return;
     if (!payStudent || !payFeeType || !payAmount || !schoolId || !user) { toast.error("All fields required"); return; }
     setPaySaving(true);
     try {
@@ -188,7 +193,9 @@ export default function Fees() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Fee Types</CardTitle>
-          <Button size="sm" onClick={() => { setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc(""); setFeeDialog(true); }}><Plus className="mr-1 h-4 w-4" /> Add Fee Type</Button>
+          <Button size="sm" disabled={isRestricted || isSuspended} onClick={() => { setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc(""); setFeeDialog(true); }}>
+            {isRestricted || isSuspended ? <Lock className="mr-1 h-4 w-4" /> : <Plus className="mr-1 h-4 w-4" />} Add Fee Type
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -217,7 +224,9 @@ export default function Fees() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Payments</CardTitle>
-          <Button size="sm" onClick={() => setPayDialog(true)}><Plus className="mr-1 h-4 w-4" /> Record Payment</Button>
+          <Button size="sm" disabled={isRestricted || isSuspended} onClick={() => setPayDialog(true)}>
+            {isRestricted || isSuspended ? <Lock className="mr-1 h-4 w-4" /> : <Plus className="mr-1 h-4 w-4" />} Record Payment
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
