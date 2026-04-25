@@ -103,10 +103,10 @@ export default function SuperAdminDashboard() {
   // ── Dashboard metrics ──────────────────────────────────────────
   const metrics = {
     total:      schools.length,
-    active:     schools.filter(s => s.computed_status === "active").length,
-    grace:      schools.filter(s => s.computed_status === "grace").length,
-    restricted: schools.filter(s => s.computed_status === "restricted").length,
-    suspended:  schools.filter(s => s.computed_status === "suspended").length,
+    active:     schools.filter(s => s.stored_status === "active").length,
+    grace:      schools.filter(s => s.stored_status === "grace").length,
+    restricted: schools.filter(s => s.stored_status === "restricted").length,
+    suspended:  schools.filter(s => s.stored_status === "suspended").length,
     expiringSoon: schools.filter(s => s.days_until_expiry !== null && s.days_until_expiry >= 0 && s.days_until_expiry <= 14).length,
   };
 
@@ -115,7 +115,7 @@ export default function SuperAdminDashboard() {
     const matchSearch = !search ||
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.slug.toLowerCase().includes(search.toLowerCase());
-    const matchTab = tab === "all" || s.computed_status === tab;
+    const matchTab = tab === "all" || s.stored_status === tab;
     return matchSearch && matchTab;
   });
 
@@ -187,7 +187,8 @@ export default function SuperAdminDashboard() {
   const openSubDialog = (school: SchoolItem) => {
     setSubSchool(school);
     setSubPlan((school.subscription_plan as SubscriptionPlan) ?? "trial");
-    setSubStatus((school.computed_status as SubscriptionStatus) ?? "active");
+    // Pre-fill with the STORED status (what's actually active, including overrides)
+    setSubStatus((school.stored_status as SubscriptionStatus) ?? "active");
     setSubExpiry(school.expiry_date ?? "");
     setSubPayDate(school.last_payment_date ?? "");
     setSubNotes("");
@@ -201,7 +202,7 @@ export default function SuperAdminDashboard() {
       const { error } = await supabase.rpc("update_school_subscription", {
         _school_id:         subSchool.id,
         _plan:              subPlan,
-        _status:            subStatus,
+        _status:            subStatus,      // ← explicit override stored in DB
         _expiry_date:       subExpiry,
         _last_payment_date: subPayDate || null,
         _notes:             subNotes || null,
@@ -217,11 +218,11 @@ export default function SuperAdminDashboard() {
   const quickStatus = async (school: SchoolItem, status: SubscriptionStatus) => {
     try {
       const { error } = await supabase.rpc("update_school_subscription", {
-        _school_id:  school.id,
-        _plan:       school.subscription_plan,
-        _status:     status,
+        _school_id:   school.id,
+        _plan:        school.subscription_plan,
+        _status:      status,               // ← explicit override
         _expiry_date: school.expiry_date ?? new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-        _notes:      `Quick override to ${status} by super admin`,
+        _notes:       `Quick override to ${status} by super admin`,
       } as any);
       if (error) throw error;
       toast.success(`${school.name} → ${status}`);
@@ -328,7 +329,7 @@ export default function SuperAdminDashboard() {
                 </TableRow>
               ) : (
                 filtered.map(school => {
-                  const status = school.computed_status as SubscriptionStatus;
+                  const status = school.stored_status as SubscriptionStatus;
                   const rowClass = status === "suspended" ? "bg-red-50/30 dark:bg-red-950/10" :
                                    status === "restricted" ? "bg-orange-50/20 dark:bg-orange-950/10" :
                                    status === "grace" ? "bg-amber-50/20 dark:bg-amber-950/10" : "";
@@ -505,21 +506,37 @@ export default function SuperAdminDashboard() {
               <Label>Notes (optional)</Label>
               <Input value={subNotes} onChange={e => setSubNotes(e.target.value)} placeholder="e.g. Payment received via bank transfer" />
             </div>
-            {/* Preview what computed status will be */}
+            {/* Show computed vs override status */}
             {subExpiry && (
-              <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                <p className="font-medium mb-1">Computed status preview:</p>
-                <p className="text-muted-foreground text-xs">
-                  {(() => {
-                    const today = new Date();
-                    const expiry = new Date(subExpiry);
-                    const diff = Math.floor((today.getTime() - expiry.getTime()) / 86400000);
-                    if (diff <= 0) return "✓ Active — within expiry date";
-                    if (diff <= 7) return "⚠ Grace period — " + diff + " days past expiry";
-                    if (diff <= 14) return "⛔ Restricted — " + diff + " days past expiry";
-                    return "🚫 Suspended — " + diff + " days past expiry (will override your status selection)";
-                  })()}
-                </p>
+              <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Status Preview</p>
+                {(() => {
+                  const today   = new Date(); today.setHours(0,0,0,0);
+                  const expiry  = new Date(subExpiry); expiry.setHours(0,0,0,0);
+                  const diff    = Math.floor((today.getTime() - expiry.getTime()) / 86400000);
+                  const computed = diff <= 0 ? "active" : diff <= 7 ? "grace" : diff <= 14 ? "restricted" : "suspended";
+                  const isOverride = subStatus !== computed;
+                  return (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Date-computed:</span>{" "}
+                        <span className="capitalize">{computed}</span>
+                        {diff > 0 ? ` (${diff}d past expiry)` : diff === 0 ? " (expires today)" : ` (${Math.abs(diff)}d remaining)`}
+                      </p>
+                      {isOverride && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                          ⚠ You are manually overriding the status to "{subStatus}".
+                          This override will remain until you change it again.
+                        </p>
+                      )}
+                      {!isOverride && (
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                          ✓ Status matches date computation — no override active.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
             <Button onClick={handleSaveSub} disabled={subSaving} className="w-full">
