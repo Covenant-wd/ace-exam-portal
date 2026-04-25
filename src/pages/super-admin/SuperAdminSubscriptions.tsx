@@ -44,6 +44,7 @@ interface SummaryRow {
   subscription_status: SubscriptionStatus;
   expiry_date:         string | null;
   last_payment_date:   string | null;
+  last_amount_paid:    number;
   days_until_expiry:   number | null;
 }
 
@@ -94,7 +95,7 @@ export default function SuperAdminSubscriptions() {
       // School subscription summary (for KPIs + expiry warnings)
       const { data: schools } = await supabase
         .from("schools")
-        .select("id, name, slug, subscription_plan, subscription_status, expiry_date, last_payment_date");
+        .select("id, name, slug, subscription_plan, subscription_status, expiry_date, last_payment_date, last_amount_paid");
 
       setSummary(
         (schools ?? []).map((s: any) => ({
@@ -105,6 +106,7 @@ export default function SuperAdminSubscriptions() {
           subscription_status: s.subscription_status ?? "active",
           expiry_date:         s.expiry_date         ?? null,
           last_payment_date:   s.last_payment_date   ?? null,
+          last_amount_paid:    Number(s.last_amount_paid) || 0,
           days_until_expiry:   s.expiry_date
             ? Math.floor((new Date(s.expiry_date).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86_400_000)
             : null,
@@ -210,6 +212,7 @@ export default function SuperAdminSubscriptions() {
                   <TableHead>Status</TableHead>
                   <TableHead>Expiry</TableHead>
                   <TableHead>Last Payment</TableHead>
+                  <TableHead>Last Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -221,6 +224,12 @@ export default function SuperAdminSubscriptions() {
                       <TableCell><StatusBadge status={s.subscription_status} /></TableCell>
                       <TableCell className="text-sm text-muted-foreground">{fmt(s.expiry_date)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{fmt(s.last_payment_date)}</TableCell>
+                      <TableCell className="text-sm">
+                        {s.last_amount_paid > 0
+                          ? <span className="text-emerald-600 dark:text-emerald-400 font-medium">₦{s.last_amount_paid.toLocaleString()}</span>
+                          : <span className="text-muted-foreground">No payment</span>
+                        }
+                      </TableCell>
                     </TableRow>
                   ))}
               </TableBody>
