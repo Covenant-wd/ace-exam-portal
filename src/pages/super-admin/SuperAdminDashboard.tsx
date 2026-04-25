@@ -30,6 +30,8 @@ interface SchoolItem {
   computed_status:   string;
   expiry_date:       string | null;
   last_payment_date: string | null;
+  last_amount_paid:  number;
+  payment_reference: string | null;
   days_until_expiry: number | null;
   days_past_expiry:  number;
   student_count:     number;
@@ -38,13 +40,6 @@ interface SchoolItem {
 
 const PLAN_OPTIONS: SubscriptionPlan[] = ["trial", "basic", "standard", "premium"];
 const STATUS_OPTIONS: SubscriptionStatus[] = ["active", "grace", "restricted", "suspended"];
-
-const PLAN_PRICES: Record<SubscriptionPlan, string> = {
-  trial: "Free",
-  basic: "₦15,000/mo",
-  standard: "₦30,000/mo",
-  premium: "₦60,000/mo",
-};
 
 export default function SuperAdminDashboard() {
   const { user } = useAuth();
@@ -75,6 +70,8 @@ export default function SuperAdminDashboard() {
   const [subStatus,      setSubStatus]      = useState<SubscriptionStatus>("active");
   const [subExpiry,      setSubExpiry]      = useState("");
   const [subPayDate,     setSubPayDate]     = useState("");
+  const [subAmount,      setSubAmount]      = useState("");
+  const [subRef,         setSubRef]         = useState("");
   const [subNotes,       setSubNotes]       = useState("");
   const [subSaving,      setSubSaving]      = useState(false);
 
@@ -89,6 +86,8 @@ export default function SuperAdminDashboard() {
         subscription_plan: s.subscription_plan ?? "trial",
         computed_status:   s.subscription_status ?? "active",
         stored_status:     s.subscription_status ?? "active",
+        last_amount_paid:  s.last_amount_paid ?? 0,
+        payment_reference: s.payment_reference ?? null,
         days_past_expiry:  0,
         student_count:     0,
       })));
@@ -187,10 +186,11 @@ export default function SuperAdminDashboard() {
   const openSubDialog = (school: SchoolItem) => {
     setSubSchool(school);
     setSubPlan((school.subscription_plan as SubscriptionPlan) ?? "trial");
-    // Pre-fill with the STORED status (what's actually active, including overrides)
     setSubStatus((school.stored_status as SubscriptionStatus) ?? "active");
     setSubExpiry(school.expiry_date ?? "");
     setSubPayDate(school.last_payment_date ?? "");
+    setSubAmount("");
+    setSubRef(school.payment_reference ?? "");
     setSubNotes("");
     setSubDialog(true);
   };
@@ -202,9 +202,11 @@ export default function SuperAdminDashboard() {
       const { error } = await supabase.rpc("update_school_subscription", {
         _school_id:         subSchool.id,
         _plan:              subPlan,
-        _status:            subStatus,      // ← explicit override stored in DB
+        _status:            subStatus,
         _expiry_date:       subExpiry,
         _last_payment_date: subPayDate || null,
+        _amount_paid:       subAmount ? parseFloat(subAmount) : 0,
+        _payment_reference: subRef || null,
         _notes:             subNotes || null,
       } as any);
       if (error) throw error;
@@ -350,8 +352,12 @@ export default function SuperAdminDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="capitalize text-sm">{school.subscription_plan}</span>
-                        <p className="text-xs text-muted-foreground">{PLAN_PRICES[school.subscription_plan as SubscriptionPlan]}</p>
+                        <span className="capitalize text-sm font-medium">{school.subscription_plan}</span>
+                        {school.last_amount_paid > 0 && (
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                            ₦{school.last_amount_paid.toLocaleString()}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={status} />
@@ -476,7 +482,6 @@ export default function SuperAdminDashboard() {
                     {PLAN_OPTIONS.map(p => (
                       <SelectItem key={p} value={p}>
                         <span className="capitalize">{p}</span>
-                        <span className="ml-2 text-muted-foreground text-xs">{PLAN_PRICES[p]}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -492,19 +497,57 @@ export default function SuperAdminDashboard() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Expiry Date</Label>
-                <Input type="date" value={subExpiry} onChange={e => setSubExpiry(e.target.value)} />
+
+            {/* Payment amount — manually entered by super admin */}
+            <div className="rounded-lg border border-dashed border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-900/10 p-3 space-y-3">
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                Payment Details
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Amount Paid (₦)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="500"
+                      value={subAmount}
+                      onChange={e => setSubAmount(e.target.value)}
+                      placeholder="0"
+                      className="pl-7"
+                    />
+                  </div>
+                  {subSchool?.last_amount_paid > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Last: ₦{subSchool.last_amount_paid.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Payment Reference</Label>
+                  <Input
+                    value={subRef}
+                    onChange={e => setSubRef(e.target.value)}
+                    placeholder="e.g. TRF-2025-001"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Last Payment Date</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Payment Date</Label>
                 <Input type="date" value={subPayDate} onChange={e => setSubPayDate(e.target.value)} />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <div className="space-y-2">
+                <Label>Expiry Date <span className="text-destructive">*</span></Label>
+                <Input type="date" value={subExpiry} onChange={e => setSubExpiry(e.target.value)} />
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Input value={subNotes} onChange={e => setSubNotes(e.target.value)} placeholder="e.g. Payment received via bank transfer" />
+              <Label>Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input value={subNotes} onChange={e => setSubNotes(e.target.value)} placeholder="e.g. Annual renewal, bank transfer" />
             </div>
             {/* Show computed vs override status */}
             {subExpiry && (
