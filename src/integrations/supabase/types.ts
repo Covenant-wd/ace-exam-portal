@@ -1344,6 +1344,26 @@ export type Database = {
       }
     }
     Functions: {
+      get_all_schools_with_subscription: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          name: string
+          slug: string
+          logo_url: string | null
+          subscription_plan: string
+          stored_status: string
+          computed_status: string
+          expiry_date: string | null
+          last_payment_date: string | null
+          last_amount_paid: number
+          payment_reference: string | null
+          days_until_expiry: number | null
+          days_past_expiry: number
+          student_count: number
+          created_at: string
+        }[]
+      }
       confirm_user_email: { Args: { _user_id: string }; Returns: undefined }
       create_school_user: {
         Args: {
