@@ -6,10 +6,10 @@ import { LogOut, Menu, School, ShieldCheck, Users, Briefcase, CreditCard } from 
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/super-admin",                  label: "Schools",           icon: School      },
-  { to: "/super-admin/subscriptions",    label: "Subscriptions",     icon: CreditCard  },
-  { to: "/super-admin/users",            label: "All Users",         icon: Users       },
-  { to: "/super-admin/outreach-officers",label: "Outreach Officers", icon: Briefcase   },
+  { to: "/super-admin",                   label: "Schools",          icon: School      },
+  { to: "/super-admin/subscriptions",     label: "Payment History",  icon: CreditCard  },
+  { to: "/super-admin/users",             label: "All Users",        icon: Users       },
+  { to: "/super-admin/outreach-officers", label: "Outreach Officers",icon: Briefcase   },
 ];
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
