@@ -202,7 +202,7 @@ export default function SuperAdminDashboard() {
       const { error } = await supabase.rpc("update_school_subscription", {
         _school_id:         subSchool.id,
         _plan:              subPlan,
-        _status:            subStatus,
+        _status:            String(subStatus),          // TEXT — no enum cast needed
         _expiry_date:       subExpiry,
         _last_payment_date: subPayDate || null,
         _amount_paid:       subAmount ? parseFloat(subAmount) : 0,
@@ -222,7 +222,7 @@ export default function SuperAdminDashboard() {
       const { error } = await supabase.rpc("update_school_subscription", {
         _school_id:   school.id,
         _plan:        school.subscription_plan,
-        _status:      status,               // ← explicit override
+        _status:      String(status),                   // TEXT — no enum cast needed
         _expiry_date: school.expiry_date ?? new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
         _notes:       `Quick override to ${status} by super admin`,
       } as any);
