@@ -1,127 +1,145 @@
 /**
  * useSubscription
  *
- * Central hook that fetches a school's subscription status once
- * and caches it for the session. Every admin page imports this
- * to check whether actions are allowed.
+ * Central hook for subscription status. Used by:
+ *  - SubscriptionBanner    → shows warning/restricted/suspended banners
+ *  - SubscriptionGuard     → blocks suspended schools entirely
+ *  - Exams page            → canCreateExam(), canPublishExam()
+ *  - Students page         → canAddStudent()
+ *  - Grades page           → canPublishResults()
  *
- * The computed_status field is derived server-side from expiry_date
- * so it's always accurate regardless of when sync_subscription_statuses
- * last ran.
- *
- * Status hierarchy:
- *   active     → full access
- *   grace      → full access + warning banner
- *   restricted → read-only (no creating exams/students, no publishing)
- *   suspended  → blocked entirely (redirect to payment page)
+ * Status rules (mirror SQL compute_subscription_status()):
+ *   today <= expiry_date           → active
+ *   within 7 days after expiry    → grace      (full access + warning)
+ *   within 14 days after expiry   → restricted (read-only)
+ *   beyond 14 days after expiry   → suspended  (full block)
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 
 export type SubscriptionStatus = "active" | "grace" | "restricted" | "suspended";
-export type SubscriptionPlan   = "trial" | "basic" | "standard" | "premium";
 
 export interface SubscriptionInfo {
-  schoolId:         string;
-  plan:             SubscriptionPlan;
-  status:           SubscriptionStatus;  // computed_status — always fresh
-  expiryDate:       string | null;
-  lastPaymentDate:  string | null;
-  daysUntilExpiry:  number | null;
-  daysPastExpiry:   number;
-  // Derived permission flags — use these in feature guards
-  canCreate:        boolean;  // false when restricted or suspended
-  canPublish:       boolean;  // false when restricted or suspended
-  showBanner:       boolean;  // true when grace or restricted
-  isSuspended:      boolean;
-  isRestricted:     boolean;
-  isGrace:          boolean;
+  status: SubscriptionStatus;
+  plan: string;
+  expiryDate: string | null;
+  lastPaymentDate: string | null;
+  daysUntilExpiry: number | null;
 }
 
-interface State {
-  info: SubscriptionInfo | null;
-  loading: boolean;
-  error: string | null;
+/** Pure function — mirrors the SQL trigger. Used server-side and client-side. */
+export function computeStatus(expiryDate: string | null): SubscriptionStatus {
+  if (!expiryDate) return "active";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(expiryDate);
+  expiry.setHours(0, 0, 0, 0);
+  const diff = Math.floor((expiry.getTime() - today.getTime()) / 86_400_000);
+  if (diff >= 0)   return "active";
+  if (diff >= -7)  return "grace";
+  if (diff >= -14) return "restricted";
+  return "suspended";
 }
 
-// In-memory cache so we don't refetch on every component mount
-const cache = new Map<string, SubscriptionInfo>();
+const BYPASS_ROLES = new Set(["super_admin", "outreach_officer", "student", "parent"]);
 
-export function useSubscription(schoolId: string | null): State & { refetch: () => void } {
-  const [state, setState] = useState<State>({
-    info: schoolId ? (cache.get(schoolId) ?? null) : null,
-    loading: !schoolId ? false : !cache.has(schoolId!),
-    error: null,
-  });
+export function useSubscription() {
+  const { schoolId, role } = useAuth();
 
-  const fetch = useCallback(async () => {
-    if (!schoolId) return;
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const { data, error } = await supabase.rpc("get_school_subscription", {
-        _school_id: schoolId,
-      } as any);
+  // Only school admins + instructors are subject to subscription checks
+  const enabled = !!schoolId && !!role && !BYPASS_ROLES.has(role);
 
-      if (error) throw error;
-      if (!data || (data as any[]).length === 0) {
-        // School has no subscription row yet — treat as active (trial)
-        const info: SubscriptionInfo = {
-          schoolId,
-          plan:            "trial",
-          status:          "active",
-          expiryDate:      null,
-          lastPaymentDate: null,
-          daysUntilExpiry: null,
-          daysPastExpiry:  0,
-          canCreate:       true,
-          canPublish:      true,
-          showBanner:      false,
-          isSuspended:     false,
-          isRestricted:    false,
-          isGrace:         false,
-        };
-        cache.set(schoolId, info);
-        setState({ info, loading: false, error: null });
-        return;
+  const { data: subscription, isLoading } = useQuery<SubscriptionInfo>({
+    queryKey: ["subscription", schoolId],
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<SubscriptionInfo> => {
+      const { data, error } = await supabase
+        .from("schools")
+        .select("subscription_plan, expiry_date, last_payment_date")
+        .eq("id", schoolId!)
+        .single();
+
+      if (error || !data) {
+        return { status: "active", plan: "basic", expiryDate: null, lastPaymentDate: null, daysUntilExpiry: null };
       }
 
-      const row = (data as any[])[0];
-      const status = (row.computed_status ?? "active") as SubscriptionStatus;
+      const expiry: string | null = (data as any).expiry_date ?? null;
+      const status = computeStatus(expiry);
+      const daysUntilExpiry = expiry
+        ? Math.floor((new Date(expiry).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86_400_000)
+        : null;
 
-      const info: SubscriptionInfo = {
-        schoolId,
-        plan:            row.subscription_plan as SubscriptionPlan,
+      return {
         status,
-        expiryDate:      row.expiry_date      ?? null,
-        lastPaymentDate: row.last_payment_date ?? null,
-        daysUntilExpiry: row.days_until_expiry ?? null,
-        daysPastExpiry:  Number(row.days_past_expiry) || 0,
-        // Permission flags
-        canCreate:   status === "active" || status === "grace",
-        canPublish:  status === "active" || status === "grace",
-        showBanner:  status === "grace" || status === "restricted",
-        isSuspended: status === "suspended",
-        isRestricted: status === "restricted",
-        isGrace:     status === "grace",
+        plan: (data as any).subscription_plan ?? "basic",
+        expiryDate: expiry,
+        lastPaymentDate: (data as any).last_payment_date ?? null,
+        daysUntilExpiry,
       };
+    },
+  });
 
-      cache.set(schoolId, info);
-      setState({ info, loading: false, error: null });
-    } catch (err: any) {
-      setState(prev => ({ ...prev, loading: false, error: err.message }));
+  const status: SubscriptionStatus = enabled ? (subscription?.status ?? "active") : "active";
+
+  // ── Write-action guards ────────────────────────────────────────────────────
+
+  const canCreateExam = useCallback((): boolean => {
+    if (status === "restricted" || status === "suspended") {
+      toast.error("Subscription expired — renew to create or edit exams.");
+      return false;
     }
-  }, [schoolId]);
+    return true;
+  }, [status]);
 
-  useEffect(() => {
-    if (!schoolId || cache.has(schoolId)) return;
-    fetch();
-  }, [schoolId, fetch]);
+  const canPublishExam = useCallback((): boolean => {
+    if (status === "restricted" || status === "suspended") {
+      toast.error("Subscription expired — renew to publish exams.");
+      return false;
+    }
+    return true;
+  }, [status]);
 
-  return { ...state, refetch: fetch };
-}
+  const canAddStudent = useCallback((): boolean => {
+    if (status === "restricted" || status === "suspended") {
+      toast.error("Subscription expired — renew to add or edit students.");
+      return false;
+    }
+    return true;
+  }, [status]);
 
-/** Call this after a payment is recorded to bust the cache */
-export function clearSubscriptionCache(schoolId: string) {
-  cache.delete(schoolId);
+  const canPublishResults = useCallback((): boolean => {
+    if (status === "restricted" || status === "suspended") {
+      toast.error("Subscription expired — renew to publish results or grades.");
+      return false;
+    }
+    return true;
+  }, [status]);
+
+  const canWrite = useCallback((): boolean => {
+    if (status === "restricted" || status === "suspended") {
+      toast.error("Your subscription has expired. Please renew to make changes.");
+      return false;
+    }
+    return true;
+  }, [status]);
+
+  return {
+    subscription,
+    status,
+    isLoading,
+    isActive:     status === "active",
+    isGrace:      status === "grace",
+    isRestricted: status === "restricted",
+    isSuspended:  status === "suspended",
+    canCreateExam,
+    canPublishExam,
+    canAddStudent,
+    canPublishResults,
+    canWrite,
+  };
 }
