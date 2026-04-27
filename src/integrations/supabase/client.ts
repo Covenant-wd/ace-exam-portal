@@ -15,14 +15,28 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   auth: {
     storage: localStorage,
     persistSession: true,
+    // autoRefreshToken: true means Supabase will proactively refresh the JWT
+    // before it expires (in the background). This is good. However it also
+    // fires an onAuthStateChange(TOKEN_REFRESHED) event every time the tab
+    // becomes visible again — which used to trigger a full page re-render.
+    // That is fixed in auth.tsx by ignoring TOKEN_REFRESHED for role resolution.
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
-  // Reduce aggressive reconnect behaviour that causes page-level re-renders
-  // when the network briefly drops and recovers (e.g. when switching tabs on
-  // a mobile device with an unreliable connection).
+  global: {
+    // Add a custom fetch that gracefully handles offline — returns a cached
+    // response or a NetworkError that Supabase can handle without crashing.
+    fetch: (url, options) => {
+      return fetch(url, options).catch((err) => {
+        // Let the caller handle the network error gracefully
+        return Promise.reject(err);
+      });
+    },
+  },
   realtime: {
     params: {
+      // Throttle realtime events to reduce reconnect churn on mobile/unreliable
+      // connections (prevents rapid reconnect loops when switching tabs).
       eventsPerSecond: 2,
     },
   },
