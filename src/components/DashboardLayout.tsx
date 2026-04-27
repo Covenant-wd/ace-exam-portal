@@ -58,7 +58,7 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { role, signOut, user } = useAuth();
+  const { role, signOut, user, schoolId } = useAuth();
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
   const location = useLocation();
@@ -88,8 +88,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
 
   const handleSignOut = async () => {
+    // For school-scoped roles, redirect to the school's landing page after logout.
+    // Fetch the slug before signing out while schoolId is still available.
+    let redirectTo = "/";
+    if (schoolId) {
+      const { data } = await supabase
+        .from("schools")
+        .select("slug")
+        .eq("id", schoolId)
+        .single();
+      if (data?.slug) redirectTo = `/school/${data.slug}`;
+    }
     await signOut();
-    navigate("/");
+    navigate(redirectTo);
   };
 
   // Group links for admin/instructor
