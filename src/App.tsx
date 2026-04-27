@@ -48,6 +48,7 @@ const TheoryQuestions = lazy(() => import("./pages/admin/TheoryQuestions"));
 const InstructorDashboard = lazy(() => import("./pages/instructor/InstructorDashboard"));
 const Parents = lazy(() => import("./pages/admin/Parents"));
 const ParentDashboard = lazy(() => import("./pages/parent/ParentDashboard"));
+const ExamReview = lazy(() => import("./pages/admin/ExamReview"));
 
 // ─── React Query ─────────────────────────────────────────────────────────────
 // Disable all automatic refetch-on-focus/reconnect behaviour.
@@ -156,6 +157,7 @@ function AppRoutes() {
         <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/results" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/results/:attemptId/review" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><ExamReview /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/attendance" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/timetable" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
@@ -172,6 +174,7 @@ function AppRoutes() {
         <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/results" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/results/:attemptId/review" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><ExamReview /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/attendance" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/grades" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
