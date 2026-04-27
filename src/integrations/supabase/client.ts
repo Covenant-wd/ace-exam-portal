@@ -16,5 +16,14 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+    detectSessionInUrl: true,
+  },
+  // Reduce aggressive reconnect behaviour that causes page-level re-renders
+  // when the network briefly drops and recovers (e.g. when switching tabs on
+  // a mobile device with an unreliable connection).
+  realtime: {
+    params: {
+      eventsPerSecond: 2,
+    },
+  },
 });
