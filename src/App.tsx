@@ -49,13 +49,17 @@ const InstructorDashboard = lazy(() => import("./pages/instructor/InstructorDash
 const Parents = lazy(() => import("./pages/admin/Parents"));
 const ParentDashboard = lazy(() => import("./pages/parent/ParentDashboard"));
 
+// ─── React Query ─────────────────────────────────────────────────────────────
+// Disable all automatic refetch-on-focus/reconnect behaviour.
+// Pages fetch data on mount via useEffect — we don't need React Query to
+// trigger additional fetches when the user switches tabs.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes — avoids redundant re-fetches on tab return
+      staleTime: 5 * 60 * 1000,
     },
   },
 });
@@ -66,23 +70,35 @@ const PageLoader = () => (
   </div>
 );
 
-function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" | "outreach_officer" }) {
+// ─── ProtectedRoute ───────────────────────────────────────────────────────────
+// Key behaviour change: when `loading` is true OR when `user` is set but `role`
+// is not yet resolved, we render a loader — never a redirect. This prevents
+// the page from unmounting (and remounting with a fresh data fetch) during the
+// brief window between a TOKEN_REFRESHED event and role resolution.
+function ProtectedRoute({
+  children,
+  requiredRole,
+}: {
+  children: React.ReactNode;
+  requiredRole: "admin" | "student" | "instructor" | "super_admin" | "parent" | "outreach_officer";
+}) {
   const { user, role, loading } = useAuth();
 
-  if (loading) {
-    return <PageLoader />;
-  }
+  // Still initialising — hold position, never redirect
+  if (loading) return <PageLoader />;
 
+  // No session at all → send to login
   if (!user) {
     if (requiredRole === "super_admin") return <Navigate to="/super-admin/login" replace />;
     if (requiredRole === "outreach_officer") return <Navigate to="/outreach/login" replace />;
     return <Navigate to="/" replace />;
   }
 
-  if (!role) {
-    return <Navigate to="/" replace />;
-  }
+  // User exists but role hasn't resolved yet (should be instant from cache,
+  // but guard against edge cases without triggering a redirect)
+  if (!role) return <PageLoader />;
 
+  // Wrong role → redirect to the correct home
   if (role !== requiredRole) {
     if (role === "super_admin") return <Navigate to="/super-admin" replace />;
     if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
