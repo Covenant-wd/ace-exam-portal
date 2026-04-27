@@ -59,11 +59,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
+      (event, newSession) => {
         if (!isMounted) return;
+
+        // TOKEN_REFRESHED fires every time the tab regains focus and Supabase
+        // silently refreshes the JWT. Setting loading=true here causes the whole
+        // app to flash a spinner on every tab switch. We update the session
+        // object silently and skip the role re-fetch (role never changes on refresh).
+        const isSilentRefresh = event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION";
+
         setSession(newSession);
         setUser(newSession?.user ?? null);
+
         if (newSession?.user) {
+          if (isSilentRefresh) {
+            // Role is already loaded — no loading flash needed
+            return;
+          }
           setLoading(true);
           setTimeout(async () => {
             await fetchRole(newSession.user.id);
