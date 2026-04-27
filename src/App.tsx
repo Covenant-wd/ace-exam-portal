@@ -49,7 +49,16 @@ const InstructorDashboard = lazy(() => import("./pages/instructor/InstructorDash
 const Parents = lazy(() => import("./pages/admin/Parents"));
 const ParentDashboard = lazy(() => import("./pages/parent/ParentDashboard"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes — avoids redundant re-fetches on tab return
+    },
+  },
+});
 
 const PageLoader = () => (
   <div className="flex min-h-screen items-center justify-center">
