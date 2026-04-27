@@ -61,7 +61,7 @@ export function useSubscription() {
     queryKey: ["subscription", schoolId],
     enabled,
     staleTime: 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<SubscriptionInfo> => {
       const { data, error } = await supabase
         .from("schools")
