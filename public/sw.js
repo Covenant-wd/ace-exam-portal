@@ -1,82 +1,106 @@
-// ACE Exam Portal — Service Worker
-// Caches the app shell so the site stays visible when the connection drops.
-// Only static assets are cached; Supabase API calls are always network-first.
+// ============================================================
+// ACE Exam Portal — Service Worker (offline-first app shell)
+// ============================================================
+// Strategy:
+//   • Navigation requests  → network-first, fall back to cached /index.html
+//   • JS / CSS / fonts     → cache-first (instant loads after first visit)
+//   • Images / icons       → cache-first with background revalidation
+//   • Supabase API calls   → network-only (NEVER cache auth/data)
+// ============================================================
 
-const CACHE_NAME = "ace-portal-v1";
+const CACHE = "ace-portal-v2";
 
-// App-shell files that must be available offline
-const APP_SHELL = [
-  "/",
-  "/index.html",
-  "/favicon.ico",
-];
+// Pre-cache these on install so the app shell is always available offline
+const PRECACHE = ["/", "/index.html"];
 
-// ── Install: pre-cache app shell ─────────────────────────────────
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+// ── Install ──────────────────────────────────────────────────
+self.addEventListener("install", (e) => {
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(PRECACHE))
   );
   self.skipWaiting();
 });
 
-// ── Activate: clean up old caches ────────────────────────────────
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
+// ── Activate: remove old caches ──────────────────────────────
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-// ── Fetch strategy ───────────────────────────────────────────────
-// • Supabase / API calls  → network-only (never cache auth/data)
-// • JS/CSS/font assets    → cache-first (fast loads after first visit)
-// • Navigation requests   → network-first, fall back to cached /index.html
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Never intercept Supabase or third-party API requests
-  if (
+// ── Helpers ──────────────────────────────────────────────────
+function isSupabaseUrl(url) {
+  return (
     url.hostname.includes("supabase.co") ||
     url.hostname.includes("supabase.in") ||
+    // Also skip any Edge Function / REST / Auth / Realtime paths
     url.pathname.startsWith("/rest/") ||
     url.pathname.startsWith("/auth/") ||
     url.pathname.startsWith("/functions/") ||
-    url.pathname.startsWith("/realtime/")
-  ) {
-    return; // Let the browser handle it
-  }
+    url.pathname.startsWith("/realtime/") ||
+    url.pathname.startsWith("/storage/")
+  );
+}
 
-  // Navigation (page loads) — network first, fall back to index.html
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
+function isStaticAsset(url) {
+  return /\.(js|mjs|css|woff2?|ttf|eot|png|svg|ico|jpg|jpeg|webp|gif|json)(\?.*)?$/.test(url.pathname);
+}
+
+// ── Fetch ────────────────────────────────────────────────────
+self.addEventListener("fetch", (e) => {
+  const url = new URL(e.request.url);
+
+  // 1. Never intercept Supabase / API calls — always go to network
+  if (isSupabaseUrl(url)) return;
+
+  // 2. Only handle GET requests
+  if (e.request.method !== "GET") return;
+
+  // 3. Navigation (HTML pages) — network-first, offline fallback to shell
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          // Cache a fresh copy of the page
+          const clone = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, clone));
+          return res;
+        })
         .catch(() =>
+          // Offline → serve cached shell so the React app can boot
           caches.match("/index.html").then((r) => r || caches.match("/"))
         )
     );
     return;
   }
 
-  // Static assets — cache first
-  if (
-    url.pathname.match(/\.(js|css|woff2?|png|svg|ico|jpg|jpeg|webp)$/)
-  ) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            if (response && response.status === 200) {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+  // 4. Static assets — cache-first, update in background (stale-while-revalidate)
+  if (isStaticAsset(url)) {
+    e.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(e.request);
+        const fetchPromise = fetch(e.request)
+          .then((res) => {
+            if (res && res.status === 200) {
+              cache.put(e.request, res.clone());
             }
-            return response;
+            return res;
           })
-      )
+          .catch(() => null);
+
+        // Return cached immediately if available, otherwise wait for network
+        return cached || fetchPromise;
+      })
     );
     return;
   }
+
+  // 5. Everything else — network with offline fallback to cache
+  e.respondWith(
+    fetch(e.request)
+      .catch(() => caches.match(e.request))
+  );
 });
