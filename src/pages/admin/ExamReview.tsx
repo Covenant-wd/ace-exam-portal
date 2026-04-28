@@ -74,25 +74,46 @@ const OPTION_LABELS = ["A", "B", "C", "D"] as const;
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper — resolve answer_status from all available signals
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Normalise a raw answer value before comparison.
+//   • Converts to string so numeric indices (0,1,2…) don't cause type mismatches
+//   • Trims whitespace   ("A " → "A")
+//   • Uppercases          ("a"  → "A")
+//   • Returns null for every "empty" value (null, undefined, "")
+// ─────────────────────────────────────────────────────────────────────────────
+function normaliseAnswer(raw: string | number | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toUpperCase();
+  return s === "" ? null : s;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIXED resolveStatus — single source of truth for per-question classification
+// ─────────────────────────────────────────────────────────────────────────────
 function resolveStatus(
   selected: string | null,
   correctOption: string,
   dbIsCorrect: boolean | null,
   hasRow: boolean,
 ): "correct" | "wrong" | "skipped" {
-  // 1. If we have selected_option, compute directly — most reliable.
-  if (selected !== null) {
-    return selected === correctOption ? "correct" : "wrong";
+  // FIXED: normalise selected here (was only uppercased at call-site, never trimmed)
+  const normSelected = normaliseAnswer(selected);
+  const normCorrect  = normaliseAnswer(correctOption);
+
+  // 1. We have a clean selected answer — compare directly. Most reliable path.
+  if (normSelected !== null) {
+    return normSelected === normCorrect ? "correct" : "wrong";
   }
 
-  // 2. selected_option is null but a row exists — the submit upsert ran with
-  //    null (stale state bug). Fall back to the stored is_correct flag.
+  // 2. selected_option is null/empty but a student_answers row exists.
+  //    The submit upsert ran with stale state and wrote null for this question.
+  //    Fall back to the DB-stored is_correct flag (set correctly at submit time).
   if (hasRow && dbIsCorrect !== null) {
     return dbIsCorrect ? "correct" : "wrong";
   }
 
-  // 3. No row at all, or row exists but is_correct is also null.
-  //    Treat as skipped / unanswered.
+  // 3. No row at all, or the row's is_correct is also null.
+  //    The student genuinely did not answer → SKIPPED.
   return "skipped";
 }
 
@@ -175,10 +196,22 @@ export default function ExamReview() {
           const ans = answerMap.get(q.id);
           const hasRow = ans !== undefined;
 
-          // Normalise to uppercase to guard against case inconsistency in the DB
-          const selected    = ans?.selected_option?.toUpperCase() ?? null;
-          const correctNorm = (q.correct_option ?? "").toUpperCase();
+          // FIXED: use normaliseAnswer() for consistent trim+uppercase+null handling
+          const selected    = normaliseAnswer(ans?.selected_option);
+          const correctNorm = normaliseAnswer(q.correct_option) ?? "";
           const dbIsCorrect = ans?.is_correct ?? null;
+
+          // ── DEBUG LOG (remove before production) ────────────────────────
+          console.log("[ExamReview] Q", q.id, {
+            correctAnswer:        q.correct_option,
+            normalizedCorrect:    correctNorm,
+            userAnswer:           ans?.selected_option ?? null,
+            normalizedUserAnswer: selected,
+            hasRow,
+            dbIsCorrect,
+            result: resolveStatus(selected, correctNorm, dbIsCorrect, hasRow),
+          });
+          // ────────────────────────────────────────────────────────────────
 
           const answer_status = resolveStatus(selected, correctNorm, dbIsCorrect, hasRow);
 
@@ -213,6 +246,23 @@ export default function ExamReview() {
         });
 
         setQuestions(merged);
+
+        // ── FIXED: Summary count integrity check (dev-only) ───────────────
+        const _correct = merged.filter((q) => q.answer_status === "correct").length;
+        const _wrong   = merged.filter((q) => q.answer_status === "wrong").length;
+        const _skipped = merged.filter((q) => q.answer_status === "skipped").length;
+        if (_correct + _wrong + _skipped !== merged.length) {
+          console.error(
+            "[ExamReview] ❌ Count mismatch!",
+            { correct: _correct, wrong: _wrong, skipped: _skipped, total: merged.length }
+          );
+        } else {
+          console.log(
+            "[ExamReview] ✅ Counts valid:",
+            { correct: _correct, wrong: _wrong, skipped: _skipped, total: merged.length }
+          );
+        }
+        // ─────────────────────────────────────────────────────────────────
       } finally {
         setLoading(false);
       }
