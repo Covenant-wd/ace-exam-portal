@@ -263,11 +263,30 @@ export default function TakeExam() {
     const correctMap: Record<string, string> = {};
     (correctData ?? []).forEach((q: any) => { correctMap[q.id] = q.correct_option; });
 
+    // ── Merge React state with DB to prevent stale-closure data loss ─────────
+    // If submitExam fires via timeout auto-submit, the closure may capture a
+    // stale `answers` object missing recent selections. We read the current DB
+    // rows first and use them as a baseline, then layer the closure answers on
+    // top (React state always takes priority over DB for the same question).
+    // This ensures selected_option is never overwritten with null for a question
+    // the student already answered via the real-time selectAnswer upsert.
+    const { data: savedAnswers } = await supabase
+      .from("student_answers")
+      .select("question_id, selected_option")
+      .eq("attempt_id", attemptId);
+
+    const dbAnswerMap: Record<string, string> = {};
+    (savedAnswers ?? []).forEach((a: any) => {
+      if (a.selected_option) dbAnswerMap[a.question_id] = a.selected_option;
+    });
+
+    const mergedAnswers: Record<string, string> = { ...dbAnswerMap, ...answers };
+
     const answerRows = questions.map((q) => ({
       attempt_id: attemptId,
       question_id: q.id,
-      selected_option: answers[q.id] || null,
-      is_correct: answers[q.id] ? answers[q.id] === correctMap[q.id] : false,
+      selected_option: mergedAnswers[q.id] || null,
+      is_correct: mergedAnswers[q.id] ? mergedAnswers[q.id] === correctMap[q.id] : false,
     }));
 
     if (answerRows.length > 0) {
