@@ -132,7 +132,8 @@ export default function TakeExam() {
         const { data: savedAnswers } = await supabase.from("student_answers")
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
-        (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
+        // FIXED: use null-check instead of truthiness so options like "0" are not silently dropped.
+        (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option != null) map[a.question_id] = a.selected_option; });
         setAnswers(map);
       } else {
         const { data: attempt, error: attemptErr } = await supabase
@@ -277,7 +278,8 @@ export default function TakeExam() {
 
     const dbAnswerMap: Record<string, string> = {};
     (savedAnswers ?? []).forEach((a: any) => {
-      if (a.selected_option) dbAnswerMap[a.question_id] = a.selected_option;
+      // FIXED: null-check only — don't drop valid falsy option values
+      if (a.selected_option != null) dbAnswerMap[a.question_id] = a.selected_option;
     });
 
     const mergedAnswers: Record<string, string> = { ...dbAnswerMap, ...answers };
@@ -285,8 +287,16 @@ export default function TakeExam() {
     const answerRows = questions.map((q) => ({
       attempt_id: attemptId,
       question_id: q.id,
-      selected_option: mergedAnswers[q.id] || null,
-      is_correct: mergedAnswers[q.id] ? mergedAnswers[q.id] === correctMap[q.id] : false,
+      // FIXED: normalise to uppercase so it always matches correct_option format
+      selected_option: mergedAnswers[q.id] != null ? String(mergedAnswers[q.id]).trim().toUpperCase() : null,
+      // FIXED: normalise both sides (trim + uppercase) before comparing.
+      // Without normalisation a DB value of "a" vs "A" counts as wrong.
+      is_correct: (() => {
+        const ua = mergedAnswers[q.id];
+        if (!ua && ua !== 0 && ua !== false) return false;   // genuinely unanswered
+        const norm = (v: unknown) => String(v).trim().toUpperCase();
+        return norm(ua) === norm(correctMap[q.id]);
+      })(),
     }));
 
     if (answerRows.length > 0) {
