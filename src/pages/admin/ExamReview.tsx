@@ -3,8 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import RichContentRenderer from "@/components/RichContentRenderer";
 import {
@@ -21,8 +20,12 @@ interface ReviewQuestion {
   option_d: string;
   correct_option: string;
   question_order: number;
+  // Raw value from student_answers — may be null if student skipped
   selected_option: string | null;
-  is_correct: boolean | null;
+  // Computed locally (never trust the stored is_correct alone — it can be null
+  // if the real-time selectAnswer upsert ran but submitExam upsert did not finish)
+  is_correct: boolean;
+  is_skipped: boolean;
 }
 
 interface AttemptMeta {
@@ -53,7 +56,6 @@ export default function ExamReview() {
   useEffect(() => {
     if (permLoading) return;
 
-    // Access guard: admin always allowed; instructor needs can_manage_exams OR can_view_results
     if (role === "instructor") {
       const allowed = permissions?.can_manage_exams || permissions?.can_view_results;
       if (!allowed) { setAccessDenied(true); setLoading(false); return; }
@@ -70,7 +72,7 @@ export default function ExamReview() {
 
         if (attemptErr || !attempt) { setLoading(false); return; }
 
-        // 2. Verify the exam belongs to this school (security check)
+        // 2. Verify the exam belongs to this school
         const { data: exam } = await supabase
           .from("exams")
           .select("id, title, school_id, subjects(name)")
@@ -89,7 +91,7 @@ export default function ExamReview() {
         // 4. Questions for this exam
         const { data: rawQuestions } = await supabase
           .from("questions")
-          .select("*")
+          .select("id, question_text, option_a, option_b, option_c, option_d, correct_option, question_order")
           .eq("exam_id", attempt.exam_id)
           .order("question_order");
 
@@ -99,26 +101,58 @@ export default function ExamReview() {
           .select("question_id, selected_option, is_correct")
           .eq("attempt_id", attemptId!);
 
+        // Build a map of question_id → answer row
         const answerMap = new Map(
           (studentAnswers ?? []).map((a) => [a.question_id, a])
         );
 
+        // Merge questions with answers.
+        // ── KEY FIX ──────────────────────────────────────────────────────────
+        // We RECOMPUTE is_correct locally by comparing selected_option to
+        // correct_option instead of relying on the stored is_correct column.
+        // The stored value can be null when:
+        //   • selectAnswer() saved the answer in real-time (no is_correct set)
+        //   • A network hiccup caused the submitExam upsert to partially fail
+        // Recomputing here ensures the review always shows the truth regardless
+        // of what ended up in the database.
+        // ─────────────────────────────────────────────────────────────────────
         const merged: ReviewQuestion[] = (rawQuestions ?? []).map((q: any) => {
           const ans = answerMap.get(q.id);
+          const selected = ans?.selected_option ?? null;
+
+          // Normalise to uppercase so "a" == "A" comparisons never fail
+          const selectedNorm = selected?.toUpperCase() ?? null;
+          const correctNorm  = (q.correct_option ?? "").toUpperCase();
+
+          const is_skipped = selectedNorm === null;
+          const is_correct = !is_skipped && selectedNorm === correctNorm;
+
           return {
-            ...q,
-            selected_option: ans?.selected_option ?? null,
-            is_correct: ans?.is_correct ?? null,
+            id: q.id,
+            question_text: q.question_text,
+            option_a: q.option_a,
+            option_b: q.option_b,
+            option_c: q.option_c,
+            option_d: q.option_d,
+            correct_option: correctNorm,      // normalised
+            question_order: q.question_order,
+            selected_option: selectedNorm,    // normalised
+            is_correct,
+            is_skipped,
           };
         });
+
+        // Recalculate score from local truth (more reliable than stored score)
+        const recomputedScore = merged.filter((q) => q.is_correct).length;
 
         setMeta({
           student_name: profile?.full_name ?? "Unknown Student",
           class_name: profile?.class_name ?? "—",
           exam_title: exam.title,
           subject_name: (exam.subjects as any)?.name ?? "—",
-          score: attempt.score,
-          total_questions: attempt.total_questions,
+          // Use stored score if available, otherwise use recomputed value
+          score: attempt.score ?? recomputedScore,
+          total_questions: attempt.total_questions ?? merged.length,
           submitted_at: attempt.submitted_at,
         });
 
@@ -168,9 +202,9 @@ export default function ExamReview() {
     ? Math.round(((meta.score ?? 0) / meta.total_questions) * 100)
     : 0;
 
-  const correct = questions.filter((q) => q.is_correct === true).length;
-  const wrong = questions.filter((q) => q.is_correct === false && q.selected_option !== null).length;
-  const skipped = questions.filter((q) => q.selected_option === null).length;
+  const correct = questions.filter((q) => q.is_correct).length;
+  const wrong   = questions.filter((q) => !q.is_correct && !q.is_skipped).length;
+  const skipped = questions.filter((q) => q.is_skipped).length;
 
   const submittedAt = meta.submitted_at
     ? new Date(meta.submitted_at).toLocaleString()
@@ -267,16 +301,16 @@ export default function ExamReview() {
       <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
         <span className="font-medium text-muted-foreground">Legend:</span>
         <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
+          Correct (student's pick)
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" />
-          Correct Answer
+          Correct Answer (not picked)
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
           Student's Wrong Pick
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
-          Correct (student's pick)
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-600" />
@@ -287,24 +321,20 @@ export default function ExamReview() {
       {/* Questions */}
       <div className="space-y-5">
         {questions.map((q, i) => {
-          const isSkipped = q.selected_option === null;
-          const statusIcon = isSkipped
+          const statusIcon = q.is_skipped
             ? <MinusCircle className="h-5 w-5 text-slate-400" />
             : q.is_correct
             ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             : <XCircle className="h-5 w-5 text-red-500" />;
 
+          const cardBorder = q.is_skipped
+            ? "border-l-4 border-l-slate-300 dark:border-l-slate-600"
+            : q.is_correct
+            ? "border-l-4 border-l-emerald-500"
+            : "border-l-4 border-l-red-500";
+
           return (
-            <Card
-              key={q.id}
-              className={`border-0 shadow-md transition-all ${
-                isSkipped
-                  ? "border-l-4 border-l-slate-300 dark:border-l-slate-600"
-                  : q.is_correct
-                  ? "border-l-4 border-l-emerald-500"
-                  : "border-l-4 border-l-red-500"
-              }`}
-            >
+            <Card key={q.id} className={`border-0 shadow-md transition-all ${cardBorder}`}>
               <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
                 <div className="flex items-start gap-3 flex-1">
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -322,27 +352,29 @@ export default function ExamReview() {
                   {OPTION_LABELS.map((label) => {
                     const optionKey = `option_${label.toLowerCase()}` as keyof ReviewQuestion;
                     const optionText = q[optionKey] as string;
-                    const isCorrect = q.correct_option === label;
-                    const isStudentPick = q.selected_option === label;
 
-                    let bgClass = "bg-muted/40 border-muted";
-                    let labelBg = "bg-muted text-muted-foreground";
+                    // Both comparisons use normalised uppercase values
+                    const isCorrectOption  = q.correct_option  === label;
+                    const isStudentPick    = q.selected_option === label;
+
+                    let bgClass   = "bg-muted/40 border-muted";
+                    let labelBg   = "bg-muted text-muted-foreground";
                     let indicator: React.ReactNode = null;
 
-                    if (isCorrect && isStudentPick) {
-                      // Student picked correctly
-                      bgClass = "bg-amber-50 border-amber-400 dark:bg-amber-950/40";
-                      labelBg = "bg-amber-400 text-white";
+                    if (isCorrectOption && isStudentPick) {
+                      // ✅ Student picked the right answer
+                      bgClass   = "bg-amber-50 border-amber-400 dark:bg-amber-950/40";
+                      labelBg   = "bg-amber-400 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />;
-                    } else if (isCorrect) {
-                      // Correct but student didn't pick it
-                      bgClass = "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40";
-                      labelBg = "bg-emerald-500 text-white";
+                    } else if (isCorrectOption) {
+                      // ✅ This is the correct answer but student didn't pick it
+                      bgClass   = "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40";
+                      labelBg   = "bg-emerald-500 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-600 shrink-0" />;
-                    } else if (isStudentPick && !isCorrect) {
-                      // Wrong pick by student
-                      bgClass = "bg-red-50 border-red-400 dark:bg-red-950/40";
-                      labelBg = "bg-red-500 text-white";
+                    } else if (isStudentPick) {
+                      // ❌ Student picked this wrong answer
+                      bgClass   = "bg-red-50 border-red-400 dark:bg-red-950/40";
+                      labelBg   = "bg-red-500 text-white";
                       indicator = <XCircle className="ml-auto h-4 w-4 text-red-500 shrink-0" />;
                     }
 
@@ -351,9 +383,7 @@ export default function ExamReview() {
                         key={label}
                         className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${bgClass}`}
                       >
-                        <span
-                          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${labelBg}`}
-                        >
+                        <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${labelBg}`}>
                           {label}
                         </span>
                         <span className="flex-1 leading-snug">
@@ -365,8 +395,8 @@ export default function ExamReview() {
                   })}
                 </div>
 
-                {/* Skipped notice */}
-                {isSkipped && (
+                {/* Skipped notice — shows the correct answer for context */}
+                {q.is_skipped && (
                   <p className="mt-3 text-xs text-muted-foreground italic">
                     ⚠ Student did not answer this question.
                     The correct answer is <strong>{q.correct_option}</strong>.
