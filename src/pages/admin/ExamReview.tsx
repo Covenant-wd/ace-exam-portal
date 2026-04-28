@@ -464,24 +464,33 @@ export default function ExamReview() {
                     const optionText = q[optionKey] as string;
 
                     const isCorrectOption = correct_option === label;
-                    const isStudentPick   = selected_option === label;
+                    // FIX: when selected_option is null (stale-submit data-loss) but
+                    // answer_status is "correct", we know the student picked the correct
+                    // option — infer the pick so the admin sees it highlighted properly.
+                    const inferredPick =
+                      selected_option !== null
+                        ? selected_option          // normal path: use stored value
+                        : answer_status === "correct"
+                          ? correct_option         // fallback: student must have picked correct
+                          : null;                  // wrong but we don't know which option
+                    const isStudentPick = inferredPick === label;
 
                     let bgClass  = "bg-muted/40 border-muted";
                     let labelBg  = "bg-muted text-muted-foreground";
                     let indicator: React.ReactNode = null;
 
                     if (isCorrectOption && isStudentPick) {
-                      // Student picked the correct option
+                      // Student picked the correct option (amber = correct pick)
                       bgClass  = "bg-amber-50 border-amber-400 dark:bg-amber-950/40";
                       labelBg  = "bg-amber-400 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />;
                     } else if (isCorrectOption) {
-                      // Correct answer — student skipped or got it wrong
+                      // Correct answer — student skipped or got it wrong (green = right answer not chosen)
                       bgClass  = "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40";
                       labelBg  = "bg-emerald-500 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-600 shrink-0" />;
                     } else if (isStudentPick) {
-                      // Student picked this wrong option
+                      // Student picked this wrong option (red = wrong pick)
                       bgClass  = "bg-red-50 border-red-400 dark:bg-red-950/40";
                       labelBg  = "bg-red-500 text-white";
                       indicator = <XCircle className="ml-auto h-4 w-4 text-red-500 shrink-0" />;
