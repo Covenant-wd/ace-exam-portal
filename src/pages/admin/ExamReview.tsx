@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import RichContentRenderer from "@/components/RichContentRenderer";
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, MinusCircle,
-  User, BookOpen, Trophy, Clock, BarChart3
+  User, BookOpen, Trophy, Clock,
 } from "lucide-react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface ReviewQuestion {
   id: string;
@@ -18,14 +22,41 @@ interface ReviewQuestion {
   option_b: string;
   option_c: string;
   option_d: string;
+  /** Always uppercase — from questions table */
   correct_option: string;
   question_order: number;
-  // Raw value from student_answers — may be null if student skipped
+
+  // ── Answer data (from student_answers) ────────────────────────────────────
+  /**
+   * The option letter the student picked (uppercase), or null.
+   *
+   * IMPORTANT: This field is nullable in the DB and may be null even when
+   * the student answered.  This can happen when:
+   *   • The real-time selectAnswer upsert ran but the final submit upsert
+   *     fired with stale/empty state and overwrote selected_option with null.
+   *   • A network error caused the submit upsert to only partially succeed.
+   *
+   * Never use this field alone to determine pass/fail status.
+   * Use `answer_status` instead.
+   */
   selected_option: string | null;
-  // Computed locally (never trust the stored is_correct alone — it can be null
-  // if the real-time selectAnswer upsert ran but submitExam upsert did not finish)
-  is_correct: boolean;
-  is_skipped: boolean;
+
+  /** Whether the student_answers row exists for this question. */
+  has_answer_row: boolean;
+
+  /**
+   * The DB value of is_correct (may be null if the submit upsert didn't run).
+   * Used as a fallback when selected_option is missing.
+   */
+  db_is_correct: boolean | null;
+
+  /**
+   * Resolved status — the single source of truth used for all UI rendering.
+   *   "correct"  — student answered and got it right
+   *   "wrong"    — student answered and got it wrong
+   *   "skipped"  — no answer recorded at all
+   */
+  answer_status: "correct" | "wrong" | "skipped";
 }
 
 interface AttemptMeta {
@@ -40,6 +71,34 @@ interface AttemptMeta {
 
 const OPTION_LABELS = ["A", "B", "C", "D"] as const;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper — resolve answer_status from all available signals
+// ─────────────────────────────────────────────────────────────────────────────
+function resolveStatus(
+  selected: string | null,
+  correctOption: string,
+  dbIsCorrect: boolean | null,
+  hasRow: boolean,
+): "correct" | "wrong" | "skipped" {
+  // 1. If we have selected_option, compute directly — most reliable.
+  if (selected !== null) {
+    return selected === correctOption ? "correct" : "wrong";
+  }
+
+  // 2. selected_option is null but a row exists — the submit upsert ran with
+  //    null (stale state bug). Fall back to the stored is_correct flag.
+  if (hasRow && dbIsCorrect !== null) {
+    return dbIsCorrect ? "correct" : "wrong";
+  }
+
+  // 3. No row at all, or row exists but is_correct is also null.
+  //    Treat as skipped / unanswered.
+  return "skipped";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ExamReview() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const { role, schoolId } = useAuth();
@@ -56,6 +115,7 @@ export default function ExamReview() {
   useEffect(() => {
     if (permLoading) return;
 
+    // Access guard
     if (role === "instructor") {
       const allowed = permissions?.can_manage_exams || permissions?.can_view_results;
       if (!allowed) { setAccessDenied(true); setLoading(false); return; }
@@ -72,14 +132,16 @@ export default function ExamReview() {
 
         if (attemptErr || !attempt) { setLoading(false); return; }
 
-        // 2. Verify the exam belongs to this school
+        // 2. Verify the exam belongs to this school (security)
         const { data: exam } = await supabase
           .from("exams")
           .select("id, title, school_id, subjects(name)")
           .eq("id", attempt.exam_id)
           .single();
 
-        if (!exam || exam.school_id !== schoolId) { setAccessDenied(true); setLoading(false); return; }
+        if (!exam || exam.school_id !== schoolId) {
+          setAccessDenied(true); setLoading(false); return;
+        }
 
         // 3. Student profile
         const { data: profile } = await supabase
@@ -88,44 +150,37 @@ export default function ExamReview() {
           .eq("user_id", attempt.student_id)
           .single();
 
-        // 4. Questions for this exam
+        // 4. All questions for this exam (with correct_option)
         const { data: rawQuestions } = await supabase
           .from("questions")
           .select("id, question_text, option_a, option_b, option_c, option_d, correct_option, question_order")
           .eq("exam_id", attempt.exam_id)
           .order("question_order");
 
-        // 5. Student answers for this attempt
+        // 5. Student's answer rows for this attempt.
+        //    We select is_correct as well so we can use it as a fallback when
+        //    selected_option is null (stale-state submit bug).
         const { data: studentAnswers } = await supabase
           .from("student_answers")
           .select("question_id, selected_option, is_correct")
           .eq("attempt_id", attemptId!);
 
-        // Build a map of question_id → answer row
+        // Build lookup: question_id → answer row
         const answerMap = new Map(
           (studentAnswers ?? []).map((a) => [a.question_id, a])
         );
 
-        // Merge questions with answers.
-        // ── KEY FIX ──────────────────────────────────────────────────────────
-        // We RECOMPUTE is_correct locally by comparing selected_option to
-        // correct_option instead of relying on the stored is_correct column.
-        // The stored value can be null when:
-        //   • selectAnswer() saved the answer in real-time (no is_correct set)
-        //   • A network hiccup caused the submitExam upsert to partially fail
-        // Recomputing here ensures the review always shows the truth regardless
-        // of what ended up in the database.
-        // ─────────────────────────────────────────────────────────────────────
+        // Merge questions with answers
         const merged: ReviewQuestion[] = (rawQuestions ?? []).map((q: any) => {
           const ans = answerMap.get(q.id);
-          const selected = ans?.selected_option ?? null;
+          const hasRow = ans !== undefined;
 
-          // Normalise to uppercase so "a" == "A" comparisons never fail
-          const selectedNorm = selected?.toUpperCase() ?? null;
-          const correctNorm  = (q.correct_option ?? "").toUpperCase();
+          // Normalise to uppercase to guard against case inconsistency in the DB
+          const selected    = ans?.selected_option?.toUpperCase() ?? null;
+          const correctNorm = (q.correct_option ?? "").toUpperCase();
+          const dbIsCorrect = ans?.is_correct ?? null;
 
-          const is_skipped = selectedNorm === null;
-          const is_correct = !is_skipped && selectedNorm === correctNorm;
+          const answer_status = resolveStatus(selected, correctNorm, dbIsCorrect, hasRow);
 
           return {
             id: q.id,
@@ -134,26 +189,27 @@ export default function ExamReview() {
             option_b: q.option_b,
             option_c: q.option_c,
             option_d: q.option_d,
-            correct_option: correctNorm,      // normalised
+            correct_option: correctNorm,
             question_order: q.question_order,
-            selected_option: selectedNorm,    // normalised
-            is_correct,
-            is_skipped,
+            selected_option: selected,
+            has_answer_row: hasRow,
+            db_is_correct: dbIsCorrect,
+            answer_status,
           };
         });
 
-        // Recalculate score from local truth (more reliable than stored score)
-        const recomputedScore = merged.filter((q) => q.is_correct).length;
+        // Use stored score from exam_attempts as the authoritative score.
+        // Fall back to counting resolved "correct" statuses only when score is null.
+        const localScore = merged.filter((q) => q.answer_status === "correct").length;
 
         setMeta({
-          student_name: profile?.full_name ?? "Unknown Student",
-          class_name: profile?.class_name ?? "—",
-          exam_title: exam.title,
-          subject_name: (exam.subjects as any)?.name ?? "—",
-          // Use stored score if available, otherwise use recomputed value
-          score: attempt.score ?? recomputedScore,
+          student_name:    profile?.full_name ?? "Unknown Student",
+          class_name:      profile?.class_name ?? "—",
+          exam_title:      exam.title,
+          subject_name:    (exam.subjects as any)?.name ?? "—",
+          score:           attempt.score ?? localScore,
           total_questions: attempt.total_questions ?? merged.length,
-          submitted_at: attempt.submitted_at,
+          submitted_at:    attempt.submitted_at,
         });
 
         setQuestions(merged);
@@ -165,6 +221,7 @@ export default function ExamReview() {
     load();
   }, [attemptId, schoolId, role, permissions, permLoading]);
 
+  // ── Loading / error states ───────────────────────────────────────────────
   if (loading || permLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -198,20 +255,23 @@ export default function ExamReview() {
     );
   }
 
+  // ── Derived counts ───────────────────────────────────────────────────────
+  const correct = questions.filter((q) => q.answer_status === "correct").length;
+  const wrong   = questions.filter((q) => q.answer_status === "wrong").length;
+  const skipped = questions.filter((q) => q.answer_status === "skipped").length;
+
   const pct = meta.total_questions
     ? Math.round(((meta.score ?? 0) / meta.total_questions) * 100)
     : 0;
-
-  const correct = questions.filter((q) => q.is_correct).length;
-  const wrong   = questions.filter((q) => !q.is_correct && !q.is_skipped).length;
-  const skipped = questions.filter((q) => q.is_skipped).length;
 
   const submittedAt = meta.submitted_at
     ? new Date(meta.submitted_at).toLocaleString()
     : "—";
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-12">
+
       {/* Back */}
       <Button
         variant="ghost"
@@ -222,7 +282,7 @@ export default function ExamReview() {
         <ArrowLeft className="h-4 w-4" /> Back to Results
       </Button>
 
-      {/* Header card */}
+      {/* ── Header card ─────────────────────────────────────────────────── */}
       <Card className="border-0 shadow-md overflow-hidden">
         <div className="bg-gradient-to-r from-primary/90 to-primary px-6 py-5 text-primary-foreground">
           <h1 className="text-2xl font-bold">Exam Review</h1>
@@ -266,7 +326,7 @@ export default function ExamReview() {
         </CardContent>
       </Card>
 
-      {/* Summary strip */}
+      {/* ── Summary strip ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         <Card className="border-0 bg-emerald-50 shadow-sm dark:bg-emerald-950/30">
           <CardContent className="flex items-center gap-3 p-4">
@@ -297,44 +357,44 @@ export default function ExamReview() {
         </Card>
       </div>
 
-      {/* Legend */}
+      {/* ── Legend ──────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
         <span className="font-medium text-muted-foreground">Legend:</span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
-          Correct (student's pick)
+          Correct — student's pick
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" />
-          Correct Answer (not picked)
+          Correct answer (not picked)
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
-          Student's Wrong Pick
+          Student's wrong pick
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-600" />
-          Not Selected
+          Not selected
         </span>
       </div>
 
-      {/* Questions */}
+      {/* ── Question cards ───────────────────────────────────────────────── */}
       <div className="space-y-5">
         {questions.map((q, i) => {
-          const statusIcon = q.is_skipped
-            ? <MinusCircle className="h-5 w-5 text-slate-400" />
-            : q.is_correct
-            ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            : <XCircle className="h-5 w-5 text-red-500" />;
+          const { answer_status, selected_option, correct_option } = q;
 
-          const cardBorder = q.is_skipped
-            ? "border-l-4 border-l-slate-300 dark:border-l-slate-600"
-            : q.is_correct
-            ? "border-l-4 border-l-emerald-500"
-            : "border-l-4 border-l-red-500";
+          const cardBorder =
+            answer_status === "correct" ? "border-l-4 border-l-emerald-500"
+            : answer_status === "wrong"   ? "border-l-4 border-l-red-500"
+            :                              "border-l-4 border-l-slate-300 dark:border-l-slate-600";
+
+          const statusIcon =
+            answer_status === "correct" ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            : answer_status === "wrong"   ? <XCircle       className="h-5 w-5 text-red-500" />
+            :                              <MinusCircle    className="h-5 w-5 text-slate-400" />;
 
           return (
-            <Card key={q.id} className={`border-0 shadow-md transition-all ${cardBorder}`}>
+            <Card key={q.id} className={`border-0 shadow-md ${cardBorder}`}>
               <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
                 <div className="flex items-start gap-3 flex-1">
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -350,31 +410,30 @@ export default function ExamReview() {
               <CardContent className="pt-0">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {OPTION_LABELS.map((label) => {
-                    const optionKey = `option_${label.toLowerCase()}` as keyof ReviewQuestion;
+                    const optionKey  = `option_${label.toLowerCase()}` as keyof ReviewQuestion;
                     const optionText = q[optionKey] as string;
 
-                    // Both comparisons use normalised uppercase values
-                    const isCorrectOption  = q.correct_option  === label;
-                    const isStudentPick    = q.selected_option === label;
+                    const isCorrectOption = correct_option === label;
+                    const isStudentPick   = selected_option === label;
 
-                    let bgClass   = "bg-muted/40 border-muted";
-                    let labelBg   = "bg-muted text-muted-foreground";
+                    let bgClass  = "bg-muted/40 border-muted";
+                    let labelBg  = "bg-muted text-muted-foreground";
                     let indicator: React.ReactNode = null;
 
                     if (isCorrectOption && isStudentPick) {
-                      // ✅ Student picked the right answer
-                      bgClass   = "bg-amber-50 border-amber-400 dark:bg-amber-950/40";
-                      labelBg   = "bg-amber-400 text-white";
+                      // Student picked the correct option
+                      bgClass  = "bg-amber-50 border-amber-400 dark:bg-amber-950/40";
+                      labelBg  = "bg-amber-400 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />;
                     } else if (isCorrectOption) {
-                      // ✅ This is the correct answer but student didn't pick it
-                      bgClass   = "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40";
-                      labelBg   = "bg-emerald-500 text-white";
+                      // Correct answer — student skipped or got it wrong
+                      bgClass  = "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/40";
+                      labelBg  = "bg-emerald-500 text-white";
                       indicator = <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-600 shrink-0" />;
                     } else if (isStudentPick) {
-                      // ❌ Student picked this wrong answer
-                      bgClass   = "bg-red-50 border-red-400 dark:bg-red-950/40";
-                      labelBg   = "bg-red-500 text-white";
+                      // Student picked this wrong option
+                      bgClass  = "bg-red-50 border-red-400 dark:bg-red-950/40";
+                      labelBg  = "bg-red-500 text-white";
                       indicator = <XCircle className="ml-auto h-4 w-4 text-red-500 shrink-0" />;
                     }
 
@@ -395,11 +454,28 @@ export default function ExamReview() {
                   })}
                 </div>
 
-                {/* Skipped notice — shows the correct answer for context */}
-                {q.is_skipped && (
+                {/* ── Status footnotes ────────────────────────────────────── */}
+
+                {/* Student genuinely skipped */}
+                {answer_status === "skipped" && (
                   <p className="mt-3 text-xs text-muted-foreground italic">
                     ⚠ Student did not answer this question.
-                    The correct answer is <strong>{q.correct_option}</strong>.
+                    The correct answer is <strong>{correct_option}</strong>.
+                  </p>
+                )}
+
+                {/*
+                  Data-loss notice: we know the outcome (correct/wrong) from is_correct,
+                  but selected_option is null so we cannot show which option was picked.
+                  This happens when TakeExam's submit upsert fired with stale state
+                  and overwrote selected_option with null.
+                */}
+                {answer_status !== "skipped" && selected_option === null && (
+                  <p className="mt-3 text-xs text-amber-700 dark:text-amber-400 italic">
+                    ⚠ The specific option the student chose could not be retrieved.
+                    The answer was recorded as{" "}
+                    <strong>{answer_status === "correct" ? "correct ✓" : "incorrect ✗"}</strong>.
+                    The correct answer is <strong>{correct_option}</strong>.
                   </p>
                 )}
               </CardContent>
