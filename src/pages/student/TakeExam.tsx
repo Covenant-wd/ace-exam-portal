@@ -162,7 +162,16 @@ export default function TakeExam() {
     setViolations(newCount);
     setWarningReason(reason);
     setWarningOpen(true);
-  }, []);
+
+    // FIX: auto-submit immediately when the violation limit is hit.
+    // We compare against maxViolationsRef (the ref, not state) because
+    // React state updates are async — the ref always holds the live value.
+    // Without this, the student could dismiss the modal or close the tab
+    // before ever clicking "Submit Now", bypassing the penalty entirely.
+    if (newCount >= maxViolationsRef.current) {
+      submitExam(false, true);
+    }
+  }, [submitExam]);
 
   // ── FULLSCREEN ───────────────────────────────────────────────────
   // Brief cooldown after enterFullscreen() so the resulting focus events
@@ -440,13 +449,13 @@ export default function TakeExam() {
                   Return to Exam
                 </Button>
               ) : (
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => submitExam(false, true)}
-                >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Now"}
-                </Button>
+                // FIX: submitExam is already called by handleViolation when the
+                // limit is hit — no button needed here. Show a non-interactive
+                // status message so the student knows submission is in progress.
+                <div className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive/10 py-2 text-sm font-semibold text-destructive">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Submitting exam…
+                </div>
               )}
             </div>
           </div>
