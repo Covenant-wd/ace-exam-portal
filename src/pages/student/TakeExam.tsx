@@ -132,8 +132,7 @@ export default function TakeExam() {
         const { data: savedAnswers } = await supabase.from("student_answers")
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
-        // FIXED: use null-check instead of truthiness so options like "0" are not silently dropped.
-        (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option != null) map[a.question_id] = a.selected_option; });
+        (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
         setAnswers(map);
       } else {
         const { data: attempt, error: attemptErr } = await supabase
@@ -162,16 +161,7 @@ export default function TakeExam() {
     setViolations(newCount);
     setWarningReason(reason);
     setWarningOpen(true);
-
-    // FIX: auto-submit immediately when the violation limit is hit.
-    // We compare against maxViolationsRef (the ref, not state) because
-    // React state updates are async — the ref always holds the live value.
-    // Without this, the student could dismiss the modal or close the tab
-    // before ever clicking "Submit Now", bypassing the penalty entirely.
-    if (newCount >= maxViolationsRef.current) {
-      submitExam(false, true);
-    }
-  }, [submitExam]);
+  }, []);
 
   // ── FULLSCREEN ───────────────────────────────────────────────────
   // Brief cooldown after enterFullscreen() so the resulting focus events
@@ -273,39 +263,11 @@ export default function TakeExam() {
     const correctMap: Record<string, string> = {};
     (correctData ?? []).forEach((q: any) => { correctMap[q.id] = q.correct_option; });
 
-    // ── Merge React state with DB to prevent stale-closure data loss ─────────
-    // If submitExam fires via timeout auto-submit, the closure may capture a
-    // stale `answers` object missing recent selections. We read the current DB
-    // rows first and use them as a baseline, then layer the closure answers on
-    // top (React state always takes priority over DB for the same question).
-    // This ensures selected_option is never overwritten with null for a question
-    // the student already answered via the real-time selectAnswer upsert.
-    const { data: savedAnswers } = await supabase
-      .from("student_answers")
-      .select("question_id, selected_option")
-      .eq("attempt_id", attemptId);
-
-    const dbAnswerMap: Record<string, string> = {};
-    (savedAnswers ?? []).forEach((a: any) => {
-      // FIXED: null-check only — don't drop valid falsy option values
-      if (a.selected_option != null) dbAnswerMap[a.question_id] = a.selected_option;
-    });
-
-    const mergedAnswers: Record<string, string> = { ...dbAnswerMap, ...answers };
-
     const answerRows = questions.map((q) => ({
       attempt_id: attemptId,
       question_id: q.id,
-      // FIXED: normalise to uppercase so it always matches correct_option format
-      selected_option: mergedAnswers[q.id] != null ? String(mergedAnswers[q.id]).trim().toUpperCase() : null,
-      // FIXED: normalise both sides (trim + uppercase) before comparing.
-      // Without normalisation a DB value of "a" vs "A" counts as wrong.
-      is_correct: (() => {
-        const ua = mergedAnswers[q.id];
-        if (!ua && ua !== 0 && ua !== false) return false;   // genuinely unanswered
-        const norm = (v: unknown) => String(v).trim().toUpperCase();
-        return norm(ua) === norm(correctMap[q.id]);
-      })(),
+      selected_option: answers[q.id] || null,
+      is_correct: answers[q.id] ? answers[q.id] === correctMap[q.id] : false,
     }));
 
     if (answerRows.length > 0) {
@@ -449,13 +411,13 @@ export default function TakeExam() {
                   Return to Exam
                 </Button>
               ) : (
-                // FIX: submitExam is already called by handleViolation when the
-                // limit is hit — no button needed here. Show a non-interactive
-                // status message so the student knows submission is in progress.
-                <div className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-destructive/10 py-2 text-sm font-semibold text-destructive">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting exam…
-                </div>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => submitExam(false, true)}
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Now"}
+                </Button>
               )}
             </div>
           </div>
