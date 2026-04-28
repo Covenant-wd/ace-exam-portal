@@ -151,8 +151,25 @@ export default function TakeExam() {
     init();
   }, [examId, user, navigate]);
 
+  // ── VIOLATION HANDLER ────────────────────────────────────────────
+  // Defined BEFORE any useEffect that references it so closures always
+  // capture the live function reference (not undefined).
+  const handleViolation = useCallback((reason: string) => {
+    if (submittedRef.current) return;
+    violationsRef.current += 1;
+    const newCount = violationsRef.current;
+    setViolations(newCount);
+    setWarningReason(reason);
+    setWarningOpen(true);
+  }, []);
+
   // ── FULLSCREEN ───────────────────────────────────────────────────
+  // Brief cooldown after enterFullscreen() so the resulting focus events
+  // don't immediately retrigger the violation handler.
+  const fsEnterTimeRef = useRef<number>(0);
+
   const enterFullscreen = useCallback(() => {
+    fsEnterTimeRef.current = Date.now();
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
     else if ((el as any).webkitRequestFullscreen) (el as any).webkitRequestFullscreen();
@@ -161,13 +178,15 @@ export default function TakeExam() {
 
   useEffect(() => {
     if (!examStarted) return;
-    // Enter fullscreen when exam loads
     enterFullscreen();
 
     const handleFSChange = () => {
       const inFS = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(inFS);
-      if (!inFS && examStarted && !submittedRef.current) {
+      // Ignore fullscreen-exit events that happen within 1 s of us calling
+      // enterFullscreen() (browser fires exit before the new enter completes)
+      const msSinceEnter = Date.now() - fsEnterTimeRef.current;
+      if (!inFS && !submittedRef.current && msSinceEnter > 1000) {
         handleViolation("You exited fullscreen mode.");
       }
     };
@@ -178,23 +197,20 @@ export default function TakeExam() {
       document.removeEventListener("fullscreenchange", handleFSChange);
       document.removeEventListener("webkitfullscreenchange", handleFSChange);
     };
-  }, [examStarted, enterFullscreen]);
+  }, [examStarted, enterFullscreen, handleViolation]);
 
   // ── ANTI-CHEAT LISTENERS ─────────────────────────────────────────
   useEffect(() => {
     if (!examStarted) return;
 
-    // Tab visibility change
+    // ── Tab / window visibility ───────────────────────────────────
+    // We use ONLY visibilitychange (not window "blur") to detect tab switching.
+    // Reason: on every tab switch the browser fires BOTH visibilitychange AND
+    // window blur — using both would count every switch as TWO violations.
+    // visibilitychange alone is sufficient and more reliable.
     const handleVisibility = () => {
       if (document.hidden && !submittedRef.current) {
         handleViolation("You switched tabs or minimized the window.");
-      }
-    };
-
-    // Window blur (Alt+Tab, click outside)
-    const handleBlur = () => {
-      if (!submittedRef.current) {
-        handleViolation("You left the exam window.");
       }
     };
 
@@ -216,7 +232,6 @@ export default function TakeExam() {
     const blockCopy = (e: ClipboardEvent) => { e.preventDefault(); };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("blur", handleBlur);
     document.addEventListener("contextmenu", blockContext);
     document.addEventListener("keydown", blockKeys);
     document.addEventListener("copy", blockCopy);
@@ -225,28 +240,13 @@ export default function TakeExam() {
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("blur", handleBlur);
       document.removeEventListener("contextmenu", blockContext);
       document.removeEventListener("keydown", blockKeys);
       document.removeEventListener("copy", blockCopy);
       document.removeEventListener("paste", blockCopy);
       document.removeEventListener("cut", blockCopy);
     };
-  }, [examStarted]);
-
-  // ── VIOLATION HANDLER ────────────────────────────────────────────
-  const handleViolation = useCallback((reason: string) => {
-    if (submittedRef.current) return;
-    violationsRef.current += 1;
-    const newCount = violationsRef.current;
-    setViolations(newCount);
-    setWarningReason(reason);
-    setWarningOpen(true);
-
-    if (newCount >= maxViolationsRef.current) {
-      // Will auto-submit from the warning modal dismiss
-    }
-  }, []);
+  }, [examStarted, handleViolation]);
 
   // ── SUBMIT ───────────────────────────────────────────────────────
   const submitExam = useCallback(async (isTimeout = false, isCheating = false) => {
