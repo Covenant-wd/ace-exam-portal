@@ -9,6 +9,8 @@ interface AuthContextType {
   session: Session | null;
   role: AppRole | null;
   schoolId: string | null;
+  /** School URL slug — used to redirect back to /school/:slug on logout */
+  schoolSlug: string | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, schoolId?: string, className?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -23,7 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // render — no loading flash, no blank screen, no page remount on tab switch.
 const CACHE_KEY = "ace_auth_cache_v1";
 
-type RoleCache = { userId: string; role: AppRole; schoolId: string | null };
+type RoleCache = { userId: string; role: AppRole; schoolId: string | null; schoolSlug: string | null };
 
 function readCache(): RoleCache | null {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null"); }
@@ -42,8 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user,     setUser]     = useState<User | null>(null);
   const [session,  setSession]  = useState<Session | null>(null);
-  const [role,     setRole]     = useState<AppRole | null>(cache?.role ?? null);
-  const [schoolId, setSchoolId] = useState<string | null>(cache?.schoolId ?? null);
+  const [role,       setRole]       = useState<AppRole | null>(cache?.role ?? null);
+  const [schoolId,   setSchoolId]   = useState<string | null>(cache?.schoolId ?? null);
+  const [schoolSlug, setSchoolSlug] = useState<string | null>(cache?.schoolSlug ?? null);
   // Skip the loading spinner entirely when we already have a cached role.
   const [loading,  setLoading]  = useState<boolean>(!cache);
 
@@ -62,12 +65,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const r = (data?.role as AppRole) ?? null;
     const s = data?.school_id ?? null;
 
+    // Fetch the school slug so DashboardLayout can redirect to /school/:slug
+    // on logout without needing a DB query after the session is cleared.
+    let slug: string | null = null;
+    if (s) {
+      const { data: schoolData } = await supabase
+        .from("schools")
+        .select("slug")
+        .eq("id", s)
+        .maybeSingle();
+      slug = schoolData?.slug ?? null;
+    }
+
     setRole(r);
     setSchoolId(s);
+    setSchoolSlug(slug);
 
     if (r) {
       fetchedForRef.current = userId;
-      writeCache({ userId, role: r, schoolId: s });
+      writeCache({ userId, role: r, schoolId: s, schoolSlug: slug });
     }
   };
 
@@ -91,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setRole(null);
           setSchoolId(null);
+          setSchoolSlug(null);
           clearCache();
           fetchedForRef.current = null;
         }
@@ -152,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Signed out
           setRole(null);
           setSchoolId(null);
+          setSchoolSlug(null);
           clearCache();
           fetchedForRef.current = null;
         }
@@ -186,13 +204,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUser(null); setSession(null); setRole(null); setSchoolId(null);
+    setUser(null); setSession(null); setRole(null); setSchoolId(null); setSchoolSlug(null);
     clearCache();
     fetchedForRef.current = null;
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, schoolId, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, schoolId, schoolSlug, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
