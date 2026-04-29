@@ -97,9 +97,12 @@ export default function Fees() {
     if (!feeName || !feeAmount || !schoolId) { toast.error("Name and amount required"); return; }
     setSaving(true);
     try {
+      // Treat both empty string and "__none__" as null so we never write
+      // a non-UUID sentinel string into a UUID column.
+      const toUuid = (v: string) => (v === "" || v === "__none__" ? null : v);
       const payload: any = {
         name: feeName, amount: parseFloat(feeAmount), school_id: schoolId, description: feeDesc,
-        term_id: feeTermId || null, class_id: feeClassId || null,
+        term_id: toUuid(feeTermId), class_id: toUuid(feeClassId),
       };
       if (editingFee) {
         const { error } = await supabase.from("fee_types").update(payload).eq("id", editingFee.id);
@@ -262,15 +265,21 @@ export default function Fees() {
               <div className="space-y-2">
                 <Label>Term (optional)</Label>
                 <Select value={feeTermId} onValueChange={setFeeTermId}>
-                  <SelectTrigger><SelectValue placeholder="All terms" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Terms</SelectItem>{terms.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  <SelectTrigger><SelectValue placeholder="All terms (no filter)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">All terms (no filter)</SelectItem>
+                    {terms.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Class (optional)</Label>
                 <Select value={feeClassId} onValueChange={setFeeClassId}>
-                  <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Classes</SelectItem>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectTrigger><SelectValue placeholder="All classes (no filter)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">All classes (no filter)</SelectItem>
+                    {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
             </div>

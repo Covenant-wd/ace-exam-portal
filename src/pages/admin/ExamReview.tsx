@@ -201,18 +201,6 @@ export default function ExamReview() {
           const correctNorm = normaliseAnswer(q.correct_option) ?? "";
           const dbIsCorrect = ans?.is_correct ?? null;
 
-          // ── DEBUG LOG (remove before production) ────────────────────────
-          console.log("[ExamReview] Q", q.id, {
-            correctAnswer:        q.correct_option,
-            normalizedCorrect:    correctNorm,
-            userAnswer:           ans?.selected_option ?? null,
-            normalizedUserAnswer: selected,
-            hasRow,
-            dbIsCorrect,
-            result: resolveStatus(selected, correctNorm, dbIsCorrect, hasRow),
-          });
-          // ────────────────────────────────────────────────────────────────
-
           const answer_status = resolveStatus(selected, correctNorm, dbIsCorrect, hasRow);
 
           return {
@@ -247,22 +235,7 @@ export default function ExamReview() {
 
         setQuestions(merged);
 
-        // ── FIXED: Summary count integrity check (dev-only) ───────────────
-        const _correct = merged.filter((q) => q.answer_status === "correct").length;
-        const _wrong   = merged.filter((q) => q.answer_status === "wrong").length;
-        const _skipped = merged.filter((q) => q.answer_status === "skipped").length;
-        if (_correct + _wrong + _skipped !== merged.length) {
-          console.error(
-            "[ExamReview] ❌ Count mismatch!",
-            { correct: _correct, wrong: _wrong, skipped: _skipped, total: merged.length }
-          );
-        } else {
-          console.log(
-            "[ExamReview] ✅ Counts valid:",
-            { correct: _correct, wrong: _wrong, skipped: _skipped, total: merged.length }
-          );
-        }
-        // ─────────────────────────────────────────────────────────────────
+
       } finally {
         setLoading(false);
       }
