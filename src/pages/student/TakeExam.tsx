@@ -527,20 +527,52 @@ export default function TakeExam() {
 
       <div className="mx-auto flex max-w-4xl gap-4 p-4">
         {/* Question navigator (desktop) */}
-        <div className="hidden w-20 shrink-0 lg:block">
-          <div className="sticky top-24 space-y-2">
-            {questions.map((q, i) => (
-              <button key={q.id} onClick={() => setCurrentIndex(i)}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-lg text-sm font-medium transition-colors",
-                  currentIndex === i ? "bg-primary text-primary-foreground"
-                    : answers[q.id] ? "bg-secondary text-secondary-foreground"
-                    : "bg-muted text-muted-foreground",
-                  flagged.has(q.id) && "ring-2 ring-accent"
-                )}>
-                {i + 1}
-              </button>
-            ))}
+        <div className="hidden w-48 shrink-0 lg:block">
+          <div className="sticky top-24">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Questions
+            </p>
+            {/* 5-column grid: rows of 1-5, 6-10, 11-15 ... */}
+            <div className="grid grid-cols-5 gap-1.5">
+              {questions.map((q, i) => (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentIndex(i)}
+                  title={`Question ${i + 1}${flagged.has(q.id) ? " (flagged)" : ""}`}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition-colors",
+                    currentIndex === i
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : answers[q.id]
+                      ? "bg-emerald-500 text-white"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70",
+                    flagged.has(q.id) && "ring-2 ring-amber-400"
+                  )}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+
+            {/* Mini legend */}
+            <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-3 w-3 rounded-sm bg-primary" />
+                Current
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
+                Answered
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-3 w-3 rounded-sm bg-muted ring-2 ring-amber-400" />
+                Flagged
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-3 w-3 rounded-sm bg-muted" />
+                Unanswered
+              </div>
+            </div>
           </div>
         </div>
 
@@ -625,19 +657,30 @@ export default function TakeExam() {
           </Card>
 
           {/* Mobile question navigator */}
-          <div className="mt-4 flex flex-wrap gap-2 lg:hidden">
-            {questions.map((q, i) => (
-              <button key={q.id} onClick={() => setCurrentIndex(i)}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-lg text-sm font-medium",
-                  currentIndex === i ? "bg-primary text-primary-foreground"
-                    : answers[q.id] ? "bg-secondary text-secondary-foreground"
-                    : "bg-muted text-muted-foreground",
-                  flagged.has(q.id) && "ring-2 ring-accent"
-                )}>
-                {i + 1}
-              </button>
-            ))}
+          <div className="mt-4 lg:hidden">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Questions
+            </p>
+            <div className="grid grid-cols-10 gap-1.5">
+              {questions.map((q, i) => (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentIndex(i)}
+                  title={`Question ${i + 1}${flagged.has(q.id) ? " (flagged)" : ""}`}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition-colors",
+                    currentIndex === i
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : answers[q.id]
+                      ? "bg-emerald-500 text-white"
+                      : "bg-muted text-muted-foreground",
+                    flagged.has(q.id) && "ring-2 ring-amber-400"
+                  )}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
