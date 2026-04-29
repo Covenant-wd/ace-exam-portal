@@ -108,9 +108,17 @@ export default function StudentDashboard() {
       }));
       setFees(feeRecords);
 
-      // Load announcements
-      const { data: annData } = await supabase.from("announcements").select("id, title, content, created_at")
-        .eq("is_active", true).order("created_at", { ascending: false }).limit(10);
+      // Load announcements — scoped to this student's school so they only see
+      // their own school's posts. Without the school_id filter, students from
+      // every school would see each other's announcements.
+      const annQuery = supabase
+        .from("announcements")
+        .select("id, title, content, created_at")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (schoolId) annQuery.eq("school_id", schoolId);
+      const { data: annData } = await annQuery;
       setAnnouncements((annData as AnnouncementItem[]) || []);
 
       setLoading(false);

@@ -39,6 +39,9 @@ export default function TakeExam() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [timeLeft, setTimeLeft]   = useState(0);
+  // Stores the absolute deadline as a Unix timestamp (ms).
+  // Used by the timer to compute remaining time accurately without drift.
+  const deadlineRef = useRef<number>(0);
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [allowCalculator, setAllowCalculator] = useState(false);
@@ -121,14 +124,18 @@ export default function TakeExam() {
         }
         setAttemptId(newAttemptId);
         setAnswers({}); setFlagged(new Set()); setCurrentIndex(0);
-        setTimeLeft(examRes.data.duration_minutes * 60);
+        const retakeSecs = examRes.data.duration_minutes * 60;
+        deadlineRef.current = Date.now() + retakeSecs * 1000;
+        setTimeLeft(retakeSecs);
         setLoading(false); setExamStarted(true); return;
       }
 
       if (existing && !existing.is_submitted) {
         setAttemptId(existing.id);
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
-        setTimeLeft(Math.floor(Math.max(0, examRes.data.duration_minutes * 60 - elapsed)));
+        const remaining = Math.floor(Math.max(0, examRes.data.duration_minutes * 60 - elapsed));
+        deadlineRef.current = Date.now() + remaining * 1000;
+        setTimeLeft(remaining);
         const { data: savedAnswers } = await supabase.from("student_answers")
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
@@ -142,7 +149,9 @@ export default function TakeExam() {
           navigate("/student/exams"); return;
         }
         setAttemptId(attempt.id);
-        setTimeLeft(examRes.data.duration_minutes * 60);
+        const secs = examRes.data.duration_minutes * 60;
+        deadlineRef.current = Date.now() + secs * 1000;
+        setTimeLeft(secs);
       }
 
       setLoading(false);
@@ -271,7 +280,24 @@ export default function TakeExam() {
     }));
 
     if (answerRows.length > 0) {
-      await supabase.from("student_answers").upsert(answerRows, { onConflict: "attempt_id,question_id" });
+      // Check the upsert result and retry once on failure.
+      // A silent failure here (network blip, RLS issue) is the root cause of
+      // selected_option being null in ExamReview despite the student answering.
+      const { error: upsertErr } = await supabase
+        .from("student_answers")
+        .upsert(answerRows, { onConflict: "attempt_id,question_id" });
+
+      if (upsertErr) {
+        // Wait 1 s and retry once before giving up
+        await new Promise((r) => setTimeout(r, 1000));
+        const { error: retryErr } = await supabase
+          .from("student_answers")
+          .upsert(answerRows, { onConflict: "attempt_id,question_id" });
+        if (retryErr) {
+          // Log but don't block — score is still written to exam_attempts
+          console.error("[TakeExam] student_answers upsert failed after retry:", retryErr.message);
+        }
+      }
     }
 
     const score = answerRows.filter((a) => a.is_correct).length;
@@ -322,16 +348,23 @@ export default function TakeExam() {
   }, [attemptId, answers, questions, examId, navigate, schoolName, user]);
 
   // ── TIMER ────────────────────────────────────────────────────────
+  // Uses deadline-based countdown (Date.now() diff) instead of decrementing
+  // state by 1 every second. setInterval fires are never perfectly 1000 ms
+  // apart — over a 60-minute exam the old approach could lose 5-15 seconds.
   useEffect(() => {
     if (loading || timeLeft <= 0) return;
     const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) { clearInterval(interval); submitExam(true); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
+      const remaining = Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000));
+      if (remaining <= 0) {
+        clearInterval(interval);
+        setTimeLeft(0);
+        submitExam(true);
+      } else {
+        setTimeLeft(remaining);
+      }
+    }, 500); // poll twice per second so display is always accurate
     return () => clearInterval(interval);
-  }, [loading, submitExam, timeLeft]);
+  }, [loading, submitExam]); // intentionally omit timeLeft — deadline drives it
 
   const selectAnswer = async (questionId: string, option: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: option }));
