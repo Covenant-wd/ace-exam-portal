@@ -146,27 +146,29 @@ export default function Students() {
 
     try {
       if (editing) {
-        const { data, error } = await supabase.functions.invoke("manage-student", {
-          body: {
-            action: "update",
-            user_id: editing.user_id,
-            email: form.email,
-            password: form.password || undefined,
-            first_name: form.first_name,
-            middle_name: form.middle_name || "",
-            last_name: form.last_name,
-            username: form.username || null,
-            class_id: form.class_id || null,
-            date_of_birth: form.date_of_birth || null,
-            address: form.address || "",
-            parent_name: form.parent_name || "",
-            nationality: form.nationality || "",
-            gender: form.gender || "",
-            subjects_offered: subjects,
-          },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
+        // Use update_school_user() SQL RPC — bypasses the edge function entirely
+        // so it works even when the edge function is not deployed / unreachable.
+        const { data: { user: callerUser } } = await supabase.auth.getUser();
+        if (!callerUser) throw new Error("Not authenticated");
+
+        const { error: rpcError } = await supabase.rpc("update_school_user", {
+          _caller_id:       callerUser.id,
+          _user_id:         editing.user_id,
+          _email:           form.email           || null,
+          _password:        form.password         || null,
+          _first_name:      form.first_name       || null,
+          _middle_name:     form.middle_name      || "",
+          _last_name:       form.last_name        || null,
+          _username:        form.username         || null,
+          _class_id:        form.class_id         || null,
+          _date_of_birth:   form.date_of_birth    || null,
+          _address:         form.address          || "",
+          _parent_name:     form.parent_name      || "",
+          _nationality:     form.nationality      || "",
+          _gender:          form.gender           || "",
+          _subjects_offered: subjects,
+        } as any);
+        if (rpcError) throw new Error(rpcError.message);
         // Update local state immediately so changes reflect at once
         const updatedStudent = {
           ...editing!,
