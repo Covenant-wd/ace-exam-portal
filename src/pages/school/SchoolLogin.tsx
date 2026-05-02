@@ -101,20 +101,23 @@ export default function SchoolLogin() {
     setSubmitting(true);
     try {
       if (activeRole === "student" || activeRole === "parent") {
-        const { data: emailData, error: emailError } = await supabase.rpc("get_email_by_username", {
+        // Use a single generic error for both "username not found" and "wrong
+        // password" — separate messages would let an attacker enumerate valid
+        // usernames just by reading (or timing) the response.
+        const { data: emailData } = await supabase.rpc("get_email_by_username", {
           _username: identifier.trim(),
           _school_id: school!.id,
         });
-        if (emailError || !emailData) {
-          toast.error("Username not found. Please check and try again.");
+        if (!emailData) {
+          toast.error("Invalid username or password. Please try again.");
           setSubmitting(false);
           return;
         }
         const { error } = await signIn(emailData, password);
-        if (error) toast.error("Incorrect password. Please try again.");
+        if (error) toast.error("Invalid username or password. Please try again.");
       } else {
         const { error } = await signIn(identifier, password);
-        if (error) toast.error(error.message);
+        if (error) toast.error("Invalid email or password. Please try again.");
       }
     } catch {
       toast.error("Login failed. Please try again.");
