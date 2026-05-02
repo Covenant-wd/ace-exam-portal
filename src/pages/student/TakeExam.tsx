@@ -63,6 +63,16 @@ export default function TakeExam() {
   const maxViolationsRef = useRef(3);
   const submittedRef  = useRef(false);
 
+  // iOS Safari does not support the Fullscreen API at all. Attempting
+  // requestFullscreen() on iOS throws or silently fails, and fullscreenchange
+  // never fires — so students would get phantom violations. We skip fullscreen
+  // entirely on iOS; visibilitychange anti-cheat still works normally.
+  const isIOS = useRef(
+    typeof navigator !== "undefined" &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+  );
+
   // ── INIT ────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
@@ -178,6 +188,7 @@ export default function TakeExam() {
   const fsEnterTimeRef = useRef<number>(0);
 
   const enterFullscreen = useCallback(() => {
+    if (isIOS.current) return; // Fullscreen API unsupported on iOS
     fsEnterTimeRef.current = Date.now();
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
@@ -187,6 +198,7 @@ export default function TakeExam() {
 
   useEffect(() => {
     if (!examStarted) return;
+    if (isIOS.current) return; // iOS doesn't support fullscreen
     enterFullscreen();
 
     const handleFSChange = () => {
