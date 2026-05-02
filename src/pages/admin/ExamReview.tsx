@@ -187,19 +187,30 @@ export default function ExamReview() {
         // 5. Student's answer rows for this attempt.
         //    We select is_correct as well so we can use it as a fallback when
         //    selected_option is null (stale-state submit bug).
-        const { data: studentAnswers } = await supabase
+        const { data: studentAnswers, error: answersErr } = await supabase
           .from("student_answers")
           .select("question_id, selected_option, is_correct")
           .eq("attempt_id", attemptId!);
 
-        // Build lookup: question_id → answer row
-        const answerMap = new Map(
-          (studentAnswers ?? []).map((a) => [a.question_id, a])
-        );
+        if (answersErr) {
+          console.error("[ExamReview] failed to load student_answers:", answersErr.message);
+        }
+        console.log("[ExamReview] loaded answers:", {
+          attemptId,
+          rows: studentAnswers?.length ?? 0,
+          sample: studentAnswers?.slice(0, 3),
+        });
+
+        // Build lookup: question_id → answer row.
+        // Normalise keys to plain strings to defeat any UUID/object key quirks.
+        const answerMap = new Map<string, { question_id: string; selected_option: string | null; is_correct: boolean | null }>();
+        for (const a of studentAnswers ?? []) {
+          if (a?.question_id) answerMap.set(String(a.question_id), a as any);
+        }
 
         // Merge questions with answers
         const merged: ReviewQuestion[] = (rawQuestions ?? []).map((q: any) => {
-          const ans = answerMap.get(q.id);
+          const ans = answerMap.get(String(q.id));
           const hasRow = ans !== undefined;
 
           // FIXED: use normaliseAnswer() for consistent trim+uppercase+null handling
@@ -224,6 +235,10 @@ export default function ExamReview() {
             answer_status,
           };
         });
+
+        console.log("[ExamReview] merged statuses:", merged.map(m => ({
+          q: m.question_order, status: m.answer_status, sel: m.selected_option, correct: m.correct_option, hasRow: m.has_answer_row
+        })));
 
         // Use stored score from exam_attempts as the authoritative score.
         // Fall back to counting resolved "correct" statuses only when score is null.
