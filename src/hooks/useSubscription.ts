@@ -60,8 +60,10 @@ export function useSubscription() {
   const { data: subscription, isLoading } = useQuery<SubscriptionInfo>({
     queryKey: ["subscription", schoolId],
     enabled,
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000,    // 5 min — subscription status rarely changes mid-session
+    gcTime:    10 * 60 * 1000,   // keep cached 10 min after component unmounts
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,   // reconnect shouldn't trigger a subscription re-check
     queryFn: async (): Promise<SubscriptionInfo> => {
       const { data, error } = await supabase
         .from("schools")
