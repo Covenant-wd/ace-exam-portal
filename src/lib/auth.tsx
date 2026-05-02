@@ -23,19 +23,31 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Role never changes between sessions for the same user, so we cache it in
 // localStorage. This means role + schoolId are available synchronously on first
 // render — no loading flash, no blank screen, no page remount on tab switch.
-const CACHE_KEY = "ace_auth_cache_v1";
+const CACHE_KEY    = "ace_auth_cache_v2"; // v2 adds cachedAt TTL — busts stale v1 entries
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24 h — role changes in DB show within a day
 
-type RoleCache = { userId: string; role: AppRole; schoolId: string | null; schoolSlug: string | null };
+type RoleCache = { userId: string; role: AppRole; schoolId: string | null; schoolSlug: string | null; cachedAt: number };
 
 function readCache(): RoleCache | null {
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY) ?? "null"); }
-  catch { return null; }
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const c: RoleCache = JSON.parse(raw);
+    if (!c.cachedAt || Date.now() - c.cachedAt > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_KEY);
+      return null; // expired — forces fresh DB read
+    }
+    return c;
+  } catch { return null; }
 }
-function writeCache(c: RoleCache) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch {}
+function writeCache(c: Omit<RoleCache, "cachedAt">) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ...c, cachedAt: Date.now() })); } catch {}
 }
 function clearCache() {
-  try { localStorage.removeItem(CACHE_KEY); } catch {}
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem("ace_auth_cache_v1"); // remove legacy key if present
+  } catch {}
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
