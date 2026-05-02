@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
 
@@ -52,6 +52,7 @@ export default function Students() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Promotion state
   const [promoOpen, setPromoOpen] = useState(false);
@@ -335,7 +336,7 @@ export default function Students() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setShowPassword(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader><DialogTitle>{editing ? "Edit Student" : "Add New Student"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
@@ -344,7 +345,28 @@ export default function Students() {
             <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.last_name} onChange={set("last_name")} required /></div>
             <div className="space-y-1.5"><Label>Username</Label><Input value={form.username} onChange={set("username")} /></div>
             <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
-            <div className="space-y-1.5"><Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={form.password} onChange={set("password")} required={!editing} /></div>
+            <div className="space-y-1.5">
+              <Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={set("password")}
+                  required={!editing}
+                  placeholder={editing ? "Leave blank to keep current" : "Min 6 characters"}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label>Gender</Label>
               <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>

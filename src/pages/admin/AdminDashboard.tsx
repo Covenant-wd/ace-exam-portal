@@ -15,7 +15,10 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!schoolId) return;
     const fetchStats = async () => {
-      const [students, subjects, exams, attempts, instructors, parents, classes, sess, term] = await Promise.all([
+      // All queries — including terms (for both name display AND fee totals termId)
+      // — run in a single parallel batch. Previously terms ran sequentially after
+      // Promise.all purely to get the termId, adding an extra round-trip (W7).
+      const [students, subjects, exams, attempts, instructors, parents, classes, sess, termRes] = await Promise.all([
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student").eq("school_id", schoolId),
         supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
         supabase.from("exams").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
@@ -23,25 +26,23 @@ export default function AdminDashboard() {
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "instructor").eq("school_id", schoolId),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "parent").eq("school_id", schoolId),
         supabase.from("classes").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
-        supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
-        supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single(),
+        supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).maybeSingle(),
+        supabase.from("terms").select("id, name").eq("school_id", schoolId).eq("is_active", true).maybeSingle(),
       ]);
       setStats({
-        students: students.count ?? 0,
-        subjects: subjects.count ?? 0,
-        exams: exams.count ?? 0,
-        attempts: attempts.count ?? 0,
+        students:    students.count    ?? 0,
+        subjects:    subjects.count    ?? 0,
+        exams:       exams.count       ?? 0,
+        attempts:    attempts.count    ?? 0,
         instructors: instructors.count ?? 0,
-        parents: parents.count ?? 0,
-        classes: classes.count ?? 0,
+        parents:     parents.count     ?? 0,
+        classes:     classes.count     ?? 0,
       });
-      if (sess.data) setActiveSession(sess.data.name);
-      if (term.data) setActiveTerm(term.data.name);
+      if (sess.data?.name)    setActiveSession(sess.data.name);
+      if (termRes.data?.name) setActiveTerm(termRes.data.name);
 
-      // Fetch active term id for fee totals
-      const activeTerm = await supabase
-        .from("terms").select("id").eq("school_id", schoolId).eq("is_active", true).maybeSingle();
-      const termId = activeTerm.data?.id ?? null;
+      // termId is already available from the parallel batch — no extra query needed
+      const termId = (termRes.data as any)?.id ?? null;
       const feeRes = await supabase.rpc("get_school_fee_totals", {
         _school_id: schoolId,
         _term_id:   termId,

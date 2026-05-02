@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Eye } from "lucide-react";
+import { Loader2, Eye, ChevronDown } from "lucide-react";
 
 export default function Results() {
   const { schoolId } = useAuth();
@@ -15,11 +15,22 @@ export default function Results() {
   const location = useLocation();
   const basePath = location.pathname.startsWith("/instructor") ? "/instructor" : "/admin";
 
-  const [exams, setExams] = useState<any[]>([]);
-  const [selectedExam, setSelectedExam] = useState<string>("");
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ── Typed interfaces replace any[] (W10) ─────────────────────────
+  interface ExamOption { id: string; title: string; subjects: { name: string } | null }
+  interface ResultRow {
+    id: string; student_id: string; score: number;
+    total_questions: number; submitted_at: string;
+    profile: { full_name: string; class_name: string } | null;
+  }
+
+  const PAGE_SIZE = 50;
+  const [exams,          setExams]          = useState<ExamOption[]>([]);
+  const [selectedExam,   setSelectedExam]   = useState<string>("");
+  const [results,        setResults]        = useState<ResultRow[]>([]);
+  const [loading,        setLoading]        = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [page,           setPage]           = useState(0);
+  const [hasMore,        setHasMore]        = useState(false);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -29,40 +40,60 @@ export default function Results() {
       .eq("school_id", schoolId)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        setExams(data ?? []);
+        setExams((data ?? []) as ExamOption[]);
         setLoading(false);
       });
   }, [schoolId]);
 
-  useEffect(() => {
-    if (!selectedExam) { setResults([]); return; }
+  // ── Paginated fetch (W4) ──────────────────────────────────────
+  const fetchPage = useCallback(async (examId: string, pageIdx: number, append = false) => {
     setLoadingResults(true);
-    (async () => {
-      const { data: attempts } = await supabase
-        .from("exam_attempts")
-        .select("*")
-        .eq("exam_id", selectedExam)
-        .eq("is_submitted", true)
-        .order("score", { ascending: false });
+    const from = pageIdx * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
 
-      if (!attempts || attempts.length === 0) {
-        setResults([]);
-        setLoadingResults(false);
-        return;
-      }
+    const { data: attempts, count } = await supabase
+      .from("exam_attempts")
+      .select("id, student_id, score, total_questions, submitted_at", { count: "exact" })
+      .eq("exam_id", examId)
+      .eq("is_submitted", true)
+      .order("score", { ascending: false })
+      .range(from, to);
 
-      const studentIds = [...new Set(attempts.map((a: any) => a.student_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, class_name")
-        .in("user_id", studentIds)
-        .eq("school_id", schoolId!);
-
-      const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
-      setResults(attempts.map((a: any) => ({ ...a, profile: profileMap.get(a.student_id) ?? null })));
+    if (!attempts || attempts.length === 0) {
+      if (!append) setResults([]);
+      setHasMore(false);
       setLoadingResults(false);
-    })();
-  }, [selectedExam, schoolId]);
+      return;
+    }
+
+    const studentIds = [...new Set(attempts.map((a) => a.student_id))];
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, class_name")
+      .in("user_id", studentIds)
+      .eq("school_id", schoolId!);
+
+    const profileMap = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+    const rows: ResultRow[] = attempts.map((a) => ({
+      ...a,
+      profile: (profileMap.get(a.student_id) as ResultRow["profile"]) ?? null,
+    }));
+    setResults((prev) => append ? [...prev, ...rows] : rows);
+    setHasMore((count ?? 0) > to + 1);
+    setLoadingResults(false);
+  }, [schoolId]);
+
+  useEffect(() => {
+    if (!selectedExam) { setResults([]); setHasMore(false); return; }
+    setPage(0);
+    fetchPage(selectedExam, 0, false);
+  }, [selectedExam, fetchPage]);
+
+  const loadMore = () => {
+    const next = page + 1;
+    setPage(next);
+    fetchPage(selectedExam, next, true);
+  };
 
   if (loading) {
     return (
@@ -157,6 +188,21 @@ export default function Results() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={loadMore}
+            disabled={loadingResults}
+            className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {loadingResults
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <ChevronDown className="h-4 w-4" />}
+            Load more results
+          </button>
+        </div>
       )}
     </div>
   );
