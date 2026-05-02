@@ -96,25 +96,31 @@ function resolveStatus(
   dbIsCorrect: boolean | null,
   hasRow: boolean,
 ): "correct" | "wrong" | "skipped" {
-  // FIXED: normalise selected here (was only uppercased at call-site, never trimmed)
   const normSelected = normaliseAnswer(selected);
   const normCorrect  = normaliseAnswer(correctOption);
 
-  // 1. We have a clean selected answer — compare directly. Most reliable path.
+  // 1. No student_answers row at all → student definitively did NOT answer.
+  //    With the fixed submitExam, skipped questions are guaranteed to have no row.
+  if (!hasRow) return "skipped";
+
+  // 2. We have a clean selected answer — compare against the correct option.
+  //    This is the primary path now that submitExam never inserts null rows.
   if (normSelected !== null) {
     return normSelected === normCorrect ? "correct" : "wrong";
   }
 
-  // 2. selected_option is null/empty but a student_answers row exists.
-  //    The submit upsert ran with stale state and wrote null for this question.
-  //    Fall back to the DB-stored is_correct flag (set correctly at submit time).
-  if (hasRow && dbIsCorrect !== null) {
+  // 3. Edge case: a row exists but selected_option is null. This should no
+  //    longer happen with the fixed submitExam, but we handle legacy/partial
+  //    data defensively. Trust is_correct when present; otherwise treat as
+  //    wrong (the row's existence proves the student engaged with the question)
+  //    rather than skipped — so we never silently misclassify a real attempt.
+  if (dbIsCorrect !== null) {
     return dbIsCorrect ? "correct" : "wrong";
   }
 
-  // 3. No row at all, or the row's is_correct is also null.
-  //    The student genuinely did not answer → SKIPPED.
-  return "skipped";
+  // 4. Row exists but both selected_option and is_correct are null — corrupt
+  //    legacy data. Mark as wrong (not skipped) since a row was created.
+  return "wrong";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
