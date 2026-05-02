@@ -210,7 +210,7 @@ export default function ExamReview() {
 
         // Merge questions with answers
         const merged: ReviewQuestion[] = (rawQuestions ?? []).map((q: any) => {
-          const ans = answerMap.get(q.id);
+          const ans = answerMap.get(String(q.id));
           const hasRow = ans !== undefined;
 
           // FIXED: use normaliseAnswer() for consistent trim+uppercase+null handling
@@ -235,6 +235,10 @@ export default function ExamReview() {
             answer_status,
           };
         });
+
+        console.log("[ExamReview] merged statuses:", merged.map(m => ({
+          q: m.question_order, status: m.answer_status, sel: m.selected_option, correct: m.correct_option, hasRow: m.has_answer_row
+        })));
 
         // Use stored score from exam_attempts as the authoritative score.
         // Fall back to counting resolved "correct" statuses only when score is null.
