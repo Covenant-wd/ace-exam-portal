@@ -61,18 +61,18 @@ export default function StudentFeeDrawer({
     setLoading(true);
     const load = async () => {
       const [summaryRes, historyRes] = await Promise.all([
-        supabase.rpc("get_student_fee_summary", {
+        (supabase as any).rpc("get_student_fee_summary", {
           _student_id: studentId,
           _school_id:  schoolId,
           _term_id:    termId ?? null,
-        } as any),
-        supabase.rpc("get_student_payment_history", {
+        }),
+        (supabase as any).rpc("get_student_payment_history", {
           _student_id: studentId,
           _school_id:  schoolId,
-        } as any),
+        }),
       ]);
-      setLines((summaryRes.data as FeeLineItem[]) ?? []);
-      setHistory((historyRes.data as PaymentRecord[]) ?? []);
+      setLines((summaryRes.data as unknown as FeeLineItem[]) ?? []);
+      setHistory((historyRes.data as unknown as PaymentRecord[]) ?? []);
       setLoading(false);
     };
     load();

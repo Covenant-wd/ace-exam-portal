@@ -64,7 +64,7 @@ export default function SuperAdminSubscriptions() {
     setLoading(true);
     try {
       // Payment history — join with schools
-      const { data: hist, error: hErr } = await supabase
+      const { data: hist, error: hErr } = await (supabase as any)
         .from("subscriptions")
         .select(`
           id, plan, status, amount_paid, payment_reference,

@@ -84,22 +84,22 @@ export default function Debtors() {
     const classArg = filterClass !== "all" ? filterClass : null;
 
     const [debtorsRes, totalsRes] = await Promise.all([
-      supabase.rpc("get_school_fee_debtors", {
+      (supabase as any).rpc("get_school_fee_debtors", {
         _school_id: schoolId,
         _term_id:   termArg,
         _class_id:  classArg,
-      } as any),
-      supabase.rpc("get_school_fee_totals", {
+      }),
+      (supabase as any).rpc("get_school_fee_totals", {
         _school_id: schoolId,
         _term_id:   termArg,
-      } as any),
+      }),
     ]);
 
     if (debtorsRes.error) { toast.error(debtorsRes.error.message); }
-    else { setDebtors((debtorsRes.data as Debtor[]) ?? []); }
+    else { setDebtors((debtorsRes.data as unknown as Debtor[]) ?? []); }
 
     if (totalsRes.data && (totalsRes.data as any[]).length > 0) {
-      setTotals((totalsRes.data as FeeTotal[])[0]);
+      setTotals((totalsRes.data as unknown as FeeTotal[])[0]);
     }
     setLoading(false);
   }, [schoolId, filterTerm, filterClass]);
