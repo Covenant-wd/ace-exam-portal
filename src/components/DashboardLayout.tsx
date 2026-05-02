@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
 import {
   GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
@@ -8,7 +9,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
-import { supabase } from "@/integrations/supabase/client";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import SubscriptionGuard from "@/components/SubscriptionGuard";
 
@@ -64,26 +64,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [instructorLinks, setInstructorLinks] = useState<NavItem[]>([]);
 
-  useEffect(() => {
-    if (role !== "instructor" || !user) return;
-    const loadPerms = async () => {
-      const { data } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
-      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
-      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen, group: "Academic" });
-      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText, group: "Academic" });
-      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock, group: "Academic" });
-      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
-      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award, group: "Assessment" });
-      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users, group: "People" });
-      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare, group: "Records" });
-      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
-      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone, group: "Records" });
-      setInstructorLinks(links);
-    };
-    loadPerms();
-  }, [role, user]);
+  // Shared hook — permissions are fetched once and cached in component state.
+  // Previously DashboardLayout had its own fetch AND ExamReview had another via
+  // the same hook, resulting in 2 DB round-trips per page. Now there is one.
+  const { permissions: instrPerms } = useInstructorPermissions();
+
+  const instructorLinks: NavItem[] = (() => {
+    if (role !== "instructor") return [];
+    const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
+    if (instrPerms?.can_manage_subjects)    links.push({ to: "/instructor/subjects",     label: "Subjects",     icon: BookOpen,    group: "Academic"   });
+    if (instrPerms?.can_manage_exams)       links.push({ to: "/instructor/exams",        label: "Exams",        icon: FileText,    group: "Academic"   });
+    if (instrPerms?.can_manage_timetable)   links.push({ to: "/instructor/timetable",    label: "Timetable",    icon: Clock,       group: "Academic"   });
+    if (instrPerms?.can_view_results)       links.push({ to: "/instructor/results",      label: "Results",      icon: BarChart3,   group: "Assessment" });
+    if (instrPerms?.can_manage_grades)      links.push({ to: "/instructor/grades",       label: "Grades",       icon: Award,       group: "Assessment" });
+    if (instrPerms?.can_manage_students)    links.push({ to: "/instructor/students",     label: "Students",     icon: Users,       group: "People"     });
+    if (instrPerms?.can_mark_attendance)    links.push({ to: "/instructor/attendance",   label: "Attendance",   icon: CheckSquare, group: "Records"    });
+    if (instrPerms?.can_manage_fees)        links.push({ to: "/instructor/fees",         label: "Fees",         icon: DollarSign,  group: "Records"    });
+    if (instrPerms?.can_post_announcements) links.push({ to: "/instructor/announcements",label: "Announcements",icon: Megaphone,   group: "Records"    });
+    return links;
+  })();
 
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
 
