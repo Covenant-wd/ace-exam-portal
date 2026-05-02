@@ -284,35 +284,50 @@ export default function TakeExam() {
     const correctMap: Record<string, string> = {};
     (correctData ?? []).forEach((q: any) => { correctMap[q.id] = q.correct_option; });
 
-    const answerRows = questions.map((q) => ({
-      attempt_id: attemptId,
-      question_id: q.id,
-      selected_option: answers[q.id] || null,
-      is_correct: answers[q.id] ? answers[q.id] === correctMap[q.id] : false,
-    }));
+    // CRITICAL FIX: Only upsert rows for questions the student actually answered.
+    // Previously we upserted a row for EVERY question (with selected_option=null
+    // for un-answered ones). That blanked-out any prior row written by
+    // selectAnswer if the local `answers` state was stale (e.g. resumed attempt
+    // where the saved answers hadn't fully rehydrated). It also made truly
+    // skipped questions indistinguishable from wrong ones (both is_correct=false).
+    //
+    // New rule: a student_answers row exists ⇔ the student selected an option.
+    // Skipped questions have NO row at all. ExamReview can then trust hasRow
+    // as the definitive "did they answer?" signal.
+    const answeredRows = questions
+      .filter((q) => {
+        const a = answers[q.id];
+        return typeof a === "string" && a.trim() !== "";
+      })
+      .map((q) => {
+        const picked = answers[q.id].trim().toUpperCase();
+        const correct = (correctMap[q.id] || "").trim().toUpperCase();
+        return {
+          attempt_id: attemptId,
+          question_id: q.id,
+          selected_option: picked,
+          is_correct: picked === correct,
+        };
+      });
 
-    if (answerRows.length > 0) {
-      // Check the upsert result and retry once on failure.
-      // A silent failure here (network blip, RLS issue) is the root cause of
-      // selected_option being null in ExamReview despite the student answering.
+    if (answeredRows.length > 0) {
+      // Retry once on failure to mitigate transient network/RLS errors.
       const { error: upsertErr } = await supabase
         .from("student_answers")
-        .upsert(answerRows, { onConflict: "attempt_id,question_id" });
+        .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
 
       if (upsertErr) {
-        // Wait 1 s and retry once before giving up
         await new Promise((r) => setTimeout(r, 1000));
         const { error: retryErr } = await supabase
           .from("student_answers")
-          .upsert(answerRows, { onConflict: "attempt_id,question_id" });
+          .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
         if (retryErr) {
-          // Log but don't block — score is still written to exam_attempts
           console.error("[TakeExam] student_answers upsert failed after retry:", retryErr.message);
         }
       }
     }
 
-    const score = answerRows.filter((a) => a.is_correct).length;
+    const score = answeredRows.filter((a) => a.is_correct).length;
 
     await supabase.from("exam_attempts").update({
       is_submitted: true,
