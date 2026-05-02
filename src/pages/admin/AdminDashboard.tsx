@@ -43,10 +43,10 @@ export default function AdminDashboard() {
 
       // termId is already available from the parallel batch — no extra query needed
       const termId = (termRes.data as any)?.id ?? null;
-      const feeRes = await supabase.rpc("get_school_fee_totals", {
+      const feeRes = await (supabase as any).rpc("get_school_fee_totals", {
         _school_id: schoolId,
         _term_id:   termId,
-      } as any);
+      });
       if (feeRes.data && (feeRes.data as any[]).length > 0) {
         const f = (feeRes.data as any[])[0];
         setFeeStats({

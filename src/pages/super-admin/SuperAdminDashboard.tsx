@@ -77,7 +77,7 @@ export default function SuperAdminDashboard() {
 
   const fetchSchools = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.rpc("get_all_schools_with_subscription") as any;
+    const { data, error } = await (supabase as any).rpc("get_all_schools_with_subscription");
     if (error) {
       // Fallback: query schools + count students via user_roles
       const { data: plain } = await supabase
@@ -216,16 +216,16 @@ export default function SuperAdminDashboard() {
     if (!subSchool || !subExpiry) { toast.error("Expiry date is required"); return; }
     setSubSaving(true);
     try {
-      const { error } = await supabase.rpc("update_school_subscription", {
+      const { error } = await (supabase as any).rpc("update_school_subscription", {
         _school_id:         subSchool.id,
         _plan:              subPlan,
-        _status:            String(subStatus),          // TEXT — no enum cast needed
+        _status:            String(subStatus),
         _expiry_date:       subExpiry,
         _last_payment_date: subPayDate || null,
         _amount_paid:       subAmount ? parseFloat(subAmount) : 0,
         _payment_reference: subRef || null,
         _notes:             subNotes || null,
-      } as any);
+      });
       if (error) throw error;
       toast.success(`Subscription updated for ${subSchool.name}`);
       setSubDialog(false);
@@ -236,13 +236,13 @@ export default function SuperAdminDashboard() {
 
   const quickStatus = async (school: SchoolItem, status: SubscriptionStatus) => {
     try {
-      const { error } = await supabase.rpc("update_school_subscription", {
+      const { error } = await (supabase as any).rpc("update_school_subscription", {
         _school_id:   school.id,
         _plan:        school.subscription_plan,
-        _status:      String(status),                   // TEXT — no enum cast needed
+        _status:      String(status),
         _expiry_date: school.expiry_date ?? new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
         _notes:       `Quick override to ${status} by super admin`,
-      } as any);
+      });
       if (error) throw error;
       toast.success(`${school.name} → ${status}`);
       fetchSchools();
