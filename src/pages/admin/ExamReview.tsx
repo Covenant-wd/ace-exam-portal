@@ -109,18 +109,9 @@ function resolveStatus(
     return normSelected === normCorrect ? "correct" : "wrong";
   }
 
-  // 3. Edge case: a row exists but selected_option is null. This should no
-  //    longer happen with the fixed submitExam, but we handle legacy/partial
-  //    data defensively. Trust is_correct when present; otherwise treat as
-  //    wrong (the row's existence proves the student engaged with the question)
-  //    rather than skipped — so we never silently misclassify a real attempt.
-  if (dbIsCorrect !== null) {
-    return dbIsCorrect ? "correct" : "wrong";
-  }
-
-  // 4. Row exists but both selected_option and is_correct are null — corrupt
-  //    legacy data. Mark as wrong (not skipped) since a row was created.
-  return "wrong";
+  // 3. Row exists but selected_option could not be retrieved. Without a
+  //    recorded choice, classify as "skipped" regardless of dbIsCorrect.
+  return "skipped";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
