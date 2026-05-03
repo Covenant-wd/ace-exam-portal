@@ -193,13 +193,21 @@ export default function ExamReview() {
           .eq("attempt_id", attemptId!);
 
         if (answersErr) {
-          console.error("[ExamReview] failed to load student_answers:", answersErr.message);
+          console.error("[ExamReview] failed to load student_answers:", answersErr.message, answersErr);
         }
-        console.log("[ExamReview] loaded answers:", {
-          attemptId,
-          rows: studentAnswers?.length ?? 0,
-          sample: studentAnswers?.slice(0, 3),
-        });
+        console.log(
+          `[ExamReview] attempt=${attemptId} questions=${rawQuestions?.length ?? 0} student_answers_rows=${studentAnswers?.length ?? 0}`
+        );
+        if ((studentAnswers?.length ?? 0) > 0) {
+          console.log("[ExamReview] first 3 answer rows:", JSON.stringify(studentAnswers!.slice(0, 3)));
+          console.log("[ExamReview] first 3 question ids:", JSON.stringify((rawQuestions ?? []).slice(0, 3).map((q: any) => q.id)));
+        } else {
+          console.warn(
+            "[ExamReview] No student_answers rows returned. " +
+            "Either the student didn't answer anything, OR the admin RLS policy " +
+            "on student_answers is missing/blocking access on this Supabase project."
+          );
+        }
 
         // Build lookup: question_id → answer row.
         // Normalise keys to plain strings to defeat any UUID/object key quirks.
