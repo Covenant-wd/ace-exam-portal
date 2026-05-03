@@ -69,10 +69,20 @@ self.addEventListener("fetch", (e) => {
           caches.open(CACHE).then((c) => c.put(e.request, clone));
           return res;
         })
-        .catch(() =>
-          // Offline → serve cached shell so the React app can boot
-          caches.match("/index.html").then((r) => r || caches.match("/"))
-        )
+        .catch(async () => {
+          // Offline → serve cached shell so the React app can boot.
+          // CRITICAL: must always return a Response — never undefined,
+          // otherwise the browser throws "Failed to convert value to 'Response'"
+          // and the page errors out instead of showing the cached shell.
+          const shell =
+            (await caches.match("/index.html")) ||
+            (await caches.match("/"));
+          if (shell) return shell;
+          return new Response(
+            "<h1>Offline</h1><p>Please reconnect and reload.</p>",
+            { status: 503, headers: { "Content-Type": "text/html" } }
+          );
+        })
     );
     return;
   }
