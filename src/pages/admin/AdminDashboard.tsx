@@ -157,7 +157,7 @@ export default function AdminDashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-bold text-foreground">Financial Overview</h2>
-          <a href="/admin/debtors" className="text-xs text-primary hover:underline">View debtors →</a>
+          <a href="/admin/debtors" className="text-xs text-primary hover:underline">View defaulters →</a>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {feeCards.map(card => (
