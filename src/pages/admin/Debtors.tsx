@@ -158,7 +158,7 @@ export default function Debtors() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Fee Debtors</h1>
+          <h1 className="text-3xl font-bold">Fee Defaulters</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Students with outstanding fee balances
           </p>
