@@ -68,21 +68,43 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Shared hook — permissions are fetched once and cached in component state.
   // Previously DashboardLayout had its own fetch AND ExamReview had another via
   // the same hook, resulting in 2 DB round-trips per page. Now there is one.
-  const { permissions: instrPerms } = useInstructorPermissions();
+  const {
+    permissions: instrPerms,
+    isSubjectInstructor,
+    isClassInstructor,
+  } = useInstructorPermissions();
 
   const instructorLinks: NavItem[] = (() => {
     if (role !== "instructor") return [];
     const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
-    if (instrPerms?.can_manage_subjects)    links.push({ to: "/instructor/subjects",     label: "Subjects",     icon: BookOpen,    group: "Academic"   });
-    if (instrPerms?.can_manage_exams)       links.push({ to: "/instructor/exams",        label: "Exams",        icon: FileText,    group: "Academic"   });
-    if (instrPerms?.can_manage_timetable)   links.push({ to: "/instructor/timetable",    label: "Timetable",    icon: Clock,       group: "Academic"   });
-    if (instrPerms?.can_view_results)       links.push({ to: "/instructor/results",      label: "Results",      icon: BarChart3,   group: "Assessment" });
-    if (instrPerms?.can_manage_grades)      links.push({ to: "/instructor/grades",       label: "Grades",       icon: Award,       group: "Assessment" });
-    if (instrPerms?.can_manage_students)    links.push({ to: "/instructor/students",     label: "Students",     icon: Users,       group: "People"     });
-    if (instrPerms?.can_mark_attendance)    links.push({ to: "/instructor/attendance",   label: "Attendance",   icon: CheckSquare, group: "Records"    });
-    if (instrPerms?.can_manage_fees)        links.push({ to: "/instructor/fees",         label: "Fees",         icon: DollarSign,  group: "Records"    });
-    if (instrPerms?.can_post_announcements) links.push({ to: "/instructor/announcements",label: "Announcements",icon: Megaphone,   group: "Records"    });
-    return links;
+
+    // ── Subject instructor nav (new role-based) ──────────────────
+    // Shown whenever the instructor has at least one subject assignment.
+    // Also shown if legacy flags are on, so existing setups are unaffected.
+    const hasSubjectAccess = isSubjectInstructor || instrPerms?.can_manage_subjects || instrPerms?.can_manage_exams || instrPerms?.can_manage_grades;
+    if (hasSubjectAccess) {
+      links.push({ to: "/instructor/subjects",  label: "Subjects",   icon: BookOpen,    group: "Academic"   });
+      links.push({ to: "/instructor/exams",     label: "Exams",      icon: FileText,    group: "Academic"   });
+      links.push({ to: "/instructor/grades",    label: "Grades",     icon: Award,       group: "Assessment" });
+      links.push({ to: "/instructor/results",   label: "Results",    icon: BarChart3,   group: "Assessment" });
+    }
+
+    // ── Class instructor nav (new role-based) ────────────────────
+    const hasClassAccess = isClassInstructor || instrPerms?.can_mark_attendance || instrPerms?.can_post_announcements || instrPerms?.can_manage_students;
+    if (hasClassAccess) {
+      links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
+      links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone,   group: "Records" });
+      links.push({ to: "/instructor/students",      label: "Students",      icon: Users,       group: "People"  });
+    }
+
+    // ── Legacy-only flags not covered above ──────────────────────
+    if (instrPerms?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock,        group: "Academic" });
+    if (instrPerms?.can_view_results && !hasSubjectAccess) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
+    if (instrPerms?.can_manage_fees)     links.push({ to: "/instructor/fees",      label: "Fees",      icon: DollarSign,   group: "Records" });
+
+    // De-duplicate by `to` (in case legacy + new role both add the same link)
+    const seen = new Set<string>();
+    return links.filter(l => { if (seen.has(l.to)) return false; seen.add(l.to); return true; });
   })();
 
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
