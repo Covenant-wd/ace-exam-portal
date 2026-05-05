@@ -163,11 +163,41 @@ export default function ParentDashboard() {
           score: g.score,
         })));
 
-        setFees((feesRes.data || []).map((f: any) => ({
+        const payments = (feesRes.data || []) as any[];
+        setFees(payments.map((f: any) => ({
           fee_name:     f.fee_types?.name || "—",
           amount_paid:  f.amount_paid,
           payment_date: f.payment_date,
         })));
+
+        // Build fee overview: applicable fee types for child's class/term, paid totals, balance
+        const childClassId = (childProfileRes.data as any)?.class_id || null;
+        const applicableTypes = ((feeTypesRes.data || []) as any[]).filter(t =>
+          (!t.class_id || t.class_id === childClassId)
+        );
+        const paidByType: Record<string, number> = {};
+        payments.forEach((p: any) => {
+          paidByType[p.fee_type_id] = (paidByType[p.fee_type_id] || 0) + Number(p.amount_paid || 0);
+        });
+        // Include any historical fee types the child paid into but not in active list
+        const knownIds = new Set(applicableTypes.map(t => t.id));
+        const historicalIds = Object.keys(paidByType).filter(id => !knownIds.has(id));
+        const historicalTypes = historicalIds.map(id => {
+          const sample = payments.find((p: any) => p.fee_type_id === id);
+          return { id, name: sample?.fee_types?.name || "Other Fee", amount: Number(sample?.fee_types?.amount || 0) };
+        });
+        const overview: FeeOverviewItem[] = [...applicableTypes, ...historicalTypes].map((t: any) => {
+          const paid = paidByType[t.id] || 0;
+          const amount = Number(t.amount || 0);
+          return {
+            fee_type_id: t.id,
+            fee_name: t.name,
+            fee_amount: amount,
+            amount_paid: paid,
+            balance: Math.max(0, amount - paid),
+          };
+        });
+        setFeeOverview(overview);
 
         setResults((resultsRes.data || []).map((r: any) => ({
           exam_title:      r.exams?.title || "—",
