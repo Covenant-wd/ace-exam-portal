@@ -13,6 +13,7 @@ interface Child { student_id: string; full_name: string; }
 interface AttendanceRecord { date: string; status: string; }
 interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
 interface FeeRecord { fee_name: string; amount_paid: number; payment_date: string; }
+interface FeeOverviewItem { fee_type_id: string; fee_name: string; fee_amount: number; amount_paid: number; balance: number; }
 interface ExamResult { exam_title: string; score: number; total_questions: number; submitted_at: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
