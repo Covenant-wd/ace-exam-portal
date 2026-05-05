@@ -13,6 +13,7 @@ interface Child { student_id: string; full_name: string; }
 interface AttendanceRecord { date: string; status: string; }
 interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
 interface FeeRecord { fee_name: string; amount_paid: number; payment_date: string; }
+interface FeeOverviewItem { fee_type_id: string; fee_name: string; fee_amount: number; amount_paid: number; balance: number; }
 interface ExamResult { exam_title: string; score: number; total_questions: number; submitted_at: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
@@ -25,6 +26,7 @@ export default function ParentDashboard() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
   const [fees, setFees] = useState<FeeRecord[]>([]);
+  const [feeOverview, setFeeOverview] = useState<FeeOverviewItem[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, late: 0 });
@@ -91,7 +93,7 @@ export default function ParentDashboard() {
     const loadChildData = async () => {
       setDataLoading(true);
       try {
-        const [attRes, gradesRes, feesRes, resultsRes, annRes] = await Promise.all([
+        const [attRes, gradesRes, feesRes, resultsRes, annRes, feeTypesRes, childProfileRes] = await Promise.all([
           supabase
             .from("attendance")
             .select("date, status")
@@ -107,7 +109,7 @@ export default function ParentDashboard() {
 
           supabase
             .from("fee_payments")
-            .select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)")
+            .select("amount_paid, payment_date, fee_type_id, fee_types:fee_type_id(name, amount)")
             .eq("student_id", selectedChild)
             .order("created_at", { ascending: false }),
 
@@ -125,6 +127,18 @@ export default function ParentDashboard() {
             .eq("school_id", childSchoolId)
             .order("created_at", { ascending: false })
             .limit(10),
+
+          supabase
+            .from("fee_types")
+            .select("id, name, amount, class_id, term_id, is_active")
+            .eq("school_id", childSchoolId)
+            .eq("is_active", true),
+
+          supabase
+            .from("profiles")
+            .select("class_id")
+            .eq("user_id", selectedChild)
+            .maybeSingle(),
         ]);
 
         // Log any errors so failures are visible in the browser console
@@ -149,11 +163,41 @@ export default function ParentDashboard() {
           score: g.score,
         })));
 
-        setFees((feesRes.data || []).map((f: any) => ({
+        const payments = (feesRes.data || []) as any[];
+        setFees(payments.map((f: any) => ({
           fee_name:     f.fee_types?.name || "—",
           amount_paid:  f.amount_paid,
           payment_date: f.payment_date,
         })));
+
+        // Build fee overview: applicable fee types for child's class/term, paid totals, balance
+        const childClassId = (childProfileRes.data as any)?.class_id || null;
+        const applicableTypes = ((feeTypesRes.data || []) as any[]).filter(t =>
+          (!t.class_id || t.class_id === childClassId)
+        );
+        const paidByType: Record<string, number> = {};
+        payments.forEach((p: any) => {
+          paidByType[p.fee_type_id] = (paidByType[p.fee_type_id] || 0) + Number(p.amount_paid || 0);
+        });
+        // Include any historical fee types the child paid into but not in active list
+        const knownIds = new Set(applicableTypes.map(t => t.id));
+        const historicalIds = Object.keys(paidByType).filter(id => !knownIds.has(id));
+        const historicalTypes = historicalIds.map(id => {
+          const sample = payments.find((p: any) => p.fee_type_id === id);
+          return { id, name: sample?.fee_types?.name || "Other Fee", amount: Number(sample?.fee_types?.amount || 0) };
+        });
+        const overview: FeeOverviewItem[] = [...applicableTypes, ...historicalTypes].map((t: any) => {
+          const paid = paidByType[t.id] || 0;
+          const amount = Number(t.amount || 0);
+          return {
+            fee_type_id: t.id,
+            fee_name: t.name,
+            fee_amount: amount,
+            amount_paid: paid,
+            balance: Math.max(0, amount - paid),
+          };
+        });
+        setFeeOverview(overview);
 
         setResults((resultsRes.data || []).map((r: any) => ({
           exam_title:      r.exams?.title || "—",
@@ -351,25 +395,95 @@ export default function ParentDashboard() {
               />
             </TabsContent>
 
-            <TabsContent value="fees">
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Amount Paid</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {fees.length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
-                      ) : fees.map((f, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{f.fee_name}</TableCell>
-                          <TableCell>₦{Number(f.amount_paid).toLocaleString()}</TableCell>
-                          <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+            <TabsContent value="fees" className="space-y-4">
+              {(() => {
+                const totalFees = feeOverview.reduce((s, f) => s + f.fee_amount, 0);
+                const totalPaid = feeOverview.reduce((s, f) => s + f.amount_paid, 0);
+                const totalBalance = Math.max(0, totalFees - totalPaid);
+                const pct = totalFees > 0 ? Math.min(100, Math.round((totalPaid / totalFees) * 100)) : 0;
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Card><CardContent className="p-4 text-center">
+                        <p className="text-lg font-bold">₦{totalFees.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Total Fees</p>
+                      </CardContent></Card>
+                      <Card><CardContent className="p-4 text-center">
+                        <p className="text-lg font-bold text-emerald-600">₦{totalPaid.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Total Paid</p>
+                      </CardContent></Card>
+                      <Card><CardContent className="p-4 text-center">
+                        <p className={`text-lg font-bold ${totalBalance > 0 ? "text-red-600" : "text-emerald-600"}`}>₦{totalBalance.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                      </CardContent></Card>
+                    </div>
+                    {totalFees > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{pct}% paid</span>
+                          <span>{totalBalance > 0 ? `₦${totalBalance.toLocaleString()} remaining` : "Fully paid"}</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-emerald-500" : pct > 50 ? "bg-amber-500" : "bg-red-500"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-base">Fee Breakdown</CardTitle></CardHeader>
+                      <CardContent className="p-0">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Fee Type</TableHead>
+                              <TableHead className="text-right">Amount</TableHead>
+                              <TableHead className="text-right">Paid</TableHead>
+                              <TableHead className="text-right">Balance</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {feeOverview.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No fees assigned</TableCell></TableRow>
+                            ) : feeOverview.map((f) => (
+                              <TableRow key={f.fee_type_id}>
+                                <TableCell className="font-medium">{f.fee_name}</TableCell>
+                                <TableCell className="text-right">₦{f.fee_amount.toLocaleString()}</TableCell>
+                                <TableCell className="text-right text-emerald-600">₦{f.amount_paid.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">
+                                  <span className={f.balance > 0 ? "text-red-600 font-medium" : "text-emerald-600"}>
+                                    {f.balance > 0 ? `₦${f.balance.toLocaleString()}` : "✓ Cleared"}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-base">Payment History</CardTitle></CardHeader>
+                      <CardContent className="p-0">
+                        <Table>
+                          <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Amount Paid</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {fees.length === 0 ? (
+                              <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payments yet</TableCell></TableRow>
+                            ) : fees.map((f, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">{f.fee_name}</TableCell>
+                                <TableCell className="text-emerald-600">₦{Number(f.amount_paid).toLocaleString()}</TableCell>
+                                <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  </>
+                );
+              })()}
             </TabsContent>
           </Tabs>
         </>
