@@ -395,25 +395,95 @@ export default function ParentDashboard() {
               />
             </TabsContent>
 
-            <TabsContent value="fees">
-              <Card>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Amount Paid</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {fees.length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
-                      ) : fees.map((f, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{f.fee_name}</TableCell>
-                          <TableCell>₦{Number(f.amount_paid).toLocaleString()}</TableCell>
-                          <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+            <TabsContent value="fees" className="space-y-4">
+              {(() => {
+                const totalFees = feeOverview.reduce((s, f) => s + f.fee_amount, 0);
+                const totalPaid = feeOverview.reduce((s, f) => s + f.amount_paid, 0);
+                const totalBalance = Math.max(0, totalFees - totalPaid);
+                const pct = totalFees > 0 ? Math.min(100, Math.round((totalPaid / totalFees) * 100)) : 0;
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Card><CardContent className="p-4 text-center">
+                        <p className="text-lg font-bold">₦{totalFees.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Total Fees</p>
+                      </CardContent></Card>
+                      <Card><CardContent className="p-4 text-center">
+                        <p className="text-lg font-bold text-emerald-600">₦{totalPaid.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Total Paid</p>
+                      </CardContent></Card>
+                      <Card><CardContent className="p-4 text-center">
+                        <p className={`text-lg font-bold ${totalBalance > 0 ? "text-red-600" : "text-emerald-600"}`}>₦{totalBalance.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                      </CardContent></Card>
+                    </div>
+                    {totalFees > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{pct}% paid</span>
+                          <span>{totalBalance > 0 ? `₦${totalBalance.toLocaleString()} remaining` : "Fully paid"}</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-emerald-500" : pct > 50 ? "bg-amber-500" : "bg-red-500"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-base">Fee Breakdown</CardTitle></CardHeader>
+                      <CardContent className="p-0">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Fee Type</TableHead>
+                              <TableHead className="text-right">Amount</TableHead>
+                              <TableHead className="text-right">Paid</TableHead>
+                              <TableHead className="text-right">Balance</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {feeOverview.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No fees assigned</TableCell></TableRow>
+                            ) : feeOverview.map((f) => (
+                              <TableRow key={f.fee_type_id}>
+                                <TableCell className="font-medium">{f.fee_name}</TableCell>
+                                <TableCell className="text-right">₦{f.fee_amount.toLocaleString()}</TableCell>
+                                <TableCell className="text-right text-emerald-600">₦{f.amount_paid.toLocaleString()}</TableCell>
+                                <TableCell className="text-right">
+                                  <span className={f.balance > 0 ? "text-red-600 font-medium" : "text-emerald-600"}>
+                                    {f.balance > 0 ? `₦${f.balance.toLocaleString()}` : "✓ Cleared"}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-base">Payment History</CardTitle></CardHeader>
+                      <CardContent className="p-0">
+                        <Table>
+                          <TableHeader><TableRow><TableHead>Fee</TableHead><TableHead>Amount Paid</TableHead><TableHead>Date</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {fees.length === 0 ? (
+                              <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payments yet</TableCell></TableRow>
+                            ) : fees.map((f, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">{f.fee_name}</TableCell>
+                                <TableCell className="text-emerald-600">₦{Number(f.amount_paid).toLocaleString()}</TableCell>
+                                <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  </>
+                );
+              })()}
             </TabsContent>
           </Tabs>
         </>
