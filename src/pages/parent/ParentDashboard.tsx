@@ -26,6 +26,7 @@ export default function ParentDashboard() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
   const [fees, setFees] = useState<FeeRecord[]>([]);
+  const [feeOverview, setFeeOverview] = useState<FeeOverviewItem[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, late: 0 });
