@@ -93,7 +93,7 @@ export default function ParentDashboard() {
     const loadChildData = async () => {
       setDataLoading(true);
       try {
-        const [attRes, gradesRes, feesRes, resultsRes, annRes] = await Promise.all([
+        const [attRes, gradesRes, feesRes, resultsRes, annRes, feeTypesRes, childProfileRes] = await Promise.all([
           supabase
             .from("attendance")
             .select("date, status")
@@ -109,7 +109,7 @@ export default function ParentDashboard() {
 
           supabase
             .from("fee_payments")
-            .select("amount_paid, payment_date, fee_types:fee_type_id(name, amount)")
+            .select("amount_paid, payment_date, fee_type_id, fee_types:fee_type_id(name, amount)")
             .eq("student_id", selectedChild)
             .order("created_at", { ascending: false }),
 
@@ -127,6 +127,18 @@ export default function ParentDashboard() {
             .eq("school_id", childSchoolId)
             .order("created_at", { ascending: false })
             .limit(10),
+
+          supabase
+            .from("fee_types")
+            .select("id, name, amount, class_id, term_id, is_active")
+            .eq("school_id", childSchoolId)
+            .eq("is_active", true),
+
+          supabase
+            .from("profiles")
+            .select("class_id")
+            .eq("user_id", selectedChild)
+            .maybeSingle(),
         ]);
 
         // Log any errors so failures are visible in the browser console
