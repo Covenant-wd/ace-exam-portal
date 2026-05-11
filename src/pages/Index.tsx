@@ -329,7 +329,7 @@ export default function Index() {
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }} transition={spring}>
             <Button variant="ghost" size="sm" asChild className="text-white/60 hover:text-white hover:bg-white/5">
-              <Link to="/super-admin/login">Platform Admin</Link>
+              <Link to="/super-admin/login">Manage Your School Smarter</Link>
             </Button>
           </motion.div>
         </div>
