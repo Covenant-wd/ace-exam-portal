@@ -25,6 +25,10 @@ interface Announcement {
 }
 interface ClassItem { id: string; name: string; }
 
+// Radix UI Select v2 crashes when a <SelectItem> has value="".
+// Use a sentinel string instead and convert it to null before saving to DB.
+const ALL_CLASSES_SENTINEL = "__ALL__";
+
 export default function Announcements() {
   const { user, schoolId } = useAuth();
   const { canWrite, isRestricted, isSuspended } = useSubscription();
@@ -37,8 +41,7 @@ export default function Announcements() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [targetRole, setTargetRole] = useState("all");
-  // BUG 4 FIX: "" means "all classes" (null in DB). Never use "all" — it's not a valid UUID.
-  const [targetClass, setTargetClass] = useState("");
+  const [targetClass, setTargetClass] = useState(ALL_CLASSES_SENTINEL);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,7 +60,6 @@ export default function Announcements() {
   }, [schoolId]);
 
   const loadAnnouncements = async (sid: string) => {
-    // BUG 5 FIX: Surface DB errors instead of silently returning an empty list
     const { data, error } = await supabase
       .from("announcements")
       .select("*")
@@ -75,7 +77,7 @@ export default function Announcements() {
     setTitle("");
     setContent("");
     setTargetRole("all");
-    setTargetClass("");
+    setTargetClass(ALL_CLASSES_SENTINEL);
     setDialog(true);
   };
 
@@ -84,14 +86,13 @@ export default function Announcements() {
     setTitle(item.title);
     setContent(item.content);
     setTargetRole(item.target_role);
-    // BUG 4b FIX: null → "" so the Select correctly shows the "All classes" placeholder
-    setTargetClass(item.target_class_id ?? "");
+    // null in DB → sentinel in Select; a UUID stays as-is
+    setTargetClass(item.target_class_id ?? ALL_CLASSES_SENTINEL);
     setDialog(true);
   };
 
   const handleSave = async () => {
     if (!canWrite()) return;
-    // BUG 6 FIX: Show validation message instead of silent no-op
     if (!title.trim()) {
       toast.error("Please enter a title for the announcement.");
       return;
@@ -103,8 +104,8 @@ export default function Announcements() {
         title: title.trim(),
         content: content.trim(),
         target_role: targetRole,
-        // BUG 4 FIX: "" → null. target_class_id is a UUID column; never send "all".
-        target_class_id: targetClass !== "" ? targetClass : null,
+        // sentinel → null (DB column is UUID, never store the sentinel string)
+        target_class_id: targetClass !== ALL_CLASSES_SENTINEL ? targetClass : null,
         school_id: schoolId,
         created_by: user.id,
       };
@@ -119,7 +120,7 @@ export default function Announcements() {
         const { error } = await supabase.from("announcements").insert(payload);
         if (error) throw error;
 
-        // Send email notifications (non-fatal if they fail)
+        // Send email notifications (non-fatal)
         try {
           const notifEnabled = await isNotificationEnabled(schoolId, "notify_announcement");
           if (!notifEnabled) throw new Error("skip");
@@ -158,8 +159,6 @@ export default function Announcements() {
     } catch (err: any) {
       toast.error(err.message ?? "Something went wrong. Please try again.");
     } finally {
-      // BUG 7 FIX: Always reset saving — original put setSaving(false) after catch,
-      // so a re-thrown error inside try left the button spinning forever.
       setSaving(false);
     }
   };
@@ -167,7 +166,6 @@ export default function Announcements() {
   const handleDelete = async (id: string) => {
     if (!canWrite()) return;
     if (!confirm("Delete this announcement?")) return;
-    // BUG 8 FIX: Handle delete errors (original ignored the return value)
     const { error } = await supabase.from("announcements").delete().eq("id", id);
     if (error) {
       toast.error(error.message);
@@ -179,7 +177,6 @@ export default function Announcements() {
 
   const toggleActive = async (item: Announcement) => {
     if (!canWrite()) return;
-    // BUG 9 FIX: Handle toggle errors (original ignored the return value)
     const { error } = await supabase
       .from("announcements")
       .update({ is_active: !item.is_active })
@@ -239,7 +236,6 @@ export default function Announcements() {
                     <Badge variant="outline">
                       {item.target_role === "all" ? "Everyone" : item.target_role}
                     </Badge>
-                    {/* BUG 10 FIX: Show which class the announcement targets */}
                     {item.target_class_id && (
                       <Badge variant="outline" className="text-xs">
                         {classes.find((c) => c.id === item.target_class_id)?.name ?? "Specific class"}
@@ -331,17 +327,19 @@ export default function Announcements() {
                 <span className="font-normal text-muted-foreground">(optional)</span>
               </Label>
               {/*
-                BUG 4 FIX: "All Classes" uses value="" (empty string), not "all".
-                onValueChange sets targetClass to "" or a real UUID.
-                In handleSave: targetClass !== "" ? targetClass : null
-                This is the only correct way — target_class_id is UUID, not text.
+                Radix UI Select v2 does not allow value="" on <SelectItem>.
+                An empty string is treated as "no selection", identical to
+                undefined/uncontrolled, which throws an internal assertion
+                error that crashes the entire component and renders a blank page.
+                Fix: use a non-empty sentinel value ("__ALL__") for "All classes"
+                and convert it to null before writing to the DB.
               */}
               <Select value={targetClass} onValueChange={setTargetClass}>
                 <SelectTrigger>
                   <SelectValue placeholder="All classes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Classes</SelectItem>
+                  <SelectItem value={ALL_CLASSES_SENTINEL}>All Classes</SelectItem>
                   {classes.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
