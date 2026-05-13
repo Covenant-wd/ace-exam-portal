@@ -8,15 +8,22 @@ interface SendEmailParams {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<boolean> {
+  const recipients = Array.from(new Set((Array.isArray(to) ? to : [to]).map((email) => email.trim()).filter(Boolean)));
+  if (recipients.length === 0) return true;
+
   try {
-    const { data, error } = await supabase.functions.invoke("send-email", {
-      body: { to, subject, html },
-    });
-    if (error) {
-      console.error("Email send error:", error);
-      return false;
+    const batchSize = 45;
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize);
+      const { data, error } = await supabase.functions.invoke("send-email", {
+        body: { to: batch, subject, html },
+      });
+      if (error || data?.success !== true) {
+        console.error("Email send error:", error || data);
+        return false;
+      }
     }
-    return data?.success === true;
+    return true;
   } catch (err) {
     console.error("Email send exception:", err);
     return false;

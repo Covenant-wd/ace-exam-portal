@@ -72,12 +72,12 @@ export default function InstructorAssignments({ instructorId, instructorName, on
     const [classesRes, subjectsRes, subjectAssRes, classAssRes] = await Promise.all([
       supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
       supabase.from("subjects").select("id, name").eq("school_id", schoolId).order("name"),
-      supabase
+      (supabase as any)
         .from("instructor_subjects")
         .select("id, subject_id, class_id, subjects:subject_id(name), classes:class_id(name)")
         .eq("instructor_id", instructorId)
         .eq("school_id", schoolId),
-      supabase
+      (supabase as any)
         .from("class_instructors")
         .select("id, class_id, classes:class_id(name)")
         .eq("instructor_id", instructorId)
@@ -136,7 +136,7 @@ export default function InstructorAssignments({ instructorId, instructorName, on
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("instructor_subjects").insert({
+    const { error } = await (supabase as any).from("instructor_subjects").insert({
       instructor_id: instructorId,
       subject_id:    addSubjectSubject,
       class_id:      addSubjectClass,
@@ -149,7 +149,7 @@ export default function InstructorAssignments({ instructorId, instructorName, on
 
   const handleRemoveSubject = async (id: string) => {
     setSaving(true);
-    const { error } = await supabase.from("instructor_subjects").delete().eq("id", id);
+    const { error } = await (supabase as any).from("instructor_subjects").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Removed"); fetchAll(); }
     setSaving(false);
@@ -161,7 +161,7 @@ export default function InstructorAssignments({ instructorId, instructorName, on
   const handleToggleClass = async (classId: string, checked: boolean) => {
     setSaving(true);
     if (checked) {
-      const { error } = await supabase.from("class_instructors").insert({
+      const { error } = await (supabase as any).from("class_instructors").insert({
         instructor_id: instructorId,
         class_id:      classId,
         school_id:     schoolId!,
@@ -169,7 +169,7 @@ export default function InstructorAssignments({ instructorId, instructorName, on
       if (error) toast.error(error.message);
       else { toast.success("Class assigned"); fetchAll(); }
     } else {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("class_instructors")
         .delete()
         .eq("instructor_id", instructorId)

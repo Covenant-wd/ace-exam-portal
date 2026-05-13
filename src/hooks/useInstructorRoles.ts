@@ -59,7 +59,7 @@ export function useInstructorRoles() {
     }
 
     const [subjectsRes, classesRes] = await Promise.allSettled([
-      supabase
+      (supabase as any)
         .from("instructor_subjects")
         .select(`
           id,
@@ -70,7 +70,7 @@ export function useInstructorRoles() {
           classes:class_id(name)
         `)
         .eq("instructor_id", user.id),
-      supabase
+      (supabase as any)
         .from("class_instructors")
         .select(`
           id,

@@ -123,8 +123,8 @@ export default function Instructors() {
         supabase.from("profiles").select("user_id, full_name, email").in("user_id", instrIds).order("full_name"),
         supabase.from("instructor_permissions").select("*").in("instructor_id", instrIds),
         supabase.from("instructor_classes").select("instructor_id, class_id").in("instructor_id", instrIds),
-        supabase.from("instructor_subjects").select("instructor_id").in("instructor_id", instrIds),
-        supabase.from("class_instructors").select("instructor_id").in("instructor_id", instrIds),
+        (supabase as any).from("instructor_subjects").select("instructor_id").in("instructor_id", instrIds),
+        (supabase as any).from("class_instructors").select("instructor_id").in("instructor_id", instrIds),
       ]);
 
       const permsMap     = new Map((permsRes.data || []).map((p: any) => [p.instructor_id, p]));
@@ -165,12 +165,12 @@ export default function Instructors() {
     setAddSubjectId("");
 
     const [subjRes, classInstrRes] = await Promise.all([
-      supabase
+      (supabase as any)
         .from("instructor_subjects")
         .select("id, subject_id, class_id, subjects:subject_id(name), classes:class_id(name)")
         .eq("instructor_id", i.user_id)
         .eq("school_id", schoolId!),
-      supabase
+      (supabase as any)
         .from("class_instructors")
         .select("id, class_id, classes:class_id(name)")
         .eq("instructor_id", i.user_id)
@@ -221,7 +221,7 @@ export default function Instructors() {
       toast.error("This subject is already assigned for that class"); return;
     }
     setRolesSaving(true);
-    const { error } = await supabase.from("instructor_subjects").insert({
+    const { error } = await (supabase as any).from("instructor_subjects").insert({
       instructor_id: rolesInstructor!.user_id,
       subject_id:    addSubjectId,
       class_id:      addSubjectClassId,
@@ -241,7 +241,7 @@ export default function Instructors() {
   // ── Remove a subject assignment ─────────────────────────────────
   const handleRemoveSubjectAssignment = async (id: string) => {
     setRolesSaving(true);
-    const { error } = await supabase.from("instructor_subjects").delete().eq("id", id);
+    const { error } = await (supabase as any).from("instructor_subjects").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Removed"); await openRoles(rolesInstructor!); }
     setRolesSaving(false);
@@ -252,7 +252,7 @@ export default function Instructors() {
   const handleToggleClassInstructor = async (classId: string, checked: boolean) => {
     setRolesSaving(true);
     if (checked) {
-      const { error } = await supabase.from("class_instructors").insert({
+      const { error } = await (supabase as any).from("class_instructors").insert({
         instructor_id: rolesInstructor!.user_id,
         class_id:      classId,
         school_id:     schoolId!,
@@ -260,14 +260,14 @@ export default function Instructors() {
       if (error) toast.error(error.message);
       else toast.success("Class instructor assigned");
     } else {
-      const { error } = await supabase.from("class_instructors").delete()
+      const { error } = await (supabase as any).from("class_instructors").delete()
         .eq("instructor_id", rolesInstructor!.user_id)
         .eq("class_id", classId);
       if (error) toast.error(error.message);
       else toast.success("Removed from class");
     }
     // Refresh the dialog list without closing
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from("class_instructors")
       .select("id, class_id, classes:class_id(name)")
       .eq("instructor_id", rolesInstructor!.user_id)
@@ -324,8 +324,8 @@ export default function Instructors() {
       await Promise.all([
         supabase.from("instructor_permissions").delete().eq("instructor_id", userId),
         supabase.from("instructor_classes").delete().eq("instructor_id", userId),
-        supabase.from("instructor_subjects").delete().eq("instructor_id", userId),
-        supabase.from("class_instructors").delete().eq("instructor_id", userId),
+        (supabase as any).from("instructor_subjects").delete().eq("instructor_id", userId),
+        (supabase as any).from("class_instructors").delete().eq("instructor_id", userId),
       ]);
       await supabase.from("user_roles").delete().eq("user_id", userId);
       await supabase.from("profiles").delete().eq("user_id", userId);
