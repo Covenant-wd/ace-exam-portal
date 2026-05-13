@@ -106,7 +106,32 @@ export default function Exams() {
       if (error) toast.error(error.message); else toast.success("Exam updated");
     } else {
       const { error } = await supabase.from("exams").insert(payload);
-      if (error) toast.error(error.message); else toast.success("Exam created");
+      if (error) toast.error(error.message); else {
+        toast.success("Exam created");
+        if (payload.is_published && schoolId) {
+          try {
+            const enabled = await isNotificationEnabled(schoolId, "notify_exam_published");
+            if (enabled) {
+              const { data } = await supabase.rpc("get_school_students_only", { _school_id: schoolId });
+              const students = payload.class_id ? ((data || []) as any[]).filter((s: any) => s.class_id === payload.class_id) : ((data || []) as any[]);
+              const userIds = students.map((s: any) => s.user_id);
+              if (userIds.length > 0) {
+                const { data: emails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+                const emailList = (emails || []).map((e: any) => e.email).filter(Boolean);
+                const subjectName = subjects.find(s => s.id === payload.subject_id)?.name || "—";
+                if (emailList.length > 0) {
+                  await sendExamPublishedEmail({
+                    to: emailList, schoolName: schoolName || "School",
+                    examTitle: payload.title, subjectName,
+                    durationMinutes: payload.duration_minutes,
+                    loginUrl: `${window.location.origin}/student/exams`,
+                  });
+                }
+              }
+            }
+          } catch (e) { console.error("Exam published email failed:", e); }
+        }
+      }
     }
     setSaving(false); setOpen(false); reset(); fetchData();
   };
