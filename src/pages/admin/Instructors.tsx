@@ -324,8 +324,8 @@ export default function Instructors() {
       await Promise.all([
         supabase.from("instructor_permissions").delete().eq("instructor_id", userId),
         supabase.from("instructor_classes").delete().eq("instructor_id", userId),
-        supabase.from("instructor_subjects").delete().eq("instructor_id", userId),
-        supabase.from("class_instructors").delete().eq("instructor_id", userId),
+        (supabase as any).from("instructor_subjects").delete().eq("instructor_id", userId),
+        (supabase as any).from("class_instructors").delete().eq("instructor_id", userId),
       ]);
       await supabase.from("user_roles").delete().eq("user_id", userId);
       await supabase.from("profiles").delete().eq("user_id", userId);
