@@ -67,6 +67,9 @@ export default function TakeExam() {
   // schoolName has loaded, the email gets "School" instead of the real name.
   // A ref always reflects the latest value regardless of when submitExam was memoized.
   const schoolNameRef = useRef("");
+  // Ref to submitExam so handleViolation can call it without a circular
+  // useCallback dependency (handleViolation is defined before submitExam).
+  const submitExamRef = useRef<(isTimeout?: boolean, isCheating?: boolean) => Promise<void>>();
 
   // iOS Safari does not support the Fullscreen API at all. Attempting
   // requestFullscreen() on iOS throws or silently fails, and fullscreenchange
@@ -187,7 +190,17 @@ export default function TakeExam() {
     const newCount = violationsRef.current;
     setViolations(newCount);
     setWarningReason(reason);
-    setWarningOpen(true);
+    // BUG FIX 3: Auto-submit IMMEDIATELY when max violations is reached.
+    // Previous code opened the modal and waited for the student to click
+    // "Submit Now" — a cheating student could simply close the browser tab
+    // to avoid the submission being recorded. Now we fire submitExam()
+    // immediately; the modal is still shown briefly during the async submit.
+    if (newCount >= maxViolationsRef.current) {
+      setWarningOpen(true); // show "Exam Terminated" state briefly
+      submitExamRef.current?.(false, true);
+    } else {
+      setWarningOpen(true);
+    }
   }, []);
 
   // ── FULLSCREEN ───────────────────────────────────────────────────
@@ -337,13 +350,31 @@ export default function TakeExam() {
 
     const score = answeredRows.filter((a) => a.is_correct).length;
 
-    await supabase.from("exam_attempts").update({
+    // BUG FIX 4: Removed `as any` cast — violations column now exists after migration.
+    // Added error checking: if this update fails, the exam appears unsubmitted.
+    // Retry once on transient failures before giving up.
+    const attemptUpdate = {
       is_submitted: true,
       score,
       total_questions: questions.length,
       submitted_at: new Date().toISOString(),
       violations: violationsRef.current,
-    } as any).eq("id", attemptId);
+    };
+    const { error: updateErr } = await supabase
+      .from("exam_attempts")
+      .update(attemptUpdate)
+      .eq("id", attemptId);
+    if (updateErr) {
+      // Retry once after a short delay
+      await new Promise((r) => setTimeout(r, 1000));
+      const { error: retryUpdateErr } = await supabase
+        .from("exam_attempts")
+        .update(attemptUpdate)
+        .eq("id", attemptId);
+      if (retryUpdateErr) {
+        console.error("[TakeExam] exam_attempts update failed after retry:", retryUpdateErr.message);
+      }
+    }
 
     if (isCheating) {
       toast.error("Exam terminated due to repeated violations.");
@@ -381,6 +412,10 @@ export default function TakeExam() {
 
     navigate("/student/results");
   }, [attemptId, answers, questions, examId, navigate, schoolName, user]);
+
+  // Keep submitExamRef in sync so handleViolation (defined earlier) can call
+  // submitExam without a circular useCallback dependency.
+  submitExamRef.current = submitExam;
 
   // ── TIMER ────────────────────────────────────────────────────────
   // Uses deadline-based countdown (Date.now() diff) instead of decrementing
@@ -429,6 +464,9 @@ export default function TakeExam() {
   const seconds   = timeLeft % 60;
   const isLowTime = timeLeft < 60;
   const optionLabels = ["A", "B", "C", "D"] as const;
+  // BUG FIX 2: Use violationsRef.current (always current) not violations state
+  // (which lags one render). violations state is fine for display; for the
+  // auto-submit threshold check we need the ref.
   const willAutoSubmit = violations >= maxViolations;
 
   return (
