@@ -62,6 +62,11 @@ export default function TakeExam() {
   const violationsRef = useRef(0);
   const maxViolationsRef = useRef(3);
   const submittedRef  = useRef(false);
+  // BUG FIX: schoolName is loaded async. submitExam is a useCallback that captures
+  // schoolName at creation time — if the exam auto-submits on timeout before
+  // schoolName has loaded, the email gets "School" instead of the real name.
+  // A ref always reflects the latest value regardless of when submitExam was memoized.
+  const schoolNameRef = useRef("");
 
   // iOS Safari does not support the Fullscreen API at all. Attempting
   // requestFullscreen() on iOS throws or silently fails, and fullscreenchange
@@ -106,7 +111,10 @@ export default function TakeExam() {
             .select("value").eq("school_id", profileData.school_id)
             .eq("key", "school_logo_url").maybeSingle(),
         ]);
-        if (schoolRes.data?.name) setSchoolName(schoolRes.data.name);
+        if (schoolRes.data?.name) {
+          setSchoolName(schoolRes.data.name);
+          schoolNameRef.current = schoolRes.data.name; // keep ref in sync for submitExam closure
+        }
         if (settingRes.data?.value) {
           const mv = parseInt(settingRes.data.value) || 3;
           setMaxViolations(mv);
@@ -362,7 +370,7 @@ export default function TakeExam() {
           to: emails,
           recipientName: profile.full_name,
           studentName: profile.full_name,
-          schoolName: schoolName || "School",
+          schoolName: schoolNameRef.current || schoolName || "School",
           examTitle: examData.title,
           score,
           totalQuestions: questions.length,
