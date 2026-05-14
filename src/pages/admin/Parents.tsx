@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { sendParentWelcomeEmail } from "@/lib/email";
+import { sendParentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 interface Child { student_id: string; full_name: string; }
 interface Parent {
@@ -25,6 +26,7 @@ interface StudentItem { user_id: string; full_name: string; }
 
 export default function Parents() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [parents, setParents] = useState<Parent[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,17 +211,19 @@ export default function Parents() {
             .map(s => ({ student_id: s.user_id, full_name: s.full_name })),
         };
         setParents(prev => [...prev, newParent]);
-        // Send welcome email to parent
+        // BUG FIX: Check notification setting before sending; use real school name
         const childNameList = students.filter(s => selectedChildren.includes(s.user_id)).map(s => s.full_name);
-        const loginUrl = `${window.location.origin}/school/${window.location.hostname}`;
-        sendParentWelcomeEmail({
-          to: email,
-          parentName: fullName,
-          schoolName: document.title || "School",
-          loginUrl: window.location.origin,
-          username,
-          childNames: childNameList,
-        }).catch(() => {});
+        isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+          if (!enabled) return;
+          sendParentWelcomeEmail({
+            to: email,
+            parentName: fullName,
+            schoolName: schoolName || document.title || "School",
+            loginUrl: window.location.origin,
+            username,
+            childNames: childNameList,
+          }).catch(() => {});
+        });
       }
       setDialogOpen(false);
       fetchData();

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendFeePaymentEmail, isNotificationEnabled } from "@/lib/email";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +24,7 @@ interface StudentProfile { user_id: string; full_name: string; }
 
 export default function Fees() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -158,7 +160,7 @@ export default function Fees() {
             to: emails,
             recipientName: profile.full_name,
             studentName: profile.full_name,
-            schoolName: document.title || "School",
+            schoolName: schoolName || document.title || "School",
             feeName,
             amountPaid: parseFloat(payAmount),
             paymentDate: new Date().toISOString(),

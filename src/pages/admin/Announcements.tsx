@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendAnnouncementEmail, isNotificationEnabled } from "@/lib/email";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ const ALL_CLASSES_SENTINEL = "__ALL__";
 
 export default function Announcements() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [items, setItems] = useState<Announcement[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -141,7 +143,7 @@ export default function Announcements() {
             if (emails.length > 0) {
               await sendAnnouncementEmail({
                 to: emails,
-                schoolName: document.title || "School",
+                schoolName: schoolName || document.title || "School",
                 title: title.trim(),
                 content: content.trim(),
                 loginUrl: window.location.origin,

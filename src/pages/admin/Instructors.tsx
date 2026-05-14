@@ -15,7 +15,8 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Shield, School, BookOpen, GraduationCap, X, BookUser } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { sendInstructorWelcomeEmail } from "@/lib/email";
+import { sendInstructorWelcomeEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ interface ClassInstructorAssignment {
 
 export default function Instructors() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
 
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [classes,     setClasses]     = useState<ClassItem[]>([]);
@@ -308,7 +310,17 @@ export default function Instructors() {
           can_manage_subjects: false, can_mark_attendance: false, can_manage_grades: false,
           can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false,
         } as any, { onConflict: "instructor_id" });
-        sendInstructorWelcomeEmail({ to: email, instructorName: fullName, schoolName: document.title || "School", loginUrl: window.location.origin, password }).catch(() => {});
+        // BUG FIX: Check notification setting before sending; use real school name
+        isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+          if (!enabled) return;
+          sendInstructorWelcomeEmail({
+            to: email,
+            instructorName: fullName,
+            schoolName: schoolName || document.title || "School",
+            loginUrl: window.location.origin,
+            password,
+          }).catch(() => {});
+        });
         toast.success("Instructor created");
       }
       setDialogOpen(false);

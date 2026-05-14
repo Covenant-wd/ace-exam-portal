@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
+import { sendStudentWelcomeEmail } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 
 interface Student {
@@ -43,6 +45,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const { canAddStudent, isRestricted, isSuspended } = useSubscription();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -214,6 +217,15 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
         toast.success("Student created");
+        // BUG FIX: Send student welcome email (was completely missing)
+        sendStudentWelcomeEmail({
+          to: form.email.trim().toLowerCase(),
+          studentName: fullName,
+          schoolName: schoolName || document.title || "School",
+          loginUrl: window.location.origin,
+          password: form.password,
+          username: form.username || undefined,
+        }).catch(() => {});
       }
       setDialogOpen(false);
       if (!editing) {
