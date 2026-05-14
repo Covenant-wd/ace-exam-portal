@@ -633,10 +633,8 @@ export default function Index() {
       <footer className="border-t border-white/5 py-10">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-            <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.04 }} transition={spring}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-600">
-                <GraduationCap className="h-4 w-4 text-white" />
-              </div>
+            <motion.div className="flex items-center gap-2" whileHover={{ scale: 1.04 }} transition={spring}>
+              <img src={academiaLogo} alt="Academia HQ" className="h-9 w-auto rounded-lg bg-white p-1" />
               <span className="text-sm font-bold">Academia <span className="text-violet-400">HQ</span></span>
             </motion.div>
             <p className="text-sm text-white/30">Complete School Management System — CBT, Grades, Fees, Attendance & More</p>
