@@ -366,3 +366,92 @@ export async function sendOutreachOfficerWelcomeEmail({
 
   return sendEmail({ to, subject: `Welcome to Academia HQ — Outreach Officer Account Created`, html });
 }
+
+// ─────────────────────────────────────────────
+// 12. Implementation / Demo Request — Super Admin notification
+// ─────────────────────────────────────────────
+export async function sendImplementationRequestEmail({
+  to,
+  schoolName,
+  contactName,
+  phone,
+  email,
+  schoolType,
+  studentCount,
+  location,
+  servicesNeeded,
+  message,
+  bookVisit,
+}: {
+  to: string | string[];
+  schoolName: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  schoolType: string;
+  studentCount: string;
+  location: string;
+  servicesNeeded: string[];
+  message?: string;
+  bookVisit?: boolean;
+}) {
+  const html = baseTemplate(`
+    ${heading("📋 New Implementation Request")}
+    ${para(`A school has submitted an implementation / demo request on <strong>Academia HQ</strong>.`)}
+    ${infoBox([
+      { label: "School Name",    value: schoolName    },
+      { label: "Contact Person", value: contactName   },
+      { label: "Phone",          value: phone         },
+      { label: "Email",          value: email         },
+      { label: "School Type",    value: schoolType    },
+      { label: "No. of Students",value: studentCount  },
+      { label: "Location",       value: location      },
+      { label: "Services Needed",value: servicesNeeded.join(", ") || "Not specified" },
+      { label: "Book Visit",     value: bookVisit ? "Yes" : "No" },
+    ])}
+    ${message ? `<div style="background:#f8f8fc;border-radius:10px;padding:16px 20px;margin:12px 0;"><p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Message</p><p style="margin:0;font-size:14px;color:#333;line-height:1.6;">${message}</p></div>` : ""}
+    ${btn("View All Requests", `${typeof window !== "undefined" ? window.location.origin : ""}/super-admin/implementation-requests`)}
+    ${para(`<span style="color:#999;font-size:13px;">Log in to the Super Admin panel to manage this request.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({
+    to,
+    subject: `New Implementation Request — ${schoolName}`,
+    html,
+  });
+}
+
+// ─────────────────────────────────────────────
+// 13. Implementation / Demo Request — Confirmation to school
+// ─────────────────────────────────────────────
+export async function sendImplementationConfirmationEmail({
+  to,
+  contactName,
+  schoolName,
+  servicesNeeded,
+}: {
+  to: string;
+  contactName: string;
+  schoolName: string;
+  servicesNeeded: string[];
+}) {
+  const html = baseTemplate(`
+    ${heading("Thank You for Reaching Out! 🎉")}
+    ${para(`Hi <strong>${contactName}</strong>, we've received your implementation request for <strong>${schoolName}</strong>.`)}
+    ${para("The Academia HQ team will review your request and reach out to you shortly to discuss next steps, scheduling, and how we can best support your school.")}
+    ${infoBox([
+      { label: "School",          value: schoolName },
+      { label: "Services",        value: servicesNeeded.join(", ") || "Not specified" },
+      { label: "Expected Response", value: "Within 24 – 48 hours" },
+    ])}
+    ${para("While you wait, feel free to reach us directly via WhatsApp for faster assistance.")}
+    ${btn("Chat on WhatsApp", "https://wa.me/2349000000000")}
+    ${para(`<span style="color:#999;font-size:13px;">If you did not submit this request, please disregard this email.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({
+    to,
+    subject: `We Received Your Request — Academia HQ`,
+    html,
+  });
+}
