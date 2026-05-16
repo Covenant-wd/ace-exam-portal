@@ -20,7 +20,7 @@ export default function Settings() {
   const [notifyAttendanceAbsent, setNotifyAttendanceAbsent] = useState(true);
   const [notifyExamPublished, setNotifyExamPublished] = useState(true);
   const [notifyGradesPublished, setNotifyGradesPublished] = useState(true);
-  const [notifyGradesParent, setNotifyGradesParent] = useState(true);
+  const [notifyWelcomeEmail, setNotifyWelcomeEmail] = useState(true);
   const [notifySaving, setNotifySaving] = useState(false);
   const [maxViolations, setMaxViolations] = useState("3");
   const [violationSaving, setViolationSaving] = useState(false);
@@ -31,7 +31,7 @@ export default function Settings() {
       const { data } = await supabase.from("school_settings")
         .select("key, value")
         .eq("school_id", schoolId)
-        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent", "notify_exam_published", "notify_grades_published", "notify_grades_parent", "max_exam_violations"]);
+        .in("key", ["notify_announcement", "notify_exam_result", "notify_fee_payment", "notify_attendance_absent", "notify_exam_published", "notify_grades_published", "notify_grades_parent", "notify_welcome_email", "max_exam_violations"]);
       (data || []).forEach((s: any) => {
         const val = s.value === "true";
         if (s.key === "notify_announcement") setNotifyAnnouncement(val);
@@ -41,6 +41,7 @@ export default function Settings() {
         if (s.key === "notify_exam_published") setNotifyExamPublished(val);
         if (s.key === "notify_grades_published") setNotifyGradesPublished(val);
         if (s.key === "notify_grades_parent") setNotifyGradesParent(val);
+        if (s.key === "notify_welcome_email") setNotifyWelcomeEmail(val);
         if (s.key === "max_exam_violations") setMaxViolations(s.value || "3");
       });
     };
@@ -286,6 +287,7 @@ export default function Settings() {
             { label: "Exam Published", desc: "Notify students when a new exam is published", value: notifyExamPublished, key: "notify_exam_published", set: setNotifyExamPublished },
             { label: "Grades Published (Students)", desc: "Notify students when grades are entered", value: notifyGradesPublished, key: "notify_grades_published", set: setNotifyGradesPublished },
             { label: "Grades Published (Parents)", desc: "Notify parents when grades are entered for their children", value: notifyGradesParent, key: "notify_grades_parent", set: setNotifyGradesParent },
+            { label: "Welcome Email (New Users)", desc: "Send a welcome email with login credentials when an instructor or student account is created", value: notifyWelcomeEmail, key: "notify_welcome_email", set: setNotifyWelcomeEmail },
           ].map(item => (
             <div key={item.key} className="flex items-center justify-between gap-4 py-2 border-b last:border-0">
               <div>
