@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Navigate } from "react-router-dom";
-import { Loader2, GraduationCap, BookOpen, Clock, BarChart3, Shield, Users, Zap, ArrowRight, CheckCircle2, Search, School, Bell, CalendarDays, DollarSign, ClipboardList, Award, ChevronRight, MessageCircle } from "lucide-react";
+import { Loader2, GraduationCap, BookOpen, Clock, BarChart3, Shield, Users, Zap, ArrowRight, CheckCircle2, Search, School, Bell, CalendarDays, DollarSign, ClipboardList, Award, ChevronRight } from "lucide-react";
 import { motion, useMotionValue, useSpring, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import academiaLogo from "@/assets/academia-hq-logo.png";
+import RequestDemoSection from "@/components/RequestDemoSection";
 
 interface SchoolItem { id: string; name: string; slug: string; logo_url: string; }
 
@@ -322,20 +322,15 @@ export default function Index() {
         className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0f]/80 backdrop-blur-xl"
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <motion.div className="flex items-center gap-2" whileHover={{ scale: 1.02 }} transition={spring}>
-            <img src={academiaLogo} alt="Academia HQ" className="h-10 w-auto rounded-lg bg-white p-1 shadow-lg shadow-violet-500/20" />
-            <span className="text-lg font-bold tracking-tight hidden sm:inline">Academia <span className="text-violet-400">HQ</span></span>
+          <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.02 }} transition={spring}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 shadow-lg shadow-violet-500/25">
+              <GraduationCap className="h-5 w-5 text-white" />
+            </div>
+            <span className="text-lg font-bold tracking-tight">Academia <span className="text-violet-400">HQ</span></span>
           </motion.div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }} transition={spring}>
-            <Button
-              size="sm"
-              asChild
-              className="bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-green-500 font-semibold"
-            >
-              <a href="https://wa.link/f4y9uc" target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="mr-2 h-4 w-4" />
-                Contact Us
-              </a>
+            <Button variant="ghost" size="sm" asChild className="text-white/60 hover:text-white hover:bg-white/5">
+              <Link to="/super-admin/login">Manage Your School Smarter</Link>
             </Button>
           </motion.div>
         </div>
@@ -629,12 +624,17 @@ export default function Index() {
         </div>
       </section>
 
+      {/* ── Implementation / Demo Request ── */}
+      <RequestDemoSection />
+
       {/* ── Footer ── */}
       <footer className="border-t border-white/5 py-10">
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-            <motion.div className="flex items-center gap-2" whileHover={{ scale: 1.04 }} transition={spring}>
-              <img src={academiaLogo} alt="Academia HQ" className="h-9 w-auto rounded-lg bg-white p-1" />
+            <motion.div className="flex items-center gap-3" whileHover={{ scale: 1.04 }} transition={spring}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-600">
+                <GraduationCap className="h-4 w-4 text-white" />
+              </div>
               <span className="text-sm font-bold">Academia <span className="text-violet-400">HQ</span></span>
             </motion.div>
             <p className="text-sm text-white/30">Complete School Management System — CBT, Grades, Fees, Attendance & More</p>
