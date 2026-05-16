@@ -20,6 +20,7 @@ export default function Settings() {
   const [notifyAttendanceAbsent, setNotifyAttendanceAbsent] = useState(true);
   const [notifyExamPublished, setNotifyExamPublished] = useState(true);
   const [notifyGradesPublished, setNotifyGradesPublished] = useState(true);
+  const [notifyGradesParent, setNotifyGradesParent] = useState(true);
   const [notifyWelcomeEmail, setNotifyWelcomeEmail] = useState(true);
   const [notifySaving, setNotifySaving] = useState(false);
   const [maxViolations, setMaxViolations] = useState("3");
