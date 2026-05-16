@@ -8,7 +8,7 @@ interface SendEmailParams {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<boolean> {
-  const recipients = Array.from(new Set((Array.isArray(to) ? to : [to]).map((email) => email.trim()).filter(Boolean)));
+  const recipients = Array.from(new Set((Array.isArray(to) ? to : [to]).map((email) => email.trim().toLowerCase()).filter(Boolean)));
   if (recipients.length === 0) return true;
 
   try {
@@ -18,14 +18,22 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
       const { data, error } = await supabase.functions.invoke("send-email", {
         body: { to: batch, subject, html },
       });
-      if (error || data?.success !== true) {
-        console.error("Email send error:", error || data);
+      if (error) {
+        // FIX: Log the full Supabase FunctionsHttpError detail so it's visible
+        // in the browser console. Previously only "error" was logged which
+        // truncated the Resend error message (e.g. "API key invalid").
+        console.error("[sendEmail] Edge function invocation error:", error?.message, error);
+        return false;
+      }
+      if (data?.success !== true) {
+        // FIX: Log the actual Resend error body returned by the edge function
+        console.error("[sendEmail] Edge function returned failure:", JSON.stringify(data));
         return false;
       }
     }
     return true;
   } catch (err) {
-    console.error("Email send exception:", err);
+    console.error("[sendEmail] Unexpected exception:", err);
     return false;
   }
 }
@@ -445,7 +453,7 @@ export async function sendImplementationConfirmationEmail({
       { label: "Expected Response", value: "Within 24 – 48 hours" },
     ])}
     ${para("While you wait, feel free to reach us directly via WhatsApp for faster assistance.")}
-    ${btn("Chat on WhatsApp", "https://wa.me/2349000000000")}
+    ${btn("Chat on WhatsApp", "https://wa.me/2349039580317")}
     ${para(`<span style="color:#999;font-size:13px;">If you did not submit this request, please disregard this email.</span>`)}
   `, "Academia HQ");
 
