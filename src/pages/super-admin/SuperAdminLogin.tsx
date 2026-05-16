@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 export default function SuperAdminLogin() {
-  const { user, role, loading, signIn } = useAuth();
+  const { user, role, loading, signIn, signOut } = useAuth();
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -19,6 +19,14 @@ export default function SuperAdminLogin() {
     return () => clearTimeout(t);
   }, []);
 
+  // If a non-super-admin session is active, sign it out so this page
+  // is always reachable as the super-admin entry point.
+  useEffect(() => {
+    if (!loading && user && role && role !== "super_admin") {
+      signOut();
+    }
+  }, [loading, user, role, signOut]);
+
   if (loading || (user && !role)) {
     return (
       <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#07090f" }}>
@@ -27,13 +35,7 @@ export default function SuperAdminLogin() {
     );
   }
 
-  if (user && role === "super_admin")      return <Navigate to="/super-admin" replace />;
-  if (user && role === "outreach_officer") return <Navigate to="/outreach" replace />;
-  if (user && role === "admin")            return <Navigate to="/admin" replace />;
-  if (user && role === "instructor")       return <Navigate to="/instructor" replace />;
-  if (user && role === "parent")           return <Navigate to="/parent" replace />;
-  if (user && role === "student")          return <Navigate to="/student" replace />;
-  if (user)                                return <Navigate to="/" replace />;
+  if (user && role === "super_admin") return <Navigate to="/super-admin" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
