@@ -203,13 +203,20 @@ export default function RequestDemoSection() {
           console.error("Implementation request notification failed:", e);
         }
       })();
-      // Confirmation to requester
-      sendImplementationConfirmationEmail({
-        to:            email.trim().toLowerCase(),
-        contactName:   contactName.trim(),
-        schoolName:    schoolName.trim(),
-        servicesNeeded: services,
-      }).catch(() => {});
+      // Confirmation to requester — await so errors surface in logs
+      try {
+        const sent = await sendImplementationConfirmationEmail({
+          to:             email.trim().toLowerCase(),
+          contactName:    contactName.trim(),
+          schoolName:     schoolName.trim(),
+          servicesNeeded: services,
+        });
+        if (!sent) {
+          console.error("[RequestDemo] Confirmation email failed to send to:", email.trim().toLowerCase());
+        }
+      } catch (emailErr) {
+        console.error("[RequestDemo] Confirmation email threw:", emailErr);
+      }
 
       lastSubmitRef.current = Date.now();
       setSubmitted(true);
@@ -267,7 +274,7 @@ export default function RequestDemoSection() {
             className="mt-8 flex flex-wrap justify-center gap-4"
           >
             <a
-              href="https://wa.me/2349000000000"
+              href="https://wa.me/2349039580317"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-emerald-600 transition-colors"
@@ -692,7 +699,7 @@ export default function RequestDemoSection() {
 
             {/* WhatsApp CTA */}
             <motion.a
-              href="https://wa.me/2349000000000"
+              href="https://wa.me/2349039580317"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.03, boxShadow: "0 8px 28px rgba(37,211,102,0.3)" }}
