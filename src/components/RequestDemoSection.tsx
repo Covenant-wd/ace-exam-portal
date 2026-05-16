@@ -177,9 +177,32 @@ export default function RequestDemoSection() {
         bookVisit,
       };
 
-      // Notify super admin (fetch from DB in production — hardcoded here for safety)
-      // You can replace this email with the actual super admin email address
-      sendImplementationRequestEmail({ to: "admin@academiahq.com", ...payload }).catch(() => {});
+      // FIX: Fetch super admin emails from DB instead of a hardcoded address.
+      // We query user_roles for every super_admin user, then resolve their
+      // emails via the get_user_emails_by_ids RPC (SECURITY DEFINER function
+      // that can read auth.users safely from the client).
+      (async () => {
+        try {
+          const { data: superAdminRoles } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("role", "super_admin");
+          const superAdminIds = (superAdminRoles || []).map((r: any) => r.user_id);
+          if (superAdminIds.length > 0) {
+            const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
+              _user_ids: superAdminIds,
+            });
+            const superAdminEmails = (emailRows || [])
+              .map((r: any) => r.email)
+              .filter(Boolean);
+            if (superAdminEmails.length > 0) {
+              await sendImplementationRequestEmail({ to: superAdminEmails, ...payload });
+            }
+          }
+        } catch (e) {
+          console.error("Implementation request notification failed:", e);
+        }
+      })();
       // Confirmation to requester
       sendImplementationConfirmationEmail({
         to:            email.trim().toLowerCase(),
