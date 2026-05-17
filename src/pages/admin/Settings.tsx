@@ -88,8 +88,8 @@ export default function Settings() {
     try {
       await updateNameMutation.mutateAsync(name.trim());
       toast.success("School name updated successfully");
-    } catch {
-      toast.error("Failed to update school name");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update school name");
     }
   };
 
@@ -107,8 +107,8 @@ export default function Settings() {
     try {
       await updateLogoMutation.mutateAsync(file);
       toast.success("School logo updated successfully");
-    } catch {
-      toast.error("Failed to upload logo");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to upload logo");
     }
   };
 
