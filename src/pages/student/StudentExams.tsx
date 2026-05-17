@@ -139,7 +139,10 @@ export default function StudentExams() {
                           <Clock className="h-4 w-4" />{exam.duration_minutes} minutes
                         </div>
                         {isTheory ? (
-                          <Button asChild className="w-full"><Link to={examLink}>{completed ? "View Again" : "Start Exam"}</Link></Button>
+                          // Theory exams are display-only — no score, no pass/fail
+                          <Button asChild className="w-full">
+                            <Link to={examLink}>{completed ? "View Again" : "Start Exam"}</Link>
+                          </Button>
                         ) : completed ? (
                           <div className="space-y-2">
                             <p className="text-sm font-medium">Score: {attempt.score}/{attempt.total_questions} ({Math.round((attempt.score / attempt.total_questions) * 100)}%)</p>
