@@ -259,14 +259,14 @@ CREATE POLICY "Class instructors can post announcements"
     AND public.has_role(auth.uid(), 'instructor'::public.app_role)
     AND (
       -- class-scoped announcement
-      (class_id IS NOT NULL AND EXISTS (
+      (target_class_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM public.class_instructors ci
         WHERE ci.instructor_id = auth.uid()
-          AND ci.class_id = announcements.class_id
+          AND ci.class_id = announcements.target_class_id
           AND ci.school_id = announcements.school_id
       ))
       -- school-wide announcement allowed if legacy permission still set
-      OR (class_id IS NULL AND EXISTS (
+      OR (target_class_id IS NULL AND EXISTS (
         SELECT 1 FROM public.instructor_permissions ip
         WHERE ip.instructor_id = auth.uid()
           AND ip.can_post_announcements = true
@@ -277,13 +277,13 @@ CREATE POLICY "Class instructors can post announcements"
     school_id = public.get_user_school_id(auth.uid())
     AND public.has_role(auth.uid(), 'instructor'::public.app_role)
     AND (
-      (class_id IS NOT NULL AND EXISTS (
+      (target_class_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM public.class_instructors ci
         WHERE ci.instructor_id = auth.uid()
-          AND ci.class_id = announcements.class_id
+          AND ci.class_id = announcements.target_class_id
           AND ci.school_id = announcements.school_id
       ))
-      OR (class_id IS NULL AND EXISTS (
+      OR (target_class_id IS NULL AND EXISTS (
         SELECT 1 FROM public.instructor_permissions ip
         WHERE ip.instructor_id = auth.uid()
           AND ip.can_post_announcements = true
