@@ -36,8 +36,10 @@ export default function Results() {
     if (!schoolId) return;
     supabase
       .from("exams")
-      .select("id, title, subjects(name)")
+      .select("id, title, exam_type, subjects(name)")
       .eq("school_id", schoolId)
+      // Theory exams are display-only with no student scores — exclude them
+      .neq("exam_type", "theory")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
         setExams((data ?? []) as ExamOption[]);
