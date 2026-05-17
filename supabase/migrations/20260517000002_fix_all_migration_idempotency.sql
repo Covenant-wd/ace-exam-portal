@@ -995,7 +995,8 @@ CREATE POLICY "Admins can upload school logo"
   WITH CHECK (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role));
 CREATE POLICY "Admins can update school logo"
   ON storage.objects FOR UPDATE
-  USING (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role));
+  USING (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role))
+  WITH CHECK (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role));
 CREATE POLICY "Admins can delete school logo"
   ON storage.objects FOR DELETE
   USING (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role));
