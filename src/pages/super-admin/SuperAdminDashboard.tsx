@@ -152,12 +152,14 @@ export default function SuperAdminDashboard() {
       } else {
         const { error } = await supabase.from("schools").insert({ name, slug });
         if (error) throw error;
-        const { data: newSchool } = await supabase.from("schools").select("id").eq("slug", slug).single();
+        const { data: newSchool, error: fetchError } = await supabase.from("schools").select("id").eq("slug", slug).single();
+        if (fetchError) throw fetchError;
         if (newSchool) {
-          await supabase.from("school_settings").insert([
+          const { error: settingsError } = await supabase.from("school_settings").insert([
             { key: "school_name", value: name, school_id: newSchool.id },
             { key: "school_logo_url", value: "", school_id: newSchool.id },
           ]);
+          if (settingsError) throw settingsError;
         }
         toast.success("School created");
       }
