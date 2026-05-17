@@ -18,16 +18,6 @@
 -- Any CREATE TABLE that lacked IF NOT EXISTS
 -- ================================================================
 
--- school_settings (20260222061014)
-CREATE TABLE IF NOT EXISTS public.school_settings (
-  id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  key text NOT NULL,
-  value text NOT NULL DEFAULT '',
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  school_id uuid REFERENCES public.schools(id) ON DELETE CASCADE
-);
-ALTER TABLE public.school_settings ENABLE ROW LEVEL SECURITY;
-
 -- sessions (20260223152200)
 CREATE TABLE IF NOT EXISTS public.sessions (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
