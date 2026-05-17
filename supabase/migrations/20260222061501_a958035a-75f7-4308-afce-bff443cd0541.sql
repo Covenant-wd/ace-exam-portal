@@ -1,6 +1,7 @@
 
 -- Create school-logo storage bucket
-INSERT INTO storage.buckets (id, name, public) VALUES ('school-logo', 'school-logo', true);
+INSERT INTO storage.buckets (id, name, public) VALUES ('school-logo', 'school-logo', true)
+ON CONFLICT (id) DO NOTHING;
 
 -- Anyone can view the logo
 CREATE POLICY "School logo is publicly accessible"
@@ -21,4 +22,8 @@ ON storage.objects FOR DELETE
 USING (bucket_id = 'school-logo' AND public.has_role(auth.uid(), 'admin'::public.app_role));
 
 -- Seed school_logo_url setting
-INSERT INTO public.school_settings (key, value) VALUES ('school_logo_url', '');
+-- NOTE: ON CONFLICT DO NOTHING used (no column spec) because the unique
+-- constraint on `key` alone was dropped when multi-tenancy was introduced.
+INSERT INTO public.school_settings (key, value)
+VALUES ('school_logo_url', '')
+ON CONFLICT DO NOTHING;

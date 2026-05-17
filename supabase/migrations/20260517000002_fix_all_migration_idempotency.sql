@@ -272,13 +272,17 @@ ON CONFLICT (id) DO NOTHING;
 -- SECTION 4: DATA SEEDS (with ON CONFLICT)
 -- ================================================================
 
+-- NOTE: ON CONFLICT DO NOTHING used (no column spec) because the unique
+-- constraint on `key` alone was dropped in favour of UNIQUE(school_id, key)
+-- when multi-tenancy was introduced (migration 20260311133417).
+-- ON CONFLICT (key) would raise SQLSTATE 42P10 on a fresh preview database.
 INSERT INTO public.school_settings (key, value)
 VALUES ('school_name', 'CBT Portal')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.school_settings (key, value)
 VALUES ('school_logo_url', '')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 
 -- ================================================================

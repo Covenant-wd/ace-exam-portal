@@ -32,6 +32,9 @@ FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
 -- Seed default school name
+-- NOTE: ON CONFLICT (key) replaced with ON CONFLICT DO NOTHING because the
+-- unique constraint on `key` alone was later dropped in favour of a composite
+-- UNIQUE(school_id, key) constraint when the platform became multi-tenant.
 INSERT INTO public.school_settings (key, value)
 VALUES ('school_name', 'CBT Portal')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT DO NOTHING;
