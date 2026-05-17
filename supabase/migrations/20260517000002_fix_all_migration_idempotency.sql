@@ -269,20 +269,14 @@ ON CONFLICT (id) DO NOTHING;
 
 
 -- ================================================================
--- SECTION 4: DATA SEEDS (with ON CONFLICT)
+-- SECTION 4: DATA SEEDS
 -- ================================================================
 
--- NOTE: ON CONFLICT DO NOTHING used (no column spec) because the unique
--- constraint on `key` alone was dropped in favour of UNIQUE(school_id, key)
--- when multi-tenancy was introduced (migration 20260311133417).
--- ON CONFLICT (key) would raise SQLSTATE 42P10 on a fresh preview database.
-INSERT INTO public.school_settings (key, value)
-VALUES ('school_name', 'CBT Portal')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.school_settings (key, value)
-VALUES ('school_logo_url', '')
-ON CONFLICT DO NOTHING;
+-- school_settings seeds intentionally removed.
+-- After migration 20260311133417, school_settings.school_id is NOT NULL
+-- (FK to public.schools). There is no global school to seed against
+-- during migration replay — settings are provisioned per-school at
+-- school-creation time, not as global seed data.
 
 
 -- ================================================================

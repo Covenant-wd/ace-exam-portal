@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.instructor_subjects (
 ALTER TABLE public.instructor_subjects ENABLE ROW LEVEL SECURITY;
 
 -- Admins manage all subject assignments in their school
+DROP POLICY IF EXISTS "Admins can manage instructor_subjects" ON public.instructor_subjects;
 CREATE POLICY "Admins can manage instructor_subjects"
   ON public.instructor_subjects
   FOR ALL
@@ -42,6 +43,7 @@ CREATE POLICY "Admins can manage instructor_subjects"
   );
 
 -- Instructors can read their own subject assignments
+DROP POLICY IF EXISTS "Instructors can read own subject assignments" ON public.instructor_subjects;
 CREATE POLICY "Instructors can read own subject assignments"
   ON public.instructor_subjects
   FOR SELECT
@@ -75,6 +77,7 @@ CREATE TABLE IF NOT EXISTS public.class_instructors (
 ALTER TABLE public.class_instructors ENABLE ROW LEVEL SECURITY;
 
 -- Admins manage all class instructor assignments in their school
+DROP POLICY IF EXISTS "Admins can manage class_instructors" ON public.class_instructors;
 CREATE POLICY "Admins can manage class_instructors"
   ON public.class_instructors
   FOR ALL
@@ -89,6 +92,7 @@ CREATE POLICY "Admins can manage class_instructors"
   );
 
 -- Instructors can read their own class instructor assignments
+DROP POLICY IF EXISTS "Instructors can read own class assignments" ON public.class_instructors;
 CREATE POLICY "Instructors can read own class assignments"
   ON public.class_instructors
   FOR SELECT
