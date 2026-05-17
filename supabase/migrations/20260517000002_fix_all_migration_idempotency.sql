@@ -528,7 +528,9 @@ DROP POLICY IF EXISTS "Anyone can read public school settings"      ON public.sc
 CREATE POLICY "Authenticated users can read settings"
   ON public.school_settings FOR SELECT USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Admins can manage settings"
-  ON public.school_settings FOR ALL USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+  ON public.school_settings FOR ALL
+  USING (public.has_role(auth.uid(), 'admin'::public.app_role))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
 CREATE POLICY "Super admins can manage school_settings"
   ON public.school_settings FOR ALL TO authenticated
   USING (public.has_role(auth.uid(), 'super_admin'::public.app_role))
