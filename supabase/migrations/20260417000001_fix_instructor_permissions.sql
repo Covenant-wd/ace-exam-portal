@@ -23,14 +23,29 @@ WHERE au.id = p.user_id
 -- Without this, deleting an instructor leaves orphaned class
 -- assignment rows with no cascade.
 -- ============================================================
-ALTER TABLE public.instructor_classes
-  ADD CONSTRAINT instructor_classes_instructor_id_fkey
-  FOREIGN KEY (instructor_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'instructor_classes_instructor_id_fkey'
+      AND conrelid = 'public.instructor_classes'::regclass
+  ) THEN
+    ALTER TABLE public.instructor_classes
+      ADD CONSTRAINT instructor_classes_instructor_id_fkey
+      FOREIGN KEY (instructor_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
--- Same for instructor_permissions
-ALTER TABLE public.instructor_permissions
-  ADD CONSTRAINT instructor_permissions_instructor_id_fkey
-  FOREIGN KEY (instructor_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'instructor_permissions_instructor_id_fkey'
+      AND conrelid = 'public.instructor_permissions'::regclass
+  ) THEN
+    ALTER TABLE public.instructor_permissions
+      ADD CONSTRAINT instructor_permissions_instructor_id_fkey
+      FOREIGN KEY (instructor_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 
 -- ============================================================
