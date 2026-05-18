@@ -93,18 +93,29 @@ export default function TakeExam() {
 
   // ── INIT ────────────────────────────────────────────────────────
   useEffect(() => {
+    // FIX: Guard against null user before running any async logic.
+    // ProtectedRoute guarantees user is set, but if the auth session expires
+    // between navigation and this effect running, user!.id would throw uncaught.
+    if (!user || !examId) return;
+
     const init = async () => {
+      console.log("[TakeExam] init() — examId:", examId, "userId:", user.id);
+
       const { data: existing } = await supabase.from("exam_attempts")
-        .select("*").eq("exam_id", examId!).eq("student_id", user!.id).maybeSingle();
+        .select("*").eq("exam_id", examId).eq("student_id", user.id).maybeSingle();
 
       const [examRes, qRes] = await Promise.all([
-        supabase.from("exams").select("*").eq("id", examId!).single(),
+        supabase.from("exams").select("*").eq("id", examId).single(),
         supabase.from("questions")
           .select("id, question_text, option_a, option_b, option_c, option_d, question_order")
-          .eq("exam_id", examId!).order("question_order"),
+          .eq("exam_id", examId).order("question_order"),
       ]);
 
-      if (!examRes.data) { navigate("/student"); return; }
+      if (!examRes.data) {
+        console.error("[TakeExam] Exam not found:", examId);
+        navigate("/student");
+        return;
+      }
       setExam(examRes.data);
       const loadedQuestions = qRes.data ?? [];
       setQuestions(loadedQuestions);
@@ -112,7 +123,7 @@ export default function TakeExam() {
 
       // Fetch student name
       const { data: profileData } = await supabase
-        .from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
+        .from("profiles").select("full_name, school_id").eq("user_id", user.id).single();
       if (profileData?.full_name) setStudentName(profileData.full_name);
 
       // Fetch school name, logo + max violations setting
@@ -147,24 +158,35 @@ export default function TakeExam() {
       if (existing?.is_submitted) {
         if (!examRes.data.allow_retake) {
           toast.info("You've already completed this exam.");
-          navigate("/student"); return;
+          navigate("/student");
+          return;
         }
+        // FIX: reset_exam_attempt deletes the old submitted attempt and inserts a fresh
+        // one, returning the new attempt UUID. It also deletes orphaned student_answers
+        // rows so the student starts with a clean slate.
+        console.log("[TakeExam] Retake requested — calling reset_exam_attempt RPC");
         const { data: newAttemptId, error: retakeErr } = await supabase
-          .rpc("reset_exam_attempt", { _exam_id: examId!, _student_id: user!.id });
+          .rpc("reset_exam_attempt", { _exam_id: examId, _student_id: user.id });
         if (retakeErr || !newAttemptId) {
+          console.error("[TakeExam] reset_exam_attempt failed:", retakeErr?.message, "| data:", newAttemptId);
           toast.error("Failed to start retake. Please try again.");
-          navigate("/student/exams"); return;
+          navigate("/student/exams");
+          return;
         }
+        console.log("[TakeExam] Retake attempt created:", newAttemptId);
         setAttemptId(newAttemptId);
         attemptIdRef.current = newAttemptId; // sync ref immediately
         setAnswers({}); setFlagged(new Set()); setCurrentIndex(0);
         const retakeSecs = examRes.data.duration_minutes * 60;
         deadlineRef.current = Date.now() + retakeSecs * 1000;
         setTimeLeft(retakeSecs);
-        setLoading(false); setExamStarted(true); return;
+        setLoading(false); setExamStarted(true);
+        return;
       }
 
       if (existing && !existing.is_submitted) {
+        // Resume an in-progress attempt
+        console.log("[TakeExam] Resuming attempt:", existing.id);
         setAttemptId(existing.id);
         attemptIdRef.current = existing.id; // sync ref immediately
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
@@ -175,17 +197,22 @@ export default function TakeExam() {
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
         (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
+        console.log("[TakeExam] Restored", Object.keys(map).length, "saved answers");
         answersRef.current = map; // sync ref before state so submitExam sees saved answers
         setAnswers(map);
       } else {
         // FIX: Create the attempt FIRST and confirm it exists before proceeding.
         // This guarantees attempt_id is valid when student_answers rows are inserted.
+        console.log("[TakeExam] Creating new attempt for exam:", examId);
         const { data: attempt, error: attemptErr } = await supabase
-          .from("exam_attempts").insert({ exam_id: examId!, student_id: user!.id }).select().single();
+          .from("exam_attempts").insert({ exam_id: examId, student_id: user.id }).select().single();
         if (attemptErr || !attempt) {
+          console.error("[TakeExam] Failed to create attempt:", attemptErr?.message);
           toast.error("Failed to start exam. Please try again.");
-          navigate("/student/exams"); return;
+          navigate("/student/exams");
+          return;
         }
+        console.log("[TakeExam] New attempt created:", attempt.id);
         setAttemptId(attempt.id);
         attemptIdRef.current = attempt.id; // sync ref immediately so submitExam has it
         const secs = examRes.data.duration_minutes * 60;
@@ -206,6 +233,7 @@ export default function TakeExam() {
     if (submittedRef.current) return;
     violationsRef.current += 1;
     const newCount = violationsRef.current;
+    console.warn("[TakeExam] VIOLATION #" + newCount + ":", reason);
     setViolations(newCount);
     setWarningReason(reason);
     // Auto-submit IMMEDIATELY when max violations is reached.
@@ -247,6 +275,7 @@ export default function TakeExam() {
       // enterFullscreen() (browser fires exit before the new enter completes)
       const msSinceEnter = Date.now() - fsEnterTimeRef.current;
       if (!inFS && !submittedRef.current && msSinceEnter > 1000) {
+        console.warn("[TakeExam] Fullscreen exited");
         handleViolation("You exited fullscreen mode.");
       }
     };
@@ -263,14 +292,47 @@ export default function TakeExam() {
   useEffect(() => {
     if (!examStarted) return;
 
-    // ── Tab / window visibility ───────────────────────────────────
-    // We use ONLY visibilitychange (not window "blur") to detect tab switching.
-    // Reason: on every tab switch the browser fires BOTH visibilitychange AND
-    // window blur — using both would count every switch as TWO violations.
-    // visibilitychange alone is sufficient and more reliable.
+    // ── Tab / window visibility + app-level blur ──────────────────
+    //
+    // REGRESSION FIX: The previous code used ONLY visibilitychange, which only fires
+    // when the browser tab itself becomes hidden (switching browser tabs).
+    // It does NOT fire when the user:
+    //   • presses Alt+Tab to switch to another application
+    //   • clicks the desktop or another app window
+    //   • minimizes the browser window
+    //
+    // Fix: use BOTH visibilitychange AND window "blur", but deduplicate them with
+    // a 1-second cooldown. On a browser-tab switch the browser fires BOTH events
+    // within a few milliseconds of each other — the cooldown absorbs the second one
+    // so it still counts as a single violation. On an Alt+Tab / minimize, only the
+    // blur event fires, which is now correctly detected.
+    //
+    // lastViolationTimeRef tracks the last time handleViolation was called from
+    // this effect so we never count the same focus-loss event twice.
+    const lastViolationTimeRef = { current: 0 };
+    const DEDUP_MS = 1000; // ignore a second event within this window
+
     const handleVisibility = () => {
       if (document.hidden && !submittedRef.current) {
-        handleViolation("You switched tabs or minimized the window.");
+        const now = Date.now();
+        if (now - lastViolationTimeRef.current > DEDUP_MS) {
+          lastViolationTimeRef.current = now;
+          console.warn("[TakeExam] visibilitychange: tab hidden");
+          handleViolation("You switched tabs or minimized the window.");
+        }
+      }
+    };
+
+    // FIX: Restore window blur listener to catch Alt+Tab / app-switch / minimize.
+    // Guarded by the same dedup window so tab-switch doesn't count twice.
+    const handleWindowBlur = () => {
+      if (!submittedRef.current) {
+        const now = Date.now();
+        if (now - lastViolationTimeRef.current > DEDUP_MS) {
+          lastViolationTimeRef.current = now;
+          console.warn("[TakeExam] window blur: focus left exam window");
+          handleViolation("You left the exam window.");
+        }
       }
     };
 
@@ -292,14 +354,18 @@ export default function TakeExam() {
     const blockCopy = (e: ClipboardEvent) => { e.preventDefault(); };
 
     document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleWindowBlur);        // FIX: restored
     document.addEventListener("contextmenu", blockContext);
     document.addEventListener("keydown", blockKeys);
     document.addEventListener("copy", blockCopy);
     document.addEventListener("paste", blockCopy);
     document.addEventListener("cut", blockCopy);
 
+    console.log("[TakeExam] Anti-cheat listeners registered (visibilitychange + window blur + fullscreenchange)");
+
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleWindowBlur);   // FIX: restored
       document.removeEventListener("contextmenu", blockContext);
       document.removeEventListener("keydown", blockKeys);
       document.removeEventListener("copy", blockCopy);
@@ -315,10 +381,15 @@ export default function TakeExam() {
     // handler). Previously the state variable was captured at useCallback
     // creation time and could be null if the closure was stale.
     const currentAttemptId = attemptIdRef.current;
-    if (submittedRef.current || !currentAttemptId) return;
+    if (submittedRef.current || !currentAttemptId) {
+      console.warn("[TakeExam] submitExam called but already submitted or no attemptId. Skipping.");
+      return;
+    }
     submittedRef.current = true;
     setSubmitting(true);
     setWarningOpen(false);
+
+    console.log("[TakeExam] submitExam() — attemptId:", currentAttemptId, "| isTimeout:", isTimeout, "| isCheating:", isCheating);
 
     // Exit fullscreen on submit
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
@@ -326,6 +397,7 @@ export default function TakeExam() {
     // FIX: Read questions from ref so we always have the full list, even in
     // stale closures (timer/violation triggered submits).
     const currentQuestions = questionsRef.current;
+    console.log("[TakeExam] Total questions:", currentQuestions.length);
 
     const { data: correctData } = await supabase.from("questions")
       .select("id, correct_option").eq("exam_id", examId!);
@@ -355,6 +427,8 @@ export default function TakeExam() {
         };
       });
 
+    console.log("[TakeExam] Answered:", answeredRows.length, "of", currentQuestions.length);
+
     // ── TRANSACTION-SAFE ORDER ────────────────────────────────────
     // STEP 1: Insert all student_answers rows FIRST using the confirmed attempt_id.
     // STEP 2: Only after all inserts succeed, mark exam_attempts.is_submitted = true.
@@ -372,6 +446,7 @@ export default function TakeExam() {
         .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
 
       if (upsertErr) {
+        console.error("[TakeExam] student_answers upsert failed (attempt 1):", upsertErr.message);
         // Retry once after a short delay to mitigate transient network / RLS errors.
         await new Promise((r) => setTimeout(r, 1000));
         const { error: retryErr } = await supabase
@@ -392,16 +467,19 @@ export default function TakeExam() {
           return; // ← abort: do NOT proceed to update is_submitted
         }
       }
+
+      console.log("[TakeExam] student_answers saved successfully.");
     }
 
     // STEP 2: All answers are confirmed saved. Now close the attempt.
     const score = answeredRows.filter((a) => a.is_correct).length;
+    console.log("[TakeExam] Score:", score, "/", currentQuestions.length);
 
-    // `violations` column does NOT exist in the exam_attempts DB schema.
+    // NOTE: `violations` column does NOT exist in the exam_attempts DB schema.
     // Including an unknown column causes PostgreSQL error 42703, which makes
     // the entire UPDATE fail silently: is_submitted stays false, and the timer
     // keeps re-firing when the student returns (the "keeps rolling" loop).
-    // Add it back here once you run a migration adding the `violations` column.
+    // Add it back here once you run the migration adding the `violations` column.
     const attemptUpdate = {
       is_submitted: true,
       score,
@@ -414,6 +492,7 @@ export default function TakeExam() {
       .eq("id", currentAttemptId);
 
     if (updateErr) {
+      console.error("[TakeExam] exam_attempts update failed (attempt 1):", updateErr.message);
       // Retry once after a short delay
       await new Promise((r) => setTimeout(r, 1500));
       const { error: retryUpdateErr } = await supabase
@@ -425,7 +504,11 @@ export default function TakeExam() {
         // Answers are already saved (Step 1 succeeded). Navigate anyway — keeping
         // the student on the exam page is worse than a failed is_submitted flag.
         // Admin can manually close the attempt; answers are preserved.
+      } else {
+        console.log("[TakeExam] exam_attempts updated successfully (retry).");
       }
+    } else {
+      console.log("[TakeExam] exam_attempts updated successfully.");
     }
 
     if (isCheating) {
@@ -457,11 +540,14 @@ export default function TakeExam() {
       const emails: string[] = [];
 
       // Student email via secure RPC (works for both email-auth and username-auth students)
+      // NOTE: After migration 20260517000003, get_email_by_user_id is restricted to
+      // admin/super_admin. This catch is intentional — students can't call this RPC.
+      // Email notification to the student is best-effort; failure here is non-blocking.
       try {
         const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
         if (studentEmail) emails.push(studentEmail);
       } catch (e) {
-        console.warn("[TakeExam] Could not fetch student email:", e);
+        console.warn("[TakeExam] Could not fetch student email (restricted RPC — non-fatal):", e);
       }
 
       // Parent emails
@@ -528,6 +614,7 @@ export default function TakeExam() {
       if (remaining <= 0) {
         clearInterval(interval);
         setTimeLeft(0);
+        console.log("[TakeExam] Timer expired — auto-submitting.");
         submitExamRef.current?.(true); // auto-submit on timeout via stable ref
       } else {
         setTimeLeft(remaining);
@@ -548,9 +635,14 @@ export default function TakeExam() {
     // even if this function is called from a stale closure.
     const currentAttemptId = attemptIdRef.current;
     if (currentAttemptId) {
-      await supabase.from("student_answers").upsert({
+      const { error: answerErr } = await supabase.from("student_answers").upsert({
         attempt_id: currentAttemptId, question_id: questionId, selected_option: option,
       }, { onConflict: "attempt_id,question_id" });
+      if (answerErr) {
+        console.error("[TakeExam] Real-time answer save failed for question", questionId, ":", answerErr.message);
+        // Non-fatal: the final submit upsert will re-save all answers. Don't toast here
+        // to avoid spamming the student with error toasts on every click.
+      }
     }
   };
 
