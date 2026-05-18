@@ -24,6 +24,7 @@ const adminLinks = [
   { to: "/admin/exams", label: "Exams", icon: FileText, group: "Assessment" },
   { to: "/admin/results", label: "Results", icon: BarChart3, group: "Assessment" },
   { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
+  { to: "/admin/report-cards", label: "Report Cards", icon: FileText, group: "Assessment" },
   { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
   { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
   { to: "/admin/debtors", label: "Defaulters", icon: AlertTriangle, group: "Records" },
