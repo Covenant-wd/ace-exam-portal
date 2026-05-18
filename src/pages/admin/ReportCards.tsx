@@ -223,7 +223,7 @@ export default function ReportCards() {
         // times_school_opened intentionally NOT overwritten
       },
     }));
-    toast.success("Auto-filled. Remember to set "Times School Opened" manually.");
+    toast.success("Auto-filled. Remember to set 'Times School Opened' manually.");
   };
 
   const setMeta = (sid: string, field: string, value: any) =>
