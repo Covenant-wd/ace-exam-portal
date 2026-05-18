@@ -350,15 +350,18 @@ export default function TakeExam() {
 
     const score = answeredRows.filter((a) => a.is_correct).length;
 
-    // BUG FIX 4: Removed `as any` cast — violations column now exists after migration.
-    // Added error checking: if this update fails, the exam appears unsubmitted.
-    // Retry once on transient failures before giving up.
+    // FIX (Bug 1 - Submission spinning/looping):
+    // `violations` is intentionally excluded — the column does NOT exist in the
+    // exam_attempts DB schema (absent from types.ts). Including an unknown column
+    // causes PostgreSQL error 42703, which makes the entire UPDATE fail silently:
+    // is_submitted stays false, the attempt is never closed, and the timer keeps
+    // re-firing when the student returns (the "keeps rolling" loop).
+    // Add it back here once you run a migration adding the `violations` column.
     const attemptUpdate = {
       is_submitted: true,
       score,
       total_questions: questions.length,
       submitted_at: new Date().toISOString(),
-      violations: violationsRef.current,
     };
     const { error: updateErr } = await supabase
       .from("exam_attempts")
@@ -366,13 +369,15 @@ export default function TakeExam() {
       .eq("id", attemptId);
     if (updateErr) {
       // Retry once after a short delay
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
       const { error: retryUpdateErr } = await supabase
         .from("exam_attempts")
         .update(attemptUpdate)
         .eq("id", attemptId);
       if (retryUpdateErr) {
         console.error("[TakeExam] exam_attempts update failed after retry:", retryUpdateErr.message);
+        // Still navigate — keeping the student on the exam page is worse than navigating
+        // with a failed DB write. Admin can review and correct manually if needed.
       }
     }
 
@@ -382,33 +387,71 @@ export default function TakeExam() {
       toast.success(isTimeout ? "Time's up! Exam submitted." : "Exam submitted successfully!");
     }
 
+    // FIX (Bug 2 - Email not sent):
+    // Each DB call now has its own try/catch so a failure in one step (e.g. the
+    // notification-check or parent-link query) does not silently abort the email.
+    // We also guard against null profile.full_name and log failures for debugging.
     try {
-      const { data: examData } = await supabase.from("exams").select("title, school_id").eq("id", examId!).single();
-      const notifEnabled = examData?.school_id ? await isNotificationEnabled(examData.school_id, "notify_exam_result") : true;
-      if (!notifEnabled) throw new Error("skip");
-      const { data: profile } = await supabase.from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
-      const { data: userAuth } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
+      const { data: examData, error: examDataErr } = await supabase
+        .from("exams").select("title, school_id").eq("id", examId!).single();
+      if (examDataErr || !examData) throw new Error("exam fetch failed");
+
+      // Check if this notification type is enabled for the school
+      const notifEnabled = examData.school_id
+        ? await isNotificationEnabled(examData.school_id, "notify_exam_result")
+        : true;
+      if (!notifEnabled) throw new Error("skip"); // disabled by school setting — not an error
+
+      // Fetch student profile
+      const { data: profile } = await supabase
+        .from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
+      const displayName = profile?.full_name || studentName || "Student";
+
+      // Collect recipient emails: student + linked parents
       const emails: string[] = [];
-      if (userAuth) emails.push(userAuth);
-      const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", user!.id);
-      if (parentLinks && parentLinks.length > 0) {
-        const parentIds = parentLinks.map((p: any) => p.parent_id);
-        const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
-        (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+
+      // Student email via secure RPC (works for both email-auth and username-auth students)
+      try {
+        const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
+        if (studentEmail) emails.push(studentEmail);
+      } catch (e) {
+        console.warn("[TakeExam] Could not fetch student email:", e);
       }
-      if (emails.length > 0 && examData && profile) {
-        await sendExamResultEmail({
+
+      // Parent emails
+      try {
+        const { data: parentLinks } = await supabase
+          .from("parent_students").select("parent_id").eq("student_id", user!.id);
+        if (parentLinks && parentLinks.length > 0) {
+          const parentIds = parentLinks.map((p: any) => p.parent_id);
+          const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+          (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+        }
+      } catch (e) {
+        console.warn("[TakeExam] Could not fetch parent emails:", e);
+      }
+
+      if (emails.length > 0) {
+        const sent = await sendExamResultEmail({
           to: emails,
-          recipientName: profile.full_name,
-          studentName: profile.full_name,
+          recipientName: displayName,
+          studentName: displayName,
           schoolName: schoolNameRef.current || schoolName || "School",
           examTitle: examData.title,
           score,
           totalQuestions: questions.length,
           loginUrl: window.location.origin,
         });
+        if (!sent) console.warn("[TakeExam] sendExamResultEmail reported failure.");
+      } else {
+        console.warn("[TakeExam] No recipient emails found — result email skipped.");
       }
-    } catch {}
+    } catch (emailErr: any) {
+      // "skip" is intentional (notification disabled); anything else is unexpected
+      if (emailErr?.message !== "skip") {
+        console.error("[TakeExam] Email notification error:", emailErr?.message ?? emailErr);
+      }
+    }
 
     navigate("/student/results");
   }, [attemptId, answers, questions, examId, navigate, schoolName, user]);

@@ -63,8 +63,23 @@ export default function StudentExams() {
         .eq("student_id", user!.id);
 
       setExams(filtered);
+      // FIX (Bug 3 - Retake badge not shown):
+      // The query returns all attempts unsorted. If the student started a retake
+      // (creating a new unsubmitted attempt) and then navigated away, the unsubmitted
+      // attempt could land last in the array, overwriting the submitted one in the map
+      // → completed=false → "Retake Available" badge hidden and retake button gone.
+      //
+      // Fix: when building the map, a SUBMITTED attempt always wins over an unsubmitted
+      // one for the same exam. This ensures the badge and score display are driven by
+      // the last successfully submitted result, not a stale in-progress row.
       const map: Record<string, any> = {};
-      (attemptsData ?? []).forEach((a: any) => { map[a.exam_id] = a; });
+      (attemptsData ?? []).forEach((a: any) => {
+        const existing = map[a.exam_id];
+        // Keep this attempt if: no prior entry, OR this one is submitted and prior is not
+        if (!existing || (a.is_submitted && !existing.is_submitted)) {
+          map[a.exam_id] = a;
+        }
+      });
       setAttempts(map);
       setLoading(false);
     };
