@@ -35,6 +35,10 @@ export default function TakeExam() {
   const [exam, setExam]           = useState<any>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers]     = useState<Record<string, string>>({});
+  // answersRef mirrors answers state so submitExam can read the latest answers
+  // without needing `answers` in its useCallback deps (which would cause the
+  // timer's interval to reset on every answer selection — the countdown freeze bug).
+  const answersRef = useRef<Record<string, string>>({});
   const [flagged, setFlagged]     = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
@@ -161,6 +165,7 @@ export default function TakeExam() {
           .select("question_id, selected_option").eq("attempt_id", existing.id);
         const map: Record<string, string> = {};
         (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
+        answersRef.current = map; // sync ref before state so submitExam sees saved answers
         setAnswers(map);
       } else {
         const { data: attempt, error: attemptErr } = await supabase
@@ -315,13 +320,17 @@ export default function TakeExam() {
     // New rule: a student_answers row exists ⇔ the student selected an option.
     // Skipped questions have NO row at all. ExamReview can then trust hasRow
     // as the definitive "did they answer?" signal.
+    // Use answersRef.current (not the `answers` state closure) so we always score
+    // the latest selections — especially important for timeout auto-submit where
+    // the closure may have captured a stale snapshot of answers state.
+    const currentAnswers = answersRef.current;
     const answeredRows = questions
       .filter((q) => {
-        const a = answers[q.id];
+        const a = currentAnswers[q.id];
         return typeof a === "string" && a.trim() !== "";
       })
       .map((q) => {
-        const picked = answers[q.id].trim().toUpperCase();
+        const picked = currentAnswers[q.id].trim().toUpperCase();
         const correct = (correctMap[q.id] || "").trim().toUpperCase();
         return {
           attempt_id: attemptId,
@@ -454,33 +463,46 @@ export default function TakeExam() {
     }
 
     navigate("/student/results");
-  }, [attemptId, answers, questions, examId, navigate, schoolName, user]);
+  // `answers` is intentionally removed from deps — we read answersRef.current instead.
+  // Keeping `answers` here would recreate submitExam on every answer click, which
+  // caused the timer useEffect to re-run and reset its interval (countdown freeze bug).
+  }, [attemptId, questions, examId, navigate, schoolName, user]);
 
   // Keep submitExamRef in sync so handleViolation (defined earlier) can call
   // submitExam without a circular useCallback dependency.
   submitExamRef.current = submitExam;
 
   // ── TIMER ────────────────────────────────────────────────────────
-  // Uses deadline-based countdown (Date.now() diff) instead of decrementing
-  // state by 1 every second. setInterval fires are never perfectly 1000 ms
-  // apart — over a 60-minute exam the old approach could lose 5-15 seconds.
+  // CRITICAL: The interval must depend ONLY on [loading] — NOT on submitExam.
+  // submitExam is a useCallback whose deps include `answers`. Every time a student
+  // selects an answer, answers changes → submitExam gets a new reference → the
+  // useEffect dep list changes → the old interval is cleared and a new one starts.
+  // This causes the countdown to stutter and effectively freeze on active exams.
+  //
+  // Fix: call submitExamRef.current() instead of submitExam() inside the interval.
+  // submitExamRef is always kept in sync (line below this hook) and never changes
+  // identity, so the timer effect runs exactly once after loading completes.
   useEffect(() => {
-    if (loading || timeLeft <= 0) return;
+    if (loading || deadlineRef.current <= 0) return;
     const interval = setInterval(() => {
       const remaining = Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000));
       if (remaining <= 0) {
         clearInterval(interval);
         setTimeLeft(0);
-        submitExam(true);
+        submitExamRef.current?.(true); // auto-submit on timeout via stable ref
       } else {
         setTimeLeft(remaining);
       }
-    }, 500); // poll twice per second so display is always accurate
+    }, 500);
     return () => clearInterval(interval);
-  }, [loading, submitExam]); // intentionally omit timeLeft — deadline drives it
+  }, [loading]); // ONLY loading — deadline & submit accessed via stable refs
 
   const selectAnswer = async (questionId: string, option: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: option }));
+    setAnswers((prev) => {
+      const next = { ...prev, [questionId]: option };
+      answersRef.current = next; // keep ref in sync for submitExam
+      return next;
+    });
     if (attemptId) {
       await supabase.from("student_answers").upsert({
         attempt_id: attemptId, question_id: questionId, selected_option: option,
