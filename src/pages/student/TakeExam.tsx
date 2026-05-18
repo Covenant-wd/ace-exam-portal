@@ -42,6 +42,9 @@ export default function TakeExam() {
   const [flagged, setFlagged]     = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  // attemptIdRef mirrors attemptId so submitExam always has the latest value
+  // even when called from a stale closure (violation handler, timer).
+  const attemptIdRef = useRef<string | null>(null);
   const [timeLeft, setTimeLeft]   = useState(0);
   // Stores the absolute deadline as a Unix timestamp (ms).
   // Used by the timer to compute remaining time accurately without drift.
@@ -66,11 +69,14 @@ export default function TakeExam() {
   const violationsRef = useRef(0);
   const maxViolationsRef = useRef(3);
   const submittedRef  = useRef(false);
-  // BUG FIX: schoolName is loaded async. submitExam is a useCallback that captures
+  // schoolName is loaded async. submitExam is a useCallback that captures
   // schoolName at creation time — if the exam auto-submits on timeout before
   // schoolName has loaded, the email gets "School" instead of the real name.
   // A ref always reflects the latest value regardless of when submitExam was memoized.
   const schoolNameRef = useRef("");
+  // questionsRef mirrors questions state so submitExam always has the latest
+  // list even when called from a stale closure (timer, violation handler).
+  const questionsRef = useRef<Question[]>([]);
   // Ref to submitExam so handleViolation can call it without a circular
   // useCallback dependency (handleViolation is defined before submitExam).
   const submitExamRef = useRef<(isTimeout?: boolean, isCheating?: boolean) => Promise<void>>();
@@ -100,7 +106,9 @@ export default function TakeExam() {
 
       if (!examRes.data) { navigate("/student"); return; }
       setExam(examRes.data);
-      setQuestions(qRes.data ?? []);
+      const loadedQuestions = qRes.data ?? [];
+      setQuestions(loadedQuestions);
+      questionsRef.current = loadedQuestions; // keep ref in sync for submitExam closure
 
       // Fetch student name
       const { data: profileData } = await supabase
@@ -148,6 +156,7 @@ export default function TakeExam() {
           navigate("/student/exams"); return;
         }
         setAttemptId(newAttemptId);
+        attemptIdRef.current = newAttemptId; // sync ref immediately
         setAnswers({}); setFlagged(new Set()); setCurrentIndex(0);
         const retakeSecs = examRes.data.duration_minutes * 60;
         deadlineRef.current = Date.now() + retakeSecs * 1000;
@@ -157,6 +166,7 @@ export default function TakeExam() {
 
       if (existing && !existing.is_submitted) {
         setAttemptId(existing.id);
+        attemptIdRef.current = existing.id; // sync ref immediately
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
         const remaining = Math.floor(Math.max(0, examRes.data.duration_minutes * 60 - elapsed));
         deadlineRef.current = Date.now() + remaining * 1000;
@@ -168,6 +178,8 @@ export default function TakeExam() {
         answersRef.current = map; // sync ref before state so submitExam sees saved answers
         setAnswers(map);
       } else {
+        // FIX: Create the attempt FIRST and confirm it exists before proceeding.
+        // This guarantees attempt_id is valid when student_answers rows are inserted.
         const { data: attempt, error: attemptErr } = await supabase
           .from("exam_attempts").insert({ exam_id: examId!, student_id: user!.id }).select().single();
         if (attemptErr || !attempt) {
@@ -175,6 +187,7 @@ export default function TakeExam() {
           navigate("/student/exams"); return;
         }
         setAttemptId(attempt.id);
+        attemptIdRef.current = attempt.id; // sync ref immediately so submitExam has it
         const secs = examRes.data.duration_minutes * 60;
         deadlineRef.current = Date.now() + secs * 1000;
         setTimeLeft(secs);
@@ -195,11 +208,11 @@ export default function TakeExam() {
     const newCount = violationsRef.current;
     setViolations(newCount);
     setWarningReason(reason);
-    // BUG FIX 3: Auto-submit IMMEDIATELY when max violations is reached.
-    // Previous code opened the modal and waited for the student to click
-    // "Submit Now" — a cheating student could simply close the browser tab
-    // to avoid the submission being recorded. Now we fire submitExam()
-    // immediately; the modal is still shown briefly during the async submit.
+    // Auto-submit IMMEDIATELY when max violations is reached.
+    // A cheating student who simply closes the browser tab after the final
+    // violation would avoid the submission being recorded if we waited for a
+    // "Submit Now" button click. We fire submitExam() immediately; the modal
+    // is still shown briefly during the async submit.
     if (newCount >= maxViolationsRef.current) {
       setWarningOpen(true); // show "Exam Terminated" state briefly
       submitExamRef.current?.(false, true);
@@ -297,7 +310,12 @@ export default function TakeExam() {
 
   // ── SUBMIT ───────────────────────────────────────────────────────
   const submitExam = useCallback(async (isTimeout = false, isCheating = false) => {
-    if (submittedRef.current || !attemptId) return;
+    // FIX: Read attemptId from the ref so this function always sees the current
+    // value even when called from a stale closure (timer auto-submit, violation
+    // handler). Previously the state variable was captured at useCallback
+    // creation time and could be null if the closure was stale.
+    const currentAttemptId = attemptIdRef.current;
+    if (submittedRef.current || !currentAttemptId) return;
     submittedRef.current = true;
     setSubmitting(true);
     setWarningOpen(false);
@@ -305,26 +323,23 @@ export default function TakeExam() {
     // Exit fullscreen on submit
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
 
+    // FIX: Read questions from ref so we always have the full list, even in
+    // stale closures (timer/violation triggered submits).
+    const currentQuestions = questionsRef.current;
+
     const { data: correctData } = await supabase.from("questions")
       .select("id, correct_option").eq("exam_id", examId!);
     const correctMap: Record<string, string> = {};
     (correctData ?? []).forEach((q: any) => { correctMap[q.id] = q.correct_option; });
 
-    // CRITICAL FIX: Only upsert rows for questions the student actually answered.
-    // Previously we upserted a row for EVERY question (with selected_option=null
-    // for un-answered ones). That blanked-out any prior row written by
-    // selectAnswer if the local `answers` state was stale (e.g. resumed attempt
-    // where the saved answers hadn't fully rehydrated). It also made truly
-    // skipped questions indistinguishable from wrong ones (both is_correct=false).
-    //
-    // New rule: a student_answers row exists ⇔ the student selected an option.
+    // Only upsert rows for questions the student actually answered.
     // Skipped questions have NO row at all. ExamReview can then trust hasRow
     // as the definitive "did they answer?" signal.
     // Use answersRef.current (not the `answers` state closure) so we always score
     // the latest selections — especially important for timeout auto-submit where
     // the closure may have captured a stale snapshot of answers state.
     const currentAnswers = answersRef.current;
-    const answeredRows = questions
+    const answeredRows = currentQuestions
       .filter((q) => {
         const a = currentAnswers[q.id];
         return typeof a === "string" && a.trim() !== "";
@@ -333,60 +348,83 @@ export default function TakeExam() {
         const picked = currentAnswers[q.id].trim().toUpperCase();
         const correct = (correctMap[q.id] || "").trim().toUpperCase();
         return {
-          attempt_id: attemptId,
+          attempt_id: currentAttemptId,
           question_id: q.id,
           selected_option: picked,
           is_correct: picked === correct,
         };
       });
 
+    // ── TRANSACTION-SAFE ORDER ────────────────────────────────────
+    // STEP 1: Insert all student_answers rows FIRST using the confirmed attempt_id.
+    // STEP 2: Only after all inserts succeed, mark exam_attempts.is_submitted = true.
+    //
+    // If we mark is_submitted=true before answers are saved and the answers write
+    // fails, the student loses their work and is permanently locked out of the exam.
+    // By saving answers first, a failed is_submitted update is recoverable (admin
+    // can manually close the attempt; answers are preserved).
+    //
+    // FIX: If answers upsert fails after retry, abort the submission rather than
+    // silently marking the exam submitted with no answers recorded.
     if (answeredRows.length > 0) {
-      // Retry once on failure to mitigate transient network/RLS errors.
       const { error: upsertErr } = await supabase
         .from("student_answers")
         .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
 
       if (upsertErr) {
+        // Retry once after a short delay to mitigate transient network / RLS errors.
         await new Promise((r) => setTimeout(r, 1000));
         const { error: retryErr } = await supabase
           .from("student_answers")
           .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
+
         if (retryErr) {
+          // Both attempts failed. Do NOT mark the exam as submitted — the student's
+          // answers are not on the server. Reset submission state so the student can
+          // try submitting again (or wait for connectivity to return).
           console.error("[TakeExam] student_answers upsert failed after retry:", retryErr.message);
+          submittedRef.current = false;
+          setSubmitting(false);
+          toast.error(
+            "Failed to save your answers. Please check your connection and try submitting again.",
+            { duration: 6000 }
+          );
+          return; // ← abort: do NOT proceed to update is_submitted
         }
       }
     }
 
+    // STEP 2: All answers are confirmed saved. Now close the attempt.
     const score = answeredRows.filter((a) => a.is_correct).length;
 
-    // FIX (Bug 1 - Submission spinning/looping):
-    // `violations` is intentionally excluded — the column does NOT exist in the
-    // exam_attempts DB schema (absent from types.ts). Including an unknown column
-    // causes PostgreSQL error 42703, which makes the entire UPDATE fail silently:
-    // is_submitted stays false, the attempt is never closed, and the timer keeps
-    // re-firing when the student returns (the "keeps rolling" loop).
+    // `violations` column does NOT exist in the exam_attempts DB schema.
+    // Including an unknown column causes PostgreSQL error 42703, which makes
+    // the entire UPDATE fail silently: is_submitted stays false, and the timer
+    // keeps re-firing when the student returns (the "keeps rolling" loop).
     // Add it back here once you run a migration adding the `violations` column.
     const attemptUpdate = {
       is_submitted: true,
       score,
-      total_questions: questions.length,
+      total_questions: currentQuestions.length,
       submitted_at: new Date().toISOString(),
     };
     const { error: updateErr } = await supabase
       .from("exam_attempts")
       .update(attemptUpdate)
-      .eq("id", attemptId);
+      .eq("id", currentAttemptId);
+
     if (updateErr) {
       // Retry once after a short delay
       await new Promise((r) => setTimeout(r, 1500));
       const { error: retryUpdateErr } = await supabase
         .from("exam_attempts")
         .update(attemptUpdate)
-        .eq("id", attemptId);
+        .eq("id", currentAttemptId);
       if (retryUpdateErr) {
         console.error("[TakeExam] exam_attempts update failed after retry:", retryUpdateErr.message);
-        // Still navigate — keeping the student on the exam page is worse than navigating
-        // with a failed DB write. Admin can review and correct manually if needed.
+        // Answers are already saved (Step 1 succeeded). Navigate anyway — keeping
+        // the student on the exam page is worse than a failed is_submitted flag.
+        // Admin can manually close the attempt; answers are preserved.
       }
     }
 
@@ -396,10 +434,9 @@ export default function TakeExam() {
       toast.success(isTimeout ? "Time's up! Exam submitted." : "Exam submitted successfully!");
     }
 
-    // FIX (Bug 2 - Email not sent):
-    // Each DB call now has its own try/catch so a failure in one step (e.g. the
-    // notification-check or parent-link query) does not silently abort the email.
-    // We also guard against null profile.full_name and log failures for debugging.
+    // Email notification: each DB call has its own try/catch so a failure in one
+    // step (e.g. the notification-check or parent-link query) does not silently
+    // abort the email. Guard against null profile.full_name and log failures.
     try {
       const { data: examData, error: examDataErr } = await supabase
         .from("exams").select("title, school_id").eq("id", examId!).single();
@@ -448,7 +485,7 @@ export default function TakeExam() {
           schoolName: schoolNameRef.current || schoolName || "School",
           examTitle: examData.title,
           score,
-          totalQuestions: questions.length,
+          totalQuestions: currentQuestions.length,
           loginUrl: window.location.origin,
         });
         if (!sent) console.warn("[TakeExam] sendExamResultEmail reported failure.");
@@ -463,10 +500,12 @@ export default function TakeExam() {
     }
 
     navigate("/student/results");
-  // `answers` is intentionally removed from deps — we read answersRef.current instead.
-  // Keeping `answers` here would recreate submitExam on every answer click, which
-  // caused the timer useEffect to re-run and reset its interval (countdown freeze bug).
-  }, [attemptId, questions, examId, navigate, schoolName, user]);
+  // `answers` and `questions` are intentionally removed from deps — we read
+  // answersRef.current and questionsRef.current instead. Keeping them here would
+  // recreate submitExam on every answer click / question load, which caused the
+  // timer useEffect to re-run and reset its interval (countdown freeze bug).
+  // `attemptId` is also replaced by attemptIdRef.current for the same reason.
+  }, [examId, navigate, schoolName, user]);
 
   // Keep submitExamRef in sync so handleViolation (defined earlier) can call
   // submitExam without a circular useCallback dependency.
@@ -498,14 +537,19 @@ export default function TakeExam() {
   }, [loading]); // ONLY loading — deadline & submit accessed via stable refs
 
   const selectAnswer = async (questionId: string, option: string) => {
+    // Guard: do not save answers after submission has started
+    if (submittedRef.current) return;
     setAnswers((prev) => {
       const next = { ...prev, [questionId]: option };
       answersRef.current = next; // keep ref in sync for submitExam
       return next;
     });
-    if (attemptId) {
+    // FIX: Use attemptIdRef.current so we always write to the correct attempt
+    // even if this function is called from a stale closure.
+    const currentAttemptId = attemptIdRef.current;
+    if (currentAttemptId) {
       await supabase.from("student_answers").upsert({
-        attempt_id: attemptId, question_id: questionId, selected_option: option,
+        attempt_id: currentAttemptId, question_id: questionId, selected_option: option,
       }, { onConflict: "attempt_id,question_id" });
     }
   };
@@ -529,9 +573,6 @@ export default function TakeExam() {
   const seconds   = timeLeft % 60;
   const isLowTime = timeLeft < 60;
   const optionLabels = ["A", "B", "C", "D"] as const;
-  // BUG FIX 2: Use violationsRef.current (always current) not violations state
-  // (which lags one render). violations state is fine for display; for the
-  // auto-submit threshold check we need the ref.
   const willAutoSubmit = violations >= maxViolations;
 
   return (

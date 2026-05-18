@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -33,6 +33,10 @@ export default function ViewTheoryExam() {
   const [timeUp, setTimeUp] = useState(false);
   const [showStartConfirm, setShowStartConfirm] = useState(false);
 
+  // FIX: Store the active attempt id in a ref so the timer's auto-close
+  // callback always has the current value regardless of closure staleness.
+  const attemptIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       if (!examId) return;
@@ -48,15 +52,23 @@ export default function ViewTheoryExam() {
         const { data: attempt } = await supabase.from("exam_attempts")
           .select("*").eq("exam_id", examId).eq("student_id", user.id)
           .order("started_at", { ascending: false }).limit(1).single();
+
         if (attempt && !attempt.is_submitted) {
+          attemptIdRef.current = attempt.id; // keep ref in sync
           const elapsed = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000);
           const remaining = (examRes.data?.duration_minutes || 30) * 60 - elapsed;
           if (remaining > 0) {
             setTimeLeft(remaining);
             setStarted(true);
           } else {
+            // FIX: For theory exams (paper-based), there are no student_answers rows to
+            // insert — the student writes on paper. We only need to close the attempt.
+            // This is safe: just update is_submitted=true directly.
             setTimeUp(true);
-            await supabase.from("exam_attempts").update({ is_submitted: true, submitted_at: new Date().toISOString() } as any).eq("id", attempt.id);
+            await supabase
+              .from("exam_attempts")
+              .update({ is_submitted: true, submitted_at: new Date().toISOString() } as any)
+              .eq("id", attempt.id);
           }
         }
       }
@@ -74,6 +86,23 @@ export default function ViewTheoryExam() {
           clearInterval(interval);
           setTimeUp(true);
           setStarted(false);
+
+          // FIX: Close the attempt when time runs out.
+          // Theory exams are paper-based so there are no student_answers rows —
+          // we can safely set is_submitted=true immediately (no answer data to lose).
+          // Use the ref to get the current attempt id (state may be stale in closure).
+          const currentAttemptId = attemptIdRef.current;
+          if (currentAttemptId) {
+            supabase
+              .from("exam_attempts")
+              .update({ is_submitted: true, submitted_at: new Date().toISOString() } as any)
+              .eq("id", currentAttemptId)
+              .then(({ error }) => {
+                if (error) {
+                  console.error("[ViewTheoryExam] Failed to close timed-out attempt:", error.message);
+                }
+              });
+          }
           return 0;
         }
         return prev - 1;
@@ -84,12 +113,26 @@ export default function ViewTheoryExam() {
 
   const startExam = useCallback(async () => {
     if (!user || !examId) return;
-    // Create attempt record
-    await supabase.from("exam_attempts").insert({
-      exam_id: examId,
-      student_id: user.id,
-      total_questions: questions.length,
-    } as any);
+
+    // FIX: Capture the returned attempt row so we have the real attempt id.
+    // The previous code called .insert() without .select(), so attemptIdRef was
+    // never populated — the timer's auto-close callback couldn't close the attempt.
+    const { data: attempt, error: attemptErr } = await supabase
+      .from("exam_attempts")
+      .insert({
+        exam_id: examId,
+        student_id: user.id,
+        total_questions: questions.length,
+      } as any)
+      .select()
+      .single();
+
+    if (attemptErr || !attempt) {
+      console.error("[ViewTheoryExam] Failed to create attempt:", attemptErr?.message);
+      return;
+    }
+
+    attemptIdRef.current = attempt.id; // keep ref in sync for timer closure
     setTimeLeft((exam?.duration_minutes || 30) * 60);
     setStarted(true);
     setShowStartConfirm(false);
