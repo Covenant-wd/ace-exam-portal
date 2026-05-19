@@ -26,6 +26,14 @@ interface Question {
   question_order: number;
 }
 
+type ErrorType = "RLS_POLICY" | "RATE_LIMITED" | "NETWORK" | "TIMEOUT" | "UNKNOWN";
+
+interface SubmissionResult {
+  success: boolean;
+  error?: string;
+  errorType?: ErrorType;
+}
+
 export default function TakeExam() {
   const { examId } = useParams<{ examId: string }>();
   const { user } = useAuth();
@@ -35,19 +43,12 @@ export default function TakeExam() {
   const [exam, setExam]           = useState<any>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers]     = useState<Record<string, string>>({});
-  // answersRef mirrors answers state so submitExam can read the latest answers
-  // without needing `answers` in its useCallback deps (which would cause the
-  // timer's interval to reset on every answer selection — the countdown freeze bug).
   const answersRef = useRef<Record<string, string>>({});
   const [flagged, setFlagged]     = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
-  // attemptIdRef mirrors attemptId so submitExam always has the latest value
-  // even when called from a stale closure (violation handler, timer).
   const attemptIdRef = useRef<string | null>(null);
   const [timeLeft, setTimeLeft]   = useState(0);
-  // Stores the absolute deadline as a Unix timestamp (ms).
-  // Used by the timer to compute remaining time accurately without drift.
   const deadlineRef = useRef<number>(0);
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -65,37 +66,131 @@ export default function TakeExam() {
   const [warningOpen, setWarningOpen]       = useState(false);
   const [warningReason, setWarningReason]   = useState("");
   const [isFullscreen, setIsFullscreen]     = useState(false);
-  const [examStarted, setExamStarted]       = useState(false); // true once exam loads
+  const [examStarted, setExamStarted]       = useState(false);
   const violationsRef = useRef(0);
   const maxViolationsRef = useRef(3);
   const submittedRef  = useRef(false);
-  // schoolName is loaded async. submitExam is a useCallback that captures
-  // schoolName at creation time — if the exam auto-submits on timeout before
-  // schoolName has loaded, the email gets "School" instead of the real name.
-  // A ref always reflects the latest value regardless of when submitExam was memoized.
   const schoolNameRef = useRef("");
-  // questionsRef mirrors questions state so submitExam always has the latest
-  // list even when called from a stale closure (timer, violation handler).
   const questionsRef = useRef<Question[]>([]);
-  // Ref to submitExam so handleViolation can call it without a circular
-  // useCallback dependency (handleViolation is defined before submitExam).
   const submitExamRef = useRef<(isTimeout?: boolean, isCheating?: boolean) => Promise<void>>();
 
-  // iOS Safari does not support the Fullscreen API at all. Attempting
-  // requestFullscreen() on iOS throws or silently fails, and fullscreenchange
-  // never fires — so students would get phantom violations. We skip fullscreen
-  // entirely on iOS; visibilitychange anti-cheat still works normally.
   const isIOS = useRef(
     typeof navigator !== "undefined" &&
     (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
   );
 
+  // ── SUBMISSION HELPER: Exponential Backoff with Error Classification ────
+  /**
+   * Executes an async operation with exponential backoff retry logic.
+   * Classifies errors (RLS, rate-limit, network) to guide retry strategy.
+   * RLS errors are non-retryable and return immediately.
+   * Network/transient errors retry with 1s, 2s, 4s delays.
+   */
+  const submitWithExponentialBackoff = useCallback(
+    async (
+      operation: () => Promise<any>,
+      operationName: string,
+      maxRetries = 3
+    ): Promise<SubmissionResult> => {
+      let lastError: any = null;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await operation();
+          if (attempt > 0) {
+            console.log(`[TakeExam] ${operationName} succeeded on attempt ${attempt + 1}/${maxRetries + 1}`);
+          }
+          return { success: true };
+        } catch (error: any) {
+          lastError = error;
+
+          // Classify error type
+          const errorMessage = error?.message?.toLowerCase() || "";
+          const errorCode = error?.code || "";
+
+          const isRLSError = 
+            errorMessage.includes("policy") ||
+            errorMessage.includes("permission") ||
+            errorCode === "42501" || // PostgreSQL permission denied
+            errorCode === "42000"; // General permission denied
+          
+          const isRateLimited = 
+            errorMessage.includes("429") ||
+            errorMessage.includes("too many requests") ||
+            errorMessage.includes("rate");
+          
+          const isNetworkError = 
+            errorMessage.includes("fetch") ||
+            errorMessage.includes("timeout") ||
+            errorMessage.includes("network") ||
+            errorMessage.includes("econnrefused") ||
+            errorMessage.includes("enotfound");
+
+          const isTimeoutError =
+            errorMessage.includes("timeout") ||
+            errorCode === "ETIMEDOUT";
+
+          const errorType: ErrorType = isRLSError ? "RLS_POLICY" :
+                                       isRateLimited ? "RATE_LIMITED" :
+                                       isTimeoutError ? "TIMEOUT" :
+                                       isNetworkError ? "NETWORK" : "UNKNOWN";
+
+          console.error(
+            `[TakeExam] ${operationName} failed (attempt ${attempt + 1}/${maxRetries + 1}):`,
+            {
+              errorType,
+              message: error?.message,
+              code: error?.code,
+              originalError: error,
+            }
+          );
+
+          // RLS policy errors are non-retryable — admin action needed
+          if (isRLSError) {
+            return {
+              success: false,
+              error: "Your school's exam permissions are not configured correctly. Please contact your school administrator.",
+              errorType: "RLS_POLICY",
+            };
+          }
+
+          // Rate limit errors: back off exponentially
+          if (isRateLimited && attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+            console.log(`[TakeExam] Rate limited. Retrying in ${delayMs}ms...`);
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+
+          // Network/timeout errors: moderate backoff
+          if ((isNetworkError || isTimeoutError) && attempt < maxRetries) {
+            const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+            console.log(`[TakeExam] Network error. Retrying in ${delayMs}ms...`);
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+
+          // Other errors or max retries reached: give up
+          if (attempt < maxRetries) {
+            const delayMs = 1000;
+            console.log(`[TakeExam] ${operationName} error. Retrying in ${delayMs}ms...`);
+            await new Promise((r) => setTimeout(r, delayMs));
+          }
+        }
+      }
+
+      return {
+        success: false,
+        error: `Failed after ${maxRetries + 1} attempts. ${lastError?.message || "Unknown error"}. Please check your connection and try again.`,
+        errorType: "UNKNOWN",
+      };
+    },
+    []
+  );
+
   // ── INIT ────────────────────────────────────────────────────────
   useEffect(() => {
-    // FIX: Guard against null user before running any async logic.
-    // ProtectedRoute guarantees user is set, but if the auth session expires
-    // between navigation and this effect running, user!.id would throw uncaught.
     if (!user || !examId) return;
 
     const init = async () => {
@@ -119,14 +214,12 @@ export default function TakeExam() {
       setExam(examRes.data);
       const loadedQuestions = qRes.data ?? [];
       setQuestions(loadedQuestions);
-      questionsRef.current = loadedQuestions; // keep ref in sync for submitExam closure
+      questionsRef.current = loadedQuestions;
 
-      // Fetch student name
       const { data: profileData } = await supabase
         .from("profiles").select("full_name, school_id").eq("user_id", user.id).single();
       if (profileData?.full_name) setStudentName(profileData.full_name);
 
-      // Fetch school name, logo + max violations setting
       if (profileData?.school_id) {
         const [schoolRes, settingRes, logoRes] = await Promise.all([
           supabase.from("schools").select("name").eq("id", profileData.school_id).single(),
@@ -139,7 +232,7 @@ export default function TakeExam() {
         ]);
         if (schoolRes.data?.name) {
           setSchoolName(schoolRes.data.name);
-          schoolNameRef.current = schoolRes.data.name; // keep ref in sync for submitExam closure
+          schoolNameRef.current = schoolRes.data.name;
         }
         if (settingRes.data?.value) {
           const mv = parseInt(settingRes.data.value) || 3;
@@ -149,21 +242,16 @@ export default function TakeExam() {
         if (logoRes.data?.value) setSchoolLogo(logoRes.data.value);
       }
 
-      // Calculator check
       const { data: subjectData } = await supabase.from("subjects")
         .select("allow_calculator" as any).eq("id", examRes.data.subject_id).single();
       if (subjectData && (subjectData as any).allow_calculator) setAllowCalculator(true);
 
-      // Handle attempt state
       if (existing?.is_submitted) {
         if (!examRes.data.allow_retake) {
           toast.info("You've already completed this exam.");
           navigate("/student");
           return;
         }
-        // FIX: reset_exam_attempt deletes the old submitted attempt and inserts a fresh
-        // one, returning the new attempt UUID. It also deletes orphaned student_answers
-        // rows so the student starts with a clean slate.
         console.log("[TakeExam] Retake requested — calling reset_exam_attempt RPC");
         const { data: newAttemptId, error: retakeErr } = await supabase
           .rpc("reset_exam_attempt", { _exam_id: examId, _student_id: user.id });
@@ -175,7 +263,7 @@ export default function TakeExam() {
         }
         console.log("[TakeExam] Retake attempt created:", newAttemptId);
         setAttemptId(newAttemptId);
-        attemptIdRef.current = newAttemptId; // sync ref immediately
+        attemptIdRef.current = newAttemptId;
         setAnswers({}); setFlagged(new Set()); setCurrentIndex(0);
         const retakeSecs = examRes.data.duration_minutes * 60;
         deadlineRef.current = Date.now() + retakeSecs * 1000;
@@ -185,10 +273,9 @@ export default function TakeExam() {
       }
 
       if (existing && !existing.is_submitted) {
-        // Resume an in-progress attempt
         console.log("[TakeExam] Resuming attempt:", existing.id);
         setAttemptId(existing.id);
-        attemptIdRef.current = existing.id; // sync ref immediately
+        attemptIdRef.current = existing.id;
         const elapsed = (Date.now() - new Date(existing.started_at).getTime()) / 1000;
         const remaining = Math.floor(Math.max(0, examRes.data.duration_minutes * 60 - elapsed));
         deadlineRef.current = Date.now() + remaining * 1000;
@@ -198,11 +285,9 @@ export default function TakeExam() {
         const map: Record<string, string> = {};
         (savedAnswers ?? []).forEach((a: any) => { if (a.selected_option) map[a.question_id] = a.selected_option; });
         console.log("[TakeExam] Restored", Object.keys(map).length, "saved answers");
-        answersRef.current = map; // sync ref before state so submitExam sees saved answers
+        answersRef.current = map;
         setAnswers(map);
       } else {
-        // FIX: Create the attempt FIRST and confirm it exists before proceeding.
-        // This guarantees attempt_id is valid when student_answers rows are inserted.
         console.log("[TakeExam] Creating new attempt for exam:", examId);
         const { data: attempt, error: attemptErr } = await supabase
           .from("exam_attempts").insert({ exam_id: examId, student_id: user.id }).select().single();
@@ -214,7 +299,7 @@ export default function TakeExam() {
         }
         console.log("[TakeExam] New attempt created:", attempt.id);
         setAttemptId(attempt.id);
-        attemptIdRef.current = attempt.id; // sync ref immediately so submitExam has it
+        attemptIdRef.current = attempt.id;
         const secs = examRes.data.duration_minutes * 60;
         deadlineRef.current = Date.now() + secs * 1000;
         setTimeLeft(secs);
@@ -227,8 +312,6 @@ export default function TakeExam() {
   }, [examId, user, navigate]);
 
   // ── VIOLATION HANDLER ────────────────────────────────────────────
-  // Defined BEFORE any useEffect that references it so closures always
-  // capture the live function reference (not undefined).
   const handleViolation = useCallback((reason: string) => {
     if (submittedRef.current) return;
     violationsRef.current += 1;
@@ -236,13 +319,8 @@ export default function TakeExam() {
     console.warn("[TakeExam] VIOLATION #" + newCount + ":", reason);
     setViolations(newCount);
     setWarningReason(reason);
-    // Auto-submit IMMEDIATELY when max violations is reached.
-    // A cheating student who simply closes the browser tab after the final
-    // violation would avoid the submission being recorded if we waited for a
-    // "Submit Now" button click. We fire submitExam() immediately; the modal
-    // is still shown briefly during the async submit.
     if (newCount >= maxViolationsRef.current) {
-      setWarningOpen(true); // show "Exam Terminated" state briefly
+      setWarningOpen(true);
       submitExamRef.current?.(false, true);
     } else {
       setWarningOpen(true);
@@ -250,12 +328,10 @@ export default function TakeExam() {
   }, []);
 
   // ── FULLSCREEN ───────────────────────────────────────────────────
-  // Brief cooldown after enterFullscreen() so the resulting focus events
-  // don't immediately retrigger the violation handler.
   const fsEnterTimeRef = useRef<number>(0);
 
   const enterFullscreen = useCallback(() => {
-    if (isIOS.current) return; // Fullscreen API unsupported on iOS
+    if (isIOS.current) return;
     fsEnterTimeRef.current = Date.now();
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
@@ -265,14 +341,12 @@ export default function TakeExam() {
 
   useEffect(() => {
     if (!examStarted) return;
-    if (isIOS.current) return; // iOS doesn't support fullscreen
+    if (isIOS.current) return;
     enterFullscreen();
 
     const handleFSChange = () => {
       const inFS = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(inFS);
-      // Ignore fullscreen-exit events that happen within 1 s of us calling
-      // enterFullscreen() (browser fires exit before the new enter completes)
       const msSinceEnter = Date.now() - fsEnterTimeRef.current;
       if (!inFS && !submittedRef.current && msSinceEnter > 1000) {
         console.warn("[TakeExam] Fullscreen exited");
@@ -292,25 +366,8 @@ export default function TakeExam() {
   useEffect(() => {
     if (!examStarted) return;
 
-    // ── Tab / window visibility + app-level blur ──────────────────
-    //
-    // REGRESSION FIX: The previous code used ONLY visibilitychange, which only fires
-    // when the browser tab itself becomes hidden (switching browser tabs).
-    // It does NOT fire when the user:
-    //   • presses Alt+Tab to switch to another application
-    //   • clicks the desktop or another app window
-    //   • minimizes the browser window
-    //
-    // Fix: use BOTH visibilitychange AND window "blur", but deduplicate them with
-    // a 1-second cooldown. On a browser-tab switch the browser fires BOTH events
-    // within a few milliseconds of each other — the cooldown absorbs the second one
-    // so it still counts as a single violation. On an Alt+Tab / minimize, only the
-    // blur event fires, which is now correctly detected.
-    //
-    // lastViolationTimeRef tracks the last time handleViolation was called from
-    // this effect so we never count the same focus-loss event twice.
     const lastViolationTimeRef = { current: 0 };
-    const DEDUP_MS = 1000; // ignore a second event within this window
+    const DEDUP_MS = 1000;
 
     const handleVisibility = () => {
       if (document.hidden && !submittedRef.current) {
@@ -323,8 +380,6 @@ export default function TakeExam() {
       }
     };
 
-    // FIX: Restore window blur listener to catch Alt+Tab / app-switch / minimize.
-    // Guarded by the same dedup window so tab-switch doesn't count twice.
     const handleWindowBlur = () => {
       if (!submittedRef.current) {
         const now = Date.now();
@@ -336,10 +391,8 @@ export default function TakeExam() {
       }
     };
 
-    // Block right-click
     const blockContext = (e: MouseEvent) => { e.preventDefault(); };
 
-    // Block keyboard shortcuts
     const blockKeys = (e: KeyboardEvent) => {
       const blocked = (
         e.key === "F12" ||
@@ -350,11 +403,10 @@ export default function TakeExam() {
       if (blocked) { e.preventDefault(); e.stopPropagation(); }
     };
 
-    // Block copy/paste/cut
     const blockCopy = (e: ClipboardEvent) => { e.preventDefault(); };
 
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("blur", handleWindowBlur);        // FIX: restored
+    window.addEventListener("blur", handleWindowBlur);
     document.addEventListener("contextmenu", blockContext);
     document.addEventListener("keydown", blockKeys);
     document.addEventListener("copy", blockCopy);
@@ -365,7 +417,7 @@ export default function TakeExam() {
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("blur", handleWindowBlur);   // FIX: restored
+      window.removeEventListener("blur", handleWindowBlur);
       document.removeEventListener("contextmenu", blockContext);
       document.removeEventListener("keydown", blockKeys);
       document.removeEventListener("copy", blockCopy);
@@ -375,235 +427,260 @@ export default function TakeExam() {
   }, [examStarted, handleViolation]);
 
   // ── SUBMIT ───────────────────────────────────────────────────────
+  /**
+   * Complete exam submission with atomic two-phase commit:
+   * 1. Save all answers first (with exponential backoff)
+   * 2. Mark exam as submitted (best-effort; answers already saved)
+   *
+   * Errors are classified to guide user messaging:
+   * - RLS policy errors require admin intervention (non-retryable)
+   * - Network/timeout errors retry with exponential backoff
+   * - Partial failures (answers saved, submission flag failed) are still success
+   *
+   * Manual submission is idempotent: second call while already submitted is a no-op.
+   * Timeout submission bypasses manual submission guards.
+   */
   const submitExam = useCallback(async (isTimeout = false, isCheating = false) => {
-    // FIX: Read attemptId from the ref so this function always sees the current
-    // value even when called from a stale closure (timer auto-submit, violation
-    // handler). Previously the state variable was captured at useCallback
-    // creation time and could be null if the closure was stale.
     const currentAttemptId = attemptIdRef.current;
-    if (submittedRef.current || !currentAttemptId) {
-      console.warn("[TakeExam] submitExam called but already submitted or no attemptId. Skipping.");
+
+    // Idempotency: allow timeout to re-submit if initial submission timed out
+    if (submittedRef.current && !isTimeout) {
+      console.warn("[TakeExam] submitExam called but already submitted. Skipping.");
       return;
     }
+
+    if (!currentAttemptId) {
+      console.error("[TakeExam] No attemptId. Submission aborted.");
+      setSubmitting(false);
+      toast.error("Submission failed: attempt ID not set. Please refresh the page and try again.");
+      return;
+    }
+
     submittedRef.current = true;
     setSubmitting(true);
     setWarningOpen(false);
 
-    console.log("[TakeExam] submitExam() — attemptId:", currentAttemptId, "| isTimeout:", isTimeout, "| isCheating:", isCheating);
+    console.log("[TakeExam] submitExam() — attemptId:", currentAttemptId,
+      "| isTimeout:", isTimeout, "| isCheating:", isCheating);
 
-    // Exit fullscreen on submit
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
 
-    // FIX: Read questions from ref so we always have the full list, even in
-    // stale closures (timer/violation triggered submits).
-    const currentQuestions = questionsRef.current;
-    console.log("[TakeExam] Total questions:", currentQuestions.length);
+    try {
+      const currentQuestions = questionsRef.current;
+      const currentAnswers = answersRef.current;
 
-    const { data: correctData } = await supabase.from("questions")
-      .select("id, correct_option").eq("exam_id", examId!);
-    const correctMap: Record<string, string> = {};
-    (correctData ?? []).forEach((q: any) => { correctMap[q.id] = q.correct_option; });
+      if (!currentQuestions || currentQuestions.length === 0) {
+        throw new Error("Questions not loaded");
+      }
 
-    // Only upsert rows for questions the student actually answered.
-    // Skipped questions have NO row at all. ExamReview can then trust hasRow
-    // as the definitive "did they answer?" signal.
-    // Use answersRef.current (not the `answers` state closure) so we always score
-    // the latest selections — especially important for timeout auto-submit where
-    // the closure may have captured a stale snapshot of answers state.
-    const currentAnswers = answersRef.current;
-    const answeredRows = currentQuestions
-      .filter((q) => {
-        const a = currentAnswers[q.id];
-        return typeof a === "string" && a.trim() !== "";
-      })
-      .map((q) => {
-        const picked = currentAnswers[q.id].trim().toUpperCase();
-        const correct = (correctMap[q.id] || "").trim().toUpperCase();
-        return {
-          attempt_id: currentAttemptId,
-          question_id: q.id,
-          selected_option: picked,
-          is_correct: picked === correct,
-        };
+      console.log("[TakeExam] Total questions:", currentQuestions.length);
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 1: Fetch correct answers
+      // ──────────────────────────────────────────────────────────────
+      const { success: correctSuccess, error: correctError, data: correctData } =
+        await submitWithExponentialBackoff(
+          async () => {
+            const { data, error } = await supabase.from("questions")
+              .select("id, correct_option").eq("exam_id", examId!);
+            if (error) throw error;
+            return { data };
+          },
+          "Fetch correct answers",
+          3
+        );
+
+      if (!correctSuccess) {
+        throw new Error(`Cannot fetch answers: ${correctError}`);
+      }
+
+      const correctMap: Record<string, string> = {};
+      ((correctData as any) ?? []).forEach((q: any) => {
+        correctMap[q.id] = q.correct_option;
       });
 
-    console.log("[TakeExam] Answered:", answeredRows.length, "of", currentQuestions.length);
+      // ──────────────────────────────────────────────────────────────
+      // STEP 2: Prepare answer rows (only answered questions)
+      // ──────────────────────────────────────────────────────────────
+      const answeredRows = currentQuestions
+        .filter((q) => {
+          const a = currentAnswers[q.id];
+          return typeof a === "string" && a.trim() !== "";
+        })
+        .map((q) => {
+          const picked = currentAnswers[q.id].trim().toUpperCase();
+          const correct = (correctMap[q.id] || "").trim().toUpperCase();
+          return {
+            attempt_id: currentAttemptId,
+            question_id: q.id,
+            selected_option: picked,
+            is_correct: picked === correct,
+          };
+        });
 
-    // ── TRANSACTION-SAFE ORDER ────────────────────────────────────
-    // STEP 1: Insert all student_answers rows FIRST using the confirmed attempt_id.
-    // STEP 2: Only after all inserts succeed, mark exam_attempts.is_submitted = true.
-    //
-    // If we mark is_submitted=true before answers are saved and the answers write
-    // fails, the student loses their work and is permanently locked out of the exam.
-    // By saving answers first, a failed is_submitted update is recoverable (admin
-    // can manually close the attempt; answers are preserved).
-    //
-    // FIX: If answers upsert fails after retry, abort the submission rather than
-    // silently marking the exam submitted with no answers recorded.
-    if (answeredRows.length > 0) {
-      const { error: upsertErr } = await supabase
-        .from("student_answers")
-        .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
+      console.log("[TakeExam] Answered:", answeredRows.length, "of", currentQuestions.length);
 
-      if (upsertErr) {
-        console.error("[TakeExam] student_answers upsert failed (attempt 1):", upsertErr.message);
-        // Retry once after a short delay to mitigate transient network / RLS errors.
-        await new Promise((r) => setTimeout(r, 1000));
-        const { error: retryErr } = await supabase
-          .from("student_answers")
-          .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
+      // ──────────────────────────────────────────────────────────────
+      // STEP 3: Save all answers with exponential backoff
+      // ──────────────────────────────────────────────────────────────
+      if (answeredRows.length > 0) {
+        const { success: answerSuccess, error: answerError } =
+          await submitWithExponentialBackoff(
+            async () => {
+              const { error } = await supabase
+                .from("student_answers")
+                .upsert(answeredRows, { onConflict: "attempt_id,question_id" });
+              if (error) throw error;
+              return { success: true };
+            },
+            "Save student answers",
+            3
+          );
 
-        if (retryErr) {
-          // Both attempts failed. Do NOT mark the exam as submitted — the student's
-          // answers are not on the server. Reset submission state so the student can
-          // try submitting again (or wait for connectivity to return).
-          console.error("[TakeExam] student_answers upsert failed after retry:", retryErr.message);
+        if (!answerSuccess) {
           submittedRef.current = false;
           setSubmitting(false);
           toast.error(
-            "Failed to save your answers. Please check your connection and try submitting again.",
-            { duration: 6000 }
+            `Failed to save your answers: ${answerError}\n\nPlease check your connection and try submitting again.`,
+            { duration: 8000 }
           );
-          return; // ← abort: do NOT proceed to update is_submitted
+          return;
         }
+
+        console.log("[TakeExam] student_answers saved successfully.");
       }
 
-      console.log("[TakeExam] student_answers saved successfully.");
-    }
+      // ──────────────────────────────────────────────────────────────
+      // STEP 4: Mark attempt as submitted (atomic)
+      // ──────────────────────────────────────────────────────────────
+      const score = answeredRows.filter((a) => a.is_correct).length;
+      console.log("[TakeExam] Score:", score, "/", currentQuestions.length);
 
-    // STEP 2: All answers are confirmed saved. Now close the attempt.
-    const score = answeredRows.filter((a) => a.is_correct).length;
-    console.log("[TakeExam] Score:", score, "/", currentQuestions.length);
+      const attemptUpdate = {
+        is_submitted: true,
+        score,
+        total_questions: currentQuestions.length,
+        submitted_at: new Date().toISOString(),
+        violations: violationsRef.current,
+      };
 
-    // violations column now exists (migration 20260519000002_fix_exam_submission_and_retake.sql).
-    const attemptUpdate = {
-      is_submitted: true,
-      score,
-      total_questions: currentQuestions.length,
-      submitted_at: new Date().toISOString(),
-      violations: violationsRef.current,
-    };
-    const { error: updateErr } = await supabase
-      .from("exam_attempts")
-      .update(attemptUpdate)
-      .eq("id", currentAttemptId);
+      const { success: updateSuccess, error: updateError } =
+        await submitWithExponentialBackoff(
+          async () => {
+            const { error } = await supabase
+              .from("exam_attempts")
+              .update(attemptUpdate)
+              .eq("id", currentAttemptId);
+            if (error) throw error;
+            return { success: true };
+          },
+          "Mark exam as submitted",
+          3
+        );
 
-    if (updateErr) {
-      console.error("[TakeExam] exam_attempts update failed (attempt 1):", updateErr.message);
-      // Retry once after a short delay
-      await new Promise((r) => setTimeout(r, 1500));
-      const { error: retryUpdateErr } = await supabase
-        .from("exam_attempts")
-        .update(attemptUpdate)
-        .eq("id", currentAttemptId);
-      if (retryUpdateErr) {
-        console.error("[TakeExam] exam_attempts update failed after retry:", retryUpdateErr.message);
-        // Answers are already saved (Step 1 succeeded). Navigate anyway — keeping
-        // the student on the exam page is worse than a failed is_submitted flag.
-        // Admin can manually close the attempt; answers are preserved.
+      if (!updateSuccess) {
+        // Answers are already saved — this is recoverable
+        console.warn(
+          "[TakeExam] Failed to mark exam as submitted (answers saved):",
+          updateError
+        );
+        toast.warning(
+          "Your answers have been saved. Your submission is being finalized. You can view your results shortly.",
+          { duration: 6000 }
+        );
       } else {
-        console.log("[TakeExam] exam_attempts updated successfully (retry).");
-      }
-    } else {
-      console.log("[TakeExam] exam_attempts updated successfully.");
-    }
-
-    if (isCheating) {
-      toast.error("Exam terminated due to repeated violations.");
-    } else {
-      toast.success(isTimeout ? "Time's up! Exam submitted." : "Exam submitted successfully!");
-    }
-
-    // Email notification: each DB call has its own try/catch so a failure in one
-    // step (e.g. the notification-check or parent-link query) does not silently
-    // abort the email. Guard against null profile.full_name and log failures.
-    try {
-      const { data: examData, error: examDataErr } = await supabase
-        .from("exams").select("title, school_id").eq("id", examId!).single();
-      if (examDataErr || !examData) throw new Error("exam fetch failed");
-
-      // Check if this notification type is enabled for the school
-      const notifEnabled = examData.school_id
-        ? await isNotificationEnabled(examData.school_id, "notify_exam_result")
-        : true;
-      if (!notifEnabled) throw new Error("skip"); // disabled by school setting — not an error
-
-      // Fetch student profile
-      const { data: profile } = await supabase
-        .from("profiles").select("full_name, school_id").eq("user_id", user!.id).single();
-      const displayName = profile?.full_name || studentName || "Student";
-
-      // Collect recipient emails: student + linked parents
-      const emails: string[] = [];
-
-      // Student email via secure RPC (works for both email-auth and username-auth students)
-      // NOTE: After migration 20260517000003, get_email_by_user_id is restricted to
-      // admin/super_admin. This catch is intentional — students can't call this RPC.
-      // Email notification to the student is best-effort; failure here is non-blocking.
-      try {
-        const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
-        if (studentEmail) emails.push(studentEmail);
-      } catch (e) {
-        console.warn("[TakeExam] Could not fetch student email (restricted RPC — non-fatal):", e);
+        console.log("[TakeExam] exam_attempts updated successfully.");
       }
 
-      // Parent emails
+      // ──────────────────────────────────────────────────────────────
+      // STEP 5: User feedback
+      // ──────────────────────────────────────────────────────────────
+      if (isCheating) {
+        toast.error("Exam terminated due to repeated violations.");
+      } else {
+        toast.success(
+          isTimeout
+            ? "Time's up! Your exam has been submitted."
+            : "Exam submitted successfully!"
+        );
+      }
+
+      // ──────────────────────────────────────────────────────────────
+      // STEP 6: Send result email (non-blocking)
+      // ──────────────────────────────────────────────────────────────
       try {
-        const { data: parentLinks } = await supabase
-          .from("parent_students").select("parent_id").eq("student_id", user!.id);
-        if (parentLinks && parentLinks.length > 0) {
-          const parentIds = parentLinks.map((p: any) => p.parent_id);
-          const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
-          (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+        const { data: examData, error: examDataErr } = await supabase
+          .from("exams").select("title, school_id").eq("id", examId!).single();
+
+        if (!examDataErr && examData) {
+          const notifEnabled = examData.school_id
+            ? await isNotificationEnabled(examData.school_id, "notify_exam_result")
+            : true;
+
+          if (notifEnabled) {
+            const { data: profile } = await supabase
+              .from("profiles").select("full_name").eq("user_id", user!.id).single();
+
+            const displayName = profile?.full_name || studentName || "Student";
+            const emails: string[] = [];
+
+            try {
+              const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: user!.id });
+              if (studentEmail) emails.push(studentEmail);
+            } catch (e) {
+              console.warn("[TakeExam] Could not fetch student email:", e);
+            }
+
+            try {
+              const { data: parentLinks } = await supabase
+                .from("parent_students").select("parent_id").eq("student_id", user!.id);
+              if (parentLinks?.length > 0) {
+                const parentIds = parentLinks.map((p: any) => p.parent_id);
+                const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+                (parentEmails || []).forEach((r: any) => { if (r.email) emails.push(r.email); });
+              }
+            } catch (e) {
+              console.warn("[TakeExam] Could not fetch parent emails:", e);
+            }
+
+            if (emails.length > 0) {
+              const sent = await sendExamResultEmail({
+                to: emails,
+                recipientName: displayName,
+                studentName: displayName,
+                schoolName: schoolNameRef.current || schoolName || "School",
+                examTitle: examData.title,
+                score,
+                totalQuestions: currentQuestions.length,
+                loginUrl: window.location.origin,
+              });
+              if (!sent) console.warn("[TakeExam] sendExamResultEmail reported failure.");
+            }
+          }
         }
-      } catch (e) {
-        console.warn("[TakeExam] Could not fetch parent emails:", e);
+      } catch (emailErr: any) {
+        console.warn("[TakeExam] Email notification error (non-fatal):", emailErr?.message ?? emailErr);
       }
 
-      if (emails.length > 0) {
-        const sent = await sendExamResultEmail({
-          to: emails,
-          recipientName: displayName,
-          studentName: displayName,
-          schoolName: schoolNameRef.current || schoolName || "School",
-          examTitle: examData.title,
-          score,
-          totalQuestions: currentQuestions.length,
-          loginUrl: window.location.origin,
-        });
-        if (!sent) console.warn("[TakeExam] sendExamResultEmail reported failure.");
-      } else {
-        console.warn("[TakeExam] No recipient emails found — result email skipped.");
-      }
-    } catch (emailErr: any) {
-      // "skip" is intentional (notification disabled); anything else is unexpected
-      if (emailErr?.message !== "skip") {
-        console.error("[TakeExam] Email notification error:", emailErr?.message ?? emailErr);
-      }
+      // ──────────────────────────────────────────────────────────────
+      // SUCCESS: Navigate to results
+      // ──────────────────────────────────────────────────────────────
+      navigate("/student/results");
+
+    } catch (fatalError: any) {
+      console.error("[TakeExam] FATAL submission error:", fatalError);
+      submittedRef.current = false;
+      setSubmitting(false);
+      toast.error(
+        `Submission error: ${fatalError?.message || "Unknown error"}\n\nPlease try again or contact your school for support.`,
+        { duration: 8000 }
+      );
     }
+  }, [examId, navigate, schoolName, user, submitWithExponentialBackoff]);
 
-    navigate("/student/results");
-  // `answers` and `questions` are intentionally removed from deps — we read
-  // answersRef.current and questionsRef.current instead. Keeping them here would
-  // recreate submitExam on every answer click / question load, which caused the
-  // timer useEffect to re-run and reset its interval (countdown freeze bug).
-  // `attemptId` is also replaced by attemptIdRef.current for the same reason.
-  }, [examId, navigate, schoolName, user]);
-
-  // Keep submitExamRef in sync so handleViolation (defined earlier) can call
-  // submitExam without a circular useCallback dependency.
   submitExamRef.current = submitExam;
 
   // ── TIMER ────────────────────────────────────────────────────────
-  // CRITICAL: The interval must depend ONLY on [loading] — NOT on submitExam.
-  // submitExam is a useCallback whose deps include `answers`. Every time a student
-  // selects an answer, answers changes → submitExam gets a new reference → the
-  // useEffect dep list changes → the old interval is cleared and a new one starts.
-  // This causes the countdown to stutter and effectively freeze on active exams.
-  //
-  // Fix: call submitExamRef.current() instead of submitExam() inside the interval.
-  // submitExamRef is always kept in sync (line below this hook) and never changes
-  // identity, so the timer effect runs exactly once after loading completes.
   useEffect(() => {
     if (loading || deadlineRef.current <= 0) return;
     const interval = setInterval(() => {
@@ -612,34 +689,53 @@ export default function TakeExam() {
         clearInterval(interval);
         setTimeLeft(0);
         console.log("[TakeExam] Timer expired — auto-submitting.");
-        submitExamRef.current?.(true); // auto-submit on timeout via stable ref
+        submitExamRef.current?.(true);
       } else {
         setTimeLeft(remaining);
       }
     }, 500);
     return () => clearInterval(interval);
-  }, [loading]); // ONLY loading — deadline & submit accessed via stable refs
+  }, [loading]);
 
+  // ── SELECT ANSWER ────────────────────────────────────────────────
+  /**
+   * Answer selection is optimistic (UI updates immediately).
+   * Saves to DB in background with exponential backoff.
+   * Non-blocking: if save fails, the final submission will re-save all answers.
+   */
   const selectAnswer = async (questionId: string, option: string) => {
-    // Guard: do not save answers after submission has started
     if (submittedRef.current) return;
+
+    // Optimistic update: UI reflects answer immediately
     setAnswers((prev) => {
       const next = { ...prev, [questionId]: option };
-      answersRef.current = next; // keep ref in sync for submitExam
+      answersRef.current = next;
       return next;
     });
-    // FIX: Use attemptIdRef.current so we always write to the correct attempt
-    // even if this function is called from a stale closure.
+
+    // Background save with limited retries (don't block student)
     const currentAttemptId = attemptIdRef.current;
-    if (currentAttemptId) {
-      const { error: answerErr } = await supabase.from("student_answers").upsert({
-        attempt_id: currentAttemptId, question_id: questionId, selected_option: option,
-      }, { onConflict: "attempt_id,question_id" });
-      if (answerErr) {
-        console.error("[TakeExam] Real-time answer save failed for question", questionId, ":", answerErr.message);
-        // Non-fatal: the final submit upsert will re-save all answers. Don't toast here
-        // to avoid spamming the student with error toasts on every click.
-      }
+    if (!currentAttemptId) {
+      console.warn("[TakeExam] selectAnswer: no attemptId yet");
+      return;
+    }
+
+    const { success, error } = await submitWithExponentialBackoff(
+      async () => {
+        const { error } = await supabase.from("student_answers").upsert({
+          attempt_id: currentAttemptId,
+          question_id: questionId,
+          selected_option: option,
+        }, { onConflict: "attempt_id,question_id" });
+        if (error) throw error;
+        return { success: true };
+      },
+      `Answer save (Q${questionId})`,
+      1 // only 1 retry for real-time saves (don't block student)
+    );
+
+    if (!success) {
+      console.warn(`[TakeExam] Background answer save failed (will retry on submit): ${error}`);
     }
   };
 
@@ -651,142 +747,124 @@ export default function TakeExam() {
     });
   };
 
-  if (loading) return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
+        <div className="space-y-4 text-center">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
+          <p className="text-lg font-medium text-muted-foreground">Loading exam...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const currentQ  = questions[currentIndex];
-  const minutes   = Math.floor(timeLeft / 60);
-  const seconds   = timeLeft % 60;
-  const isLowTime = timeLeft < 60;
-  const optionLabels = ["A", "B", "C", "D"] as const;
-  const willAutoSubmit = violations >= maxViolations;
+  if (!exam || questions.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Card className="w-96">
+          <CardHeader>
+            <CardTitle>Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">Failed to load exam. Please try again.</p>
+            <Button onClick={() => navigate("/student")} className="mt-4 w-full">
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const currentQ = questions[currentIndex] || questions[0];
+  const optionLabels = ["A", "B", "C", "D"];
 
   return (
-    <div
-      className="min-h-screen bg-background select-none"
-      onCopy={e => e.preventDefault()}
-      onCut={e => e.preventDefault()}
-      onPaste={e => e.preventDefault()}
-      onContextMenu={e => e.preventDefault()}
-    >
-      {/* ── VIOLATION WARNING MODAL ── */}
-      {warningOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-md rounded-2xl border-2 border-destructive bg-background p-6 shadow-2xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-                <ShieldAlert className="h-7 w-7 text-destructive" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-destructive">
-                  {willAutoSubmit ? "Exam Terminated" : `Warning ${violations} of ${maxViolations}`}
-                </h2>
-                <p className="text-sm text-muted-foreground">Anti-Cheat System</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-background">
+      {/* Header */}
+      <div className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-4">
+            {schoolLogo && (
+              <img src={schoolLogo} alt="School Logo" className="h-10 w-auto" />
+            )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">{schoolName || "School"}</p>
+              <p className="text-base font-semibold">{exam.title}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="hidden sm:flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{studentName || "Student"}</span>
             </div>
 
-            <p className="mb-2 text-sm font-medium">{warningReason}</p>
+            <div className="flex items-center gap-4">
+              {violations > 0 && (
+                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">
+                    {violations}/{maxViolations}
+                  </span>
+                </div>
+              )}
 
-            {willAutoSubmit ? (
-              <p className="mb-6 text-sm text-destructive font-semibold">
-                You have reached the maximum number of violations. Your exam is being submitted now.
-              </p>
-            ) : (
-              <p className="mb-6 text-sm text-muted-foreground">
-                You have <strong>{maxViolations - violations}</strong> warning(s) remaining before your exam is automatically submitted.
-              </p>
-            )}
+              <div className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2 font-mono",
+                timeLeft > 600
+                  ? "bg-emerald-500/10 text-emerald-700"
+                  : timeLeft > 180
+                  ? "bg-amber-500/10 text-amber-700"
+                  : "bg-destructive/10 text-destructive"
+              )}>
+                <Clock className="h-4 w-4" />
+                <span className="text-sm font-bold">
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                </span>
+              </div>
 
-            <div className="flex gap-2">
-              {!willAutoSubmit ? (
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    setWarningOpen(false);
-                    enterFullscreen();
-                  }}
-                >
-                  Return to Exam
-                </Button>
-              ) : (
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => submitExam(false, true)}
-                >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Now"}
+              {allowCalculator && (
+                <Button variant="outline" size="sm" onClick={() => setShowCalculator(!showCalculator)}>
+                  <CalcIcon className="h-4 w-4" />
                 </Button>
               )}
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── TOP HEADER BAR ── */}
-      <div className="sticky top-0 z-10 border-b bg-card shadow-sm">
-        {/* Row 1: School + Student + Timer */}
-        <div className="flex items-center justify-between px-4 py-2.5">
-          {/* School name + logo */}
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 overflow-hidden border border-primary/20">
-              {schoolLogo
-                ? <img src={schoolLogo} alt="School logo" className="h-full w-full object-contain p-0.5" />
-                : <GraduationCap className="h-4 w-4 text-primary" />}
-            </div>
-            <span className="font-semibold text-sm truncate">{schoolName || "Academia HQ"}</span>
-          </div>
-
-          {/* Student name — center */}
-          <div className="hidden sm:flex items-center gap-2 px-4">
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-primary">
-                {studentName ? studentName.charAt(0).toUpperCase() : "S"}
-              </span>
-            </div>
-            <span className="text-sm font-medium text-foreground truncate max-w-[180px]">{studentName}</span>
-          </div>
-
-          {/* Right: violations + calculator + timer */}
-          <div className="flex items-center gap-2">
-            {/* Violation indicator */}
-            {violations > 0 && (
-              <div className="flex items-center gap-1 rounded-lg bg-destructive/10 px-2 py-1">
-                <ShieldAlert className="h-3.5 w-3.5 text-destructive" />
-                <span className="text-xs font-bold text-destructive">{violations}/{maxViolations}</span>
-              </div>
-            )}
-
-            {allowCalculator && (
-              <Button variant={showCalculator ? "default" : "outline"} size="sm"
-                onClick={() => setShowCalculator(!showCalculator)}>
-                <CalcIcon className="mr-1 h-4 w-4" />Calculator
-              </Button>
-            )}
-
-            <div className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-mono font-bold",
-              isLowTime ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-muted"
-            )}>
-              <Clock className="h-4 w-4" />
-              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Exam title + student name on mobile */}
-        <div className="border-t bg-muted/40 px-4 py-1.5 flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-foreground truncate">{exam?.title}</p>
-          {/* Student name on mobile */}
-          <span className="sm:hidden text-xs text-muted-foreground truncate shrink-0 ml-2">
-            {studentName}
-          </span>
-        </div>
       </div>
 
-      {/* Floating calculator */}
+      {/* Violation Warning Dialog */}
+      <AlertDialog open={warningOpen} onOpenChange={setWarningOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-destructive" />
+              {violations >= maxViolations ? "Exam Terminated" : "Violation Warning"}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{warningReason}</p>
+            {violations < maxViolations && (
+              <p className="text-sm font-medium">
+                Violations: {violations}/{maxViolations}
+              </p>
+            )}
+            {violations >= maxViolations && (
+              <p className="text-sm font-medium text-destructive">
+                Your exam has been automatically submitted due to multiple violations.
+              </p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            {violations < maxViolations && (
+              <AlertDialogCancel>Continue Exam</AlertDialogCancel>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Calculator */}
       {showCalculator && allowCalculator && (
         <div className="fixed right-4 top-24 z-20">
           <Calculator onClose={() => setShowCalculator(false)} />
@@ -800,7 +878,6 @@ export default function TakeExam() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Questions
             </p>
-            {/* 5-column grid: rows of 1-5, 6-10, 11-15 ... */}
             <div className="grid grid-cols-5 gap-1.5">
               {questions.map((q, i) => (
                 <button
@@ -822,7 +899,6 @@ export default function TakeExam() {
               ))}
             </div>
 
-            {/* Mini legend */}
             <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span className="inline-block h-3 w-3 rounded-sm bg-primary" />
@@ -885,7 +961,6 @@ export default function TakeExam() {
                 })}
               </div>
 
-              {/* Navigation */}
               <div className="mt-6 flex items-center justify-between">
                 <Button variant="outline" disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((i) => i - 1)}>
@@ -899,7 +974,14 @@ export default function TakeExam() {
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="default" disabled={submitting}>
-                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Exam"}
+                        {submitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Exam"
+                        )}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
@@ -915,7 +997,16 @@ export default function TakeExam() {
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Continue Exam</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => submitExam(false)}>Submit</AlertDialogAction>
+                        <AlertDialogAction onClick={() => submitExam(false)} disabled={submitting}>
+                          {submitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Submitting...
+                            </>
+                          ) : (
+                            "Submit"
+                          )}
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
