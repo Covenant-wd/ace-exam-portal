@@ -475,16 +475,13 @@ export default function TakeExam() {
     const score = answeredRows.filter((a) => a.is_correct).length;
     console.log("[TakeExam] Score:", score, "/", currentQuestions.length);
 
-    // NOTE: `violations` column does NOT exist in the exam_attempts DB schema.
-    // Including an unknown column causes PostgreSQL error 42703, which makes
-    // the entire UPDATE fail silently: is_submitted stays false, and the timer
-    // keeps re-firing when the student returns (the "keeps rolling" loop).
-    // Add it back here once you run the migration adding the `violations` column.
+    // violations column now exists (migration 20260519000002_fix_exam_submission_and_retake.sql).
     const attemptUpdate = {
       is_submitted: true,
       score,
       total_questions: currentQuestions.length,
       submitted_at: new Date().toISOString(),
+      violations: violationsRef.current,
     };
     const { error: updateErr } = await supabase
       .from("exam_attempts")
