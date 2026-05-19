@@ -30,6 +30,7 @@ type ErrorType = "RLS_POLICY" | "RATE_LIMITED" | "NETWORK" | "TIMEOUT" | "UNKNOW
 
 interface SubmissionResult {
   success: boolean;
+  data?: any;       // payload returned by the operation on success
   error?: string;
   errorType?: ErrorType;
 }
@@ -101,7 +102,7 @@ export default function TakeExam() {
           if (attempt > 0) {
             console.log(`[TakeExam] ${operationName} succeeded on attempt ${attempt + 1}/${maxRetries + 1}`);
           }
-          return { success: true };
+          return { success: true, data: result };
         } catch (error: any) {
           lastError = error;
 
@@ -125,7 +126,9 @@ export default function TakeExam() {
             errorMessage.includes("timeout") ||
             errorMessage.includes("network") ||
             errorMessage.includes("econnrefused") ||
-            errorMessage.includes("enotfound");
+            errorMessage.includes("enotfound") ||
+            errorMessage.includes("schema cache") ||   // PostgREST restart — transient
+            errorMessage.includes("failed to fetch");  // generic browser fetch failure
 
           const isTimeoutError =
             errorMessage.includes("timeout") ||
@@ -478,13 +481,13 @@ export default function TakeExam() {
       // ──────────────────────────────────────────────────────────────
       // STEP 1: Fetch correct answers
       // ──────────────────────────────────────────────────────────────
-      const { success: correctSuccess, error: correctError, data: correctData } =
+      const { success: correctSuccess, error: correctError, data: correctResult } =
         await submitWithExponentialBackoff(
           async () => {
             const { data, error } = await supabase.from("questions")
               .select("id, correct_option").eq("exam_id", examId!);
             if (error) throw error;
-            return { data };
+            return data;   // returned as result.data in SubmissionResult
           },
           "Fetch correct answers",
           3
@@ -495,7 +498,7 @@ export default function TakeExam() {
       }
 
       const correctMap: Record<string, string> = {};
-      ((correctData as any) ?? []).forEach((q: any) => {
+      ((correctResult as any[]) ?? []).forEach((q: any) => {
         correctMap[q.id] = q.correct_option;
       });
 
