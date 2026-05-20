@@ -564,7 +564,7 @@ export default function TakeExam() {
         score,
         total_questions: currentQuestions.length,
         submitted_at: new Date().toISOString(),
-        violations: violationsRef.current,
+        // violations omitted: column does not exist in exam_attempts (confirmed via types.ts)
       };
 
       const { success: updateSuccess, error: updateError } =
