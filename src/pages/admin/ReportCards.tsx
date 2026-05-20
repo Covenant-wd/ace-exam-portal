@@ -184,7 +184,11 @@ export default function ReportCards() {
       setAffectiveMap(afMap);
 
       const gMap: Record<string, RawGrade[]> = {};
-      const subjTotals: Record<string, { sum: number; count: number }> = {};
+      // Track per-student subject totals so class averages are computed
+      // as mean(subject_total_per_student) — NOT mean(individual_category_rows).
+      // The naive approach of summing all category rows and dividing by row count
+      // gives ~(1/numCategories) of the correct value, e.g. 43% instead of 86%.
+      const studentSubjTotals: Record<string, Record<string, number>> = {};
       ((gradesRes.data || []) as any[]).forEach((g: any) => {
         const sid = g.student_id, sname = g.subjects?.name || "—";
         if (!gMap[sid]) gMap[sid] = [];
@@ -192,13 +196,22 @@ export default function ReportCards() {
           subject_name: sname, category_name: g.grade_categories?.name || "—",
           category_max_score: g.grade_categories?.max_score ?? 0, score: g.score,
         });
-        if (!subjTotals[sname]) subjTotals[sname] = { sum: 0, count: 0 };
-        subjTotals[sname].sum += g.score; subjTotals[sname].count += 1;
+        if (!studentSubjTotals[sid]) studentSubjTotals[sid] = {};
+        studentSubjTotals[sid][sname] = (studentSubjTotals[sid][sname] || 0) + g.score;
       });
       setGradesMap(gMap);
 
+      // Average of per-student subject totals — one data point per student per subject
+      const subjSums: Record<string, { sum: number; count: number }> = {};
+      Object.values(studentSubjTotals).forEach(subjs => {
+        Object.entries(subjs).forEach(([sname, total]) => {
+          if (!subjSums[sname]) subjSums[sname] = { sum: 0, count: 0 };
+          subjSums[sname].sum += total;
+          subjSums[sname].count += 1;
+        });
+      });
       const avgs: Record<string, number> = {};
-      Object.entries(subjTotals).forEach(([n, { sum, count }]) => {
+      Object.entries(subjSums).forEach(([n, { sum, count }]) => {
         avgs[n] = count > 0 ? Math.round(sum / count) : 0;
       });
       setClassAverages(avgs);
@@ -275,14 +288,23 @@ export default function ReportCards() {
     if (!schoolId || students.length === 0) return;
     setPublishingAll(true);
     try {
+      // Build a consistent total-obtainable from ALL students' grades so every
+      // student is ranked against the same denominator. Using each student's own
+      // category set (the old approach) inflates the percentage of students who
+      // are missing some grades because their `tot` would be smaller.
+      const globalCatMaxes = new Map<string, number>();
+      Object.values(gradesMap).flat().forEach(g => {
+        globalCatMaxes.set(g.category_name, g.category_max_score);
+      });
+      const globalTotObtainable = Array.from(globalCatMaxes.values()).reduce((s, v) => s + v, 0);
+
       const rankings = students.map(s => {
         const sg = gradesMap[s.user_id] || [];
-        const sm = new Map<string, number>(), cm = new Map<string, number>();
-        sg.forEach(g => { sm.set(g.subject_name, (sm.get(g.subject_name) || 0) + g.score); cm.set(g.category_name, g.category_max_score); });
-        const tot = Array.from(new Set(sg.map(g => g.category_name))).reduce((s, c) => s + (cm.get(c) || 0), 0);
+        const sm = new Map<string, number>();
+        sg.forEach(g => { sm.set(g.subject_name, (sm.get(g.subject_name) || 0) + g.score); });
         const grand = Array.from(sm.values()).reduce((a, b) => a + b, 0);
         const n = sm.size;
-        return { user_id: s.user_id, avgPct: n > 0 && tot > 0 ? (grand / (n * tot)) * 100 : 0 };
+        return { user_id: s.user_id, avgPct: n > 0 && globalTotObtainable > 0 ? (grand / (n * globalTotObtainable)) * 100 : 0 };
       });
       rankings.sort((a, b) => b.avgPct - a.avgPct);
       const posMap: Record<string, number> = {};
