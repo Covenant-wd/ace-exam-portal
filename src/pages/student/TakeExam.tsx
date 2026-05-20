@@ -564,7 +564,7 @@ export default function TakeExam() {
         score,
         total_questions: currentQuestions.length,
         submitted_at: new Date().toISOString(),
-        // violations omitted: column does not exist in exam_attempts (confirmed via types.ts)
+        violations: violationsRef.current || 0,
       };
 
       const { success: updateSuccess, error: updateError } =
@@ -734,7 +734,7 @@ export default function TakeExam() {
         return { success: true };
       },
       `Answer save (Q${questionId})`,
-      1 // only 1 retry for real-time saves (don't block student)
+      2 // increased to 2 retries for better reliability
     );
 
     if (!success) {
