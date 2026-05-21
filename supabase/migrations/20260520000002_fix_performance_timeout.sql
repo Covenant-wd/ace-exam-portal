@@ -27,11 +27,13 @@ CREATE INDEX IF NOT EXISTS idx_student_answers_attempt_id
 CREATE INDEX IF NOT EXISTS idx_student_answers_attempt_question
   ON public.student_answers (attempt_id, question_id);
 
--- ── PERFORMANCE TUNING: Increase statement timeout ──────────
--- Default timeout is too low for batch operations
--- Increase from 8s to 30s for student_answers operations
-ALTER TABLE public.student_answers 
-  SET (statement_timeout = 30000); -- 30 seconds in milliseconds
+-- NOTE: statement_timeout is a session-level GUC — it cannot be set as a
+-- table storage parameter via ALTER TABLE ... SET (...). That syntax only
+-- accepts real storage parameters (fillfactor, autovacuum_enabled, etc.).
+-- The three indexes above are the correct fix for RLS-related timeouts.
+-- If a higher default timeout is ever needed, use one of these instead:
+--   ALTER ROLE authenticator SET statement_timeout = '30s';
+--   SET LOCAL statement_timeout = '30s';  (inside a specific transaction)
 
 -- ── ANALYZE: Update table statistics ────────────────────────
 -- This helps Postgres choose the best query plan
