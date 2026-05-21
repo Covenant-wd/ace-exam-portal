@@ -25,6 +25,7 @@ interface SchoolItem {
   name:              string;
   slug:              string;
   logo_url:          string | null;
+  cbt_link:          string | null;
   subscription_plan: string;
   stored_status:     string;
   computed_status:   string;
@@ -53,6 +54,7 @@ export default function SuperAdminDashboard() {
   const [editing,       setEditing]       = useState<SchoolItem | null>(null);
   const [name,          setName]          = useState("");
   const [slug,          setSlug]          = useState("");
+  const [cbtLink,       setCbtLink]       = useState("");
   const [saving,        setSaving]        = useState(false);
 
   // Assign admin dialog
@@ -138,19 +140,19 @@ export default function SuperAdminDashboard() {
   // ── School create/edit ─────────────────────────────────────────
   const generateSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-  const openNew = () => { setEditing(null); setName(""); setSlug(""); setSchoolDialog(true); };
-  const openEdit = (s: SchoolItem) => { setEditing(s); setName(s.name); setSlug(s.slug); setSchoolDialog(true); };
+  const openNew = () => { setEditing(null); setName(""); setSlug(""); setCbtLink(""); setSchoolDialog(true); };
+  const openEdit = (s: SchoolItem) => { setEditing(s); setName(s.name); setSlug(s.slug); setCbtLink(s.cbt_link ?? ""); setSchoolDialog(true); };
 
   const handleSave = async () => {
     if (!name.trim() || !slug.trim()) { toast.error("Name and slug are required"); return; }
     setSaving(true);
     try {
       if (editing) {
-        const { error } = await supabase.from("schools").update({ name, slug }).eq("id", editing.id);
+        const { error } = await supabase.from("schools").update({ name, slug, cbt_link: cbtLink.trim() || null }).eq("id", editing.id);
         if (error) throw error;
         toast.success("School updated");
       } else {
-        const { error } = await supabase.from("schools").insert({ name, slug });
+        const { error } = await supabase.from("schools").insert({ name, slug, cbt_link: cbtLink.trim() || null });
         if (error) throw error;
         const { data: newSchool, error: fetchError } = await supabase.from("schools").select("id").eq("slug", slug).single();
         if (fetchError) throw fetchError;
@@ -163,7 +165,7 @@ export default function SuperAdminDashboard() {
         }
         toast.success("School created");
       }
-      setSchoolDialog(false); setName(""); setSlug(""); setEditing(null);
+      setSchoolDialog(false); setName(""); setSlug(""); setCbtLink(""); setEditing(null);
       fetchSchools();
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
@@ -450,6 +452,11 @@ export default function SuperAdminDashboard() {
               <Label>URL Slug</Label>
               <Input value={slug} onChange={e => setSlug(e.target.value)} placeholder="abc-academy" />
               <p className="text-xs text-muted-foreground">Login URL: {window.location.origin}/school/{slug || "..."}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>CBT Link <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input value={cbtLink} onChange={e => setCbtLink(e.target.value)} placeholder="https://cbt.yourschool.com" type="url" />
+              <p className="text-xs text-muted-foreground">A CBT card with this link will appear on the school's login page.</p>
             </div>
             <Button onClick={handleSave} disabled={saving} className="w-full">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Update" : "Create School"}
