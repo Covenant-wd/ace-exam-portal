@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useEffect } from "react";
 
-const DEFAULT_SCHOOL_NAME = "CBT Portal";
+const DEFAULT_SCHOOL_NAME = "Academia HQ";
 
 export function useSchoolName() {
   const { schoolId } = useAuth();
@@ -52,7 +52,6 @@ export function useSchoolLogo() {
     enabled: !!schoolId,
   });
 
-  // Update favicon when logo changes
   useEffect(() => {
     if (logoUrl) {
       const link =
@@ -67,9 +66,32 @@ export function useSchoolLogo() {
   return { logoUrl, isLoading };
 }
 
+/**
+ * Reads the school's external CBT portal URL (stored in the `schools.cbt_link`
+ * column, which already exists in the DB schema).
+ * Returns null when no link is configured — callers should hide CBT UI in that case.
+ */
+export function useSchoolCbtLink() {
+  const { schoolId } = useAuth();
+  const { data: cbtLink = null } = useQuery({
+    queryKey: ["school_cbt_link", schoolId],
+    queryFn: async () => {
+      if (!schoolId) return null;
+      const { data } = await supabase
+        .from("schools")
+        .select("cbt_link")
+        .eq("id", schoolId)
+        .single();
+      return (data?.cbt_link as string | null) ?? null;
+    },
+    staleTime: 60 * 1000,
+    enabled: !!schoolId,
+  });
+
+  return { cbtLink };
+}
+
 // ─── Shared helper ────────────────────────────────────────────────────────────
-// Calls the SECURITY DEFINER RPC `upsert_school_setting` which bypasses RLS
-// and does its own caller-is-admin-of-this-school verification internally.
 async function upsertSetting(schoolId: string, key: string, value: string) {
   const { error } = await supabase.rpc("upsert_school_setting", {
     _school_id: schoolId,
@@ -103,25 +125,40 @@ export function useUpdateSchoolLogo() {
       const ext = file.name.split(".").pop();
       const fileName = `${schoolId}/logo.${ext}`;
 
-      // 1. Upload file to storage
       const { error: uploadError } = await supabase.storage
         .from("school-logo")
         .upload(fileName, file, { upsert: true });
       if (uploadError) throw uploadError;
 
-      // 2. Get public URL (cache-busted)
       const { data: urlData } = supabase.storage
         .from("school-logo")
         .getPublicUrl(fileName);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-      // 3. Persist URL via SECURITY DEFINER RPC (bypasses RLS)
       await upsertSetting(schoolId, "school_logo_url", publicUrl);
 
       return publicUrl;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["school_settings"] });
+    },
+  });
+}
+
+export function useUpdateCbtLink() {
+  const { schoolId } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (url: string) => {
+      if (!schoolId) throw new Error("No school ID available");
+      const { error } = await supabase
+        .from("schools")
+        .update({ cbt_link: url || null })
+        .eq("id", schoolId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school_cbt_link"] });
     },
   });
 }
