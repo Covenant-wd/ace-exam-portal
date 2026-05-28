@@ -2,11 +2,17 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Link } from "react-router-dom";
-import { Users, BookOpen, FileText, ClipboardList, UserCheck, Heart, TrendingUp, Calendar, ChevronRight, GraduationCap } from "lucide-react";
+import {
+  Users, BookOpen, UserCheck, Heart, TrendingUp, Calendar,
+  ChevronRight, GraduationCap, CheckSquare, DollarSign,
+  Megaphone, BarChart3, ExternalLink,
+} from "lucide-react";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
 export default function AdminDashboard() {
   const { schoolId } = useAuth();
-  const [stats, setStats] = useState({ students: 0, subjects: 0, exams: 0, attempts: 0, instructors: 0, parents: 0, classes: 0 });
+  const { cbtLink } = useSchoolCbtLink();
+  const [stats, setStats] = useState({ students: 0, subjects: 0, instructors: 0, parents: 0, classes: 0 });
   const [feeStats, setFeeStats] = useState({ total_expected: 0, total_collected: 0, total_outstanding: 0, non_payers: 0 });
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
@@ -15,14 +21,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!schoolId) return;
     const fetchStats = async () => {
-      // All queries — including terms (for both name display AND fee totals termId)
-      // — run in a single parallel batch. Previously terms ran sequentially after
-      // Promise.all purely to get the termId, adding an extra round-trip (W7).
-      const [students, subjects, exams, attempts, instructors, parents, classes, sess, termRes] = await Promise.all([
+      const [students, subjects, instructors, parents, classes, sess, termRes] = await Promise.all([
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student").eq("school_id", schoolId),
         supabase.from("subjects").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
-        supabase.from("exams").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
-        supabase.from("exam_attempts").select("id, exams!inner(school_id)", { count: "exact", head: true }).eq("is_submitted", true).eq("exams.school_id", schoolId),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "instructor").eq("school_id", schoolId),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "parent").eq("school_id", schoolId),
         supabase.from("classes").select("id", { count: "exact", head: true }).eq("school_id", schoolId),
@@ -32,8 +33,6 @@ export default function AdminDashboard() {
       setStats({
         students:    students.count    ?? 0,
         subjects:    subjects.count    ?? 0,
-        exams:       exams.count       ?? 0,
-        attempts:    attempts.count    ?? 0,
         instructors: instructors.count ?? 0,
         parents:     parents.count     ?? 0,
         classes:     classes.count     ?? 0,
@@ -41,7 +40,6 @@ export default function AdminDashboard() {
       if (sess.data?.name)    setActiveSession(sess.data.name);
       if (termRes.data?.name) setActiveTerm(termRes.data.name);
 
-      // termId is already available from the parallel batch — no extra query needed
       const termId = (termRes.data as any)?.id ?? null;
       const feeRes = await (supabase as any).rpc("get_school_fee_totals", {
         _school_id: schoolId,
@@ -62,14 +60,12 @@ export default function AdminDashboard() {
   }, [schoolId]);
 
   const primaryStats = [
-    { label: "Students", value: stats.students, icon: Users, color: "bg-blue-500", light: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", to: "/admin/students" },
-    { label: "Instructors", value: stats.instructors, icon: UserCheck, color: "bg-violet-500", light: "bg-violet-50 dark:bg-violet-500/10", text: "text-violet-600 dark:text-violet-400", to: "/admin/instructors" },
-    { label: "Parents", value: stats.parents, icon: Heart, color: "bg-pink-500", light: "bg-pink-50 dark:bg-pink-500/10", text: "text-pink-600 dark:text-pink-400", to: "/admin/parents" },
-    { label: "Classes", value: stats.classes, icon: GraduationCap, color: "bg-emerald-500", light: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", to: "/admin/classes" },
-    { label: "Subjects", value: stats.subjects, icon: BookOpen, color: "bg-amber-500", light: "bg-amber-50 dark:bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", to: "/admin/subjects" },
-    { label: "Exams", value: stats.exams, icon: FileText, color: "bg-cyan-500", light: "bg-cyan-50 dark:bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400", to: "/admin/exams" },
-    { label: "Submissions", value: stats.attempts, icon: ClipboardList, color: "bg-orange-500", light: "bg-orange-50 dark:bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", to: "/admin/results" },
-    { label: "Growth", value: `${stats.students > 0 ? "+" + stats.students : "0"}`, icon: TrendingUp, color: "bg-teal-500", light: "bg-teal-50 dark:bg-teal-500/10", text: "text-teal-600 dark:text-teal-400", to: "/admin/students" },
+    { label: "Students",    value: stats.students,    icon: Users,      color: "bg-blue-500",    light: "bg-blue-50 dark:bg-blue-500/10",    text: "text-blue-600 dark:text-blue-400",    to: "/admin/students" },
+    { label: "Instructors", value: stats.instructors, icon: UserCheck,  color: "bg-violet-500",  light: "bg-violet-50 dark:bg-violet-500/10", text: "text-violet-600 dark:text-violet-400", to: "/admin/instructors" },
+    { label: "Parents",     value: stats.parents,     icon: Heart,      color: "bg-pink-500",    light: "bg-pink-50 dark:bg-pink-500/10",    text: "text-pink-600 dark:text-pink-400",    to: "/admin/parents" },
+    { label: "Classes",     value: stats.classes,     icon: GraduationCap, color: "bg-emerald-500", light: "bg-emerald-50 dark:bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", to: "/admin/classes" },
+    { label: "Subjects",    value: stats.subjects,    icon: BookOpen,   color: "bg-amber-500",   light: "bg-amber-50 dark:bg-amber-500/10",  text: "text-amber-600 dark:text-amber-400",  to: "/admin/subjects" },
+    { label: "Growth",      value: `${stats.students > 0 ? "+" + stats.students : "0"}`, icon: TrendingUp, color: "bg-teal-500", light: "bg-teal-50 dark:bg-teal-500/10", text: "text-teal-600 dark:text-teal-400", to: "/admin/students" },
   ];
 
   const feeCards = [
@@ -100,12 +96,12 @@ export default function AdminDashboard() {
   ];
 
   const quickLinks = [
-    { label: "Add Student", to: "/admin/students", icon: Users, desc: "Enroll new students" },
-    { label: "Create Exam", to: "/admin/exams", icon: FileText, desc: "Set up assessments" },
-    { label: "Mark Attendance", to: "/admin/attendance", icon: ClipboardList, desc: "Daily attendance" },
-    { label: "Record Payment", to: "/admin/fees", icon: ClipboardList, desc: "Fee management" },
-    { label: "Post Announcement", to: "/admin/announcements", icon: ClipboardList, desc: "Broadcast messages" },
-    { label: "View Results", to: "/admin/results", icon: TrendingUp, desc: "Exam performance" },
+    { label: "Add Student",       to: "/admin/students",     icon: Users,        desc: "Enroll new students" },
+    { label: "Mark Attendance",   to: "/admin/attendance",   icon: CheckSquare,  desc: "Daily attendance" },
+    { label: "Record Payment",    to: "/admin/fees",         icon: DollarSign,   desc: "Fee management" },
+    { label: "Post Announcement", to: "/admin/announcements",icon: Megaphone,    desc: "Broadcast messages" },
+    { label: "View Results",      to: "/admin/results",      icon: BarChart3,    desc: "Academic performance" },
+    { label: "Report Cards",      to: "/admin/report-cards", icon: BarChart3,    desc: "Generate report cards" },
   ];
 
   return (
@@ -119,20 +115,34 @@ export default function AdminDashboard() {
             <h1 className="text-2xl font-extrabold tracking-tight">Admin Dashboard</h1>
             <p className="text-white/70 text-sm mt-1">Manage your school from one place</p>
           </div>
-          {(activeSession || activeTerm) && (
-            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
-              <Calendar className="h-4 w-4 text-white/60 shrink-0" />
-              <div>
-                {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
-                {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
+          <div className="flex flex-wrap items-center gap-3">
+            {(activeSession || activeTerm) && (
+              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
+                <Calendar className="h-4 w-4 text-white/60 shrink-0" />
+                <div>
+                  {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
+                  {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {/* External CBT launch button in dashboard banner */}
+            {cbtLink && (
+              <a
+                href={cbtLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/20 transition-colors text-sm font-semibold text-white"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                Launch CBT Portal
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {primaryStats.map((stat) => (
           <Link
             key={stat.label}
@@ -153,39 +163,43 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Fee Financial Overview */}
+      {/* Fee summary */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-foreground">Financial Overview</h2>
-          <a href="/admin/debtors" className="text-xs text-primary hover:underline">View defaulters →</a>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {feeCards.map(card => (
-            <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.colorClass} p-4 text-white shadow-sm`}>
-              <p className="text-xl font-extrabold leading-none">{loading ? "—" : card.value}</p>
-              <p className="text-xs font-medium opacity-80 mt-1">{card.label}</p>
-              <p className="text-xs opacity-60 mt-0.5">{card.sub}</p>
-            </div>
+        <h2 className="text-base font-bold text-foreground mb-3">Fee Summary — Current Term</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {feeCards.map((card) => (
+            <Link
+              key={card.label}
+              to="/admin/fees"
+              className="relative overflow-hidden rounded-2xl p-5 text-white shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${card.colorClass} opacity-90`} />
+              <div className="relative">
+                <p className="text-xs font-semibold text-white/70 uppercase tracking-wide">{card.label}</p>
+                <p className="text-2xl font-extrabold mt-1">
+                  {loading ? <span className="inline-block h-7 w-16 rounded bg-white/20 animate-pulse" /> : card.value}
+                </p>
+                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
+              </div>
+            </Link>
           ))}
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick actions */}
       <div>
         <h2 className="text-base font-bold text-foreground mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {quickLinks.map((ql) => (
+          {quickLinks.map((item) => (
             <Link
-              key={ql.label}
-              to={ql.to}
-              className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+              key={item.label}
+              to={item.to}
+              className="group flex flex-col gap-2 rounded-2xl border border-black/5 dark:border-white/5 bg-white dark:bg-white/5 p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
-                <ql.icon className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{ql.label}</p>
-                <p className="text-xs text-muted-foreground truncate">{ql.desc}</p>
+              <item.icon className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.desc}</p>
               </div>
             </Link>
           ))}
