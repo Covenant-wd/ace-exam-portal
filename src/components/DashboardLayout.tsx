@@ -212,7 +212,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all group"
               >
                 <ExternalLink className="h-4 w-4 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
-                <span className="truncate">CBT Portal</span>
+                <span className="truncate">{schoolName || "Academia HQ"}</span>
               </a>
             </div>
           )}
@@ -265,7 +265,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
             >
               <ExternalLink className="h-3 w-3" />
-              CBT Portal
+              {schoolName || "Academia HQ"}
             </a>
           )}
 
