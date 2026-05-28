@@ -1,16 +1,18 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
 import {
-  GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
+  GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import SubscriptionGuard from "@/components/SubscriptionGuard";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
@@ -21,10 +23,9 @@ const adminLinks = [
   { to: "/admin/students", label: "Students", icon: Users, group: "People" },
   { to: "/admin/instructors", label: "Instructors", icon: UserCheck, group: "People" },
   { to: "/admin/parents", label: "Parents", icon: Heart, group: "People" },
-  { to: "/admin/exams", label: "Exams", icon: FileText, group: "Assessment" },
   { to: "/admin/results", label: "Results", icon: BarChart3, group: "Assessment" },
   { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
-  { to: "/admin/report-cards", label: "Report Cards", icon: FileText, group: "Assessment" },
+  { to: "/admin/report-cards", label: "Report Cards", icon: ClipboardList, group: "Assessment" },
   { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
   { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
   { to: "/admin/debtors", label: "Defaulters", icon: AlertTriangle, group: "Records" },
@@ -34,7 +35,6 @@ const adminLinks = [
 
 const studentLinks = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard, group: "" },
-  { to: "/student/exams", label: "My Exams", icon: ClipboardList, group: "" },
   { to: "/student/results", label: "My Results", icon: BarChart3, group: "" },
 ];
 
@@ -62,13 +62,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user, schoolId, schoolSlug } = useAuth();
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
+  const { cbtLink } = useSchoolCbtLink();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Shared hook — permissions are fetched once and cached in component state.
-  // Previously DashboardLayout had its own fetch AND ExamReview had another via
-  // the same hook, resulting in 2 DB round-trips per page. Now there is one.
   const {
     permissions: instrPerms,
     isSubjectInstructor,
@@ -79,18 +77,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (role !== "instructor") return [];
     const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
 
-    // ── Subject instructor nav (new role-based) ──────────────────
-    // Shown whenever the instructor has at least one subject assignment.
-    // Also shown if legacy flags are on, so existing setups are unaffected.
     const hasSubjectAccess = isSubjectInstructor || instrPerms?.can_manage_subjects || instrPerms?.can_manage_exams || instrPerms?.can_manage_grades;
     if (hasSubjectAccess) {
-      links.push({ to: "/instructor/subjects",  label: "Subjects",   icon: BookOpen,    group: "Academic"   });
-      links.push({ to: "/instructor/exams",     label: "Exams",      icon: FileText,    group: "Academic"   });
-      links.push({ to: "/instructor/grades",    label: "Grades",     icon: Award,       group: "Assessment" });
-      links.push({ to: "/instructor/results",   label: "Results",    icon: BarChart3,   group: "Assessment" });
+      links.push({ to: "/instructor/subjects", label: "Subjects",  icon: BookOpen,  group: "Academic"   });
+      links.push({ to: "/instructor/grades",   label: "Grades",    icon: Award,     group: "Assessment" });
+      links.push({ to: "/instructor/results",  label: "Results",   icon: BarChart3, group: "Assessment" });
     }
 
-    // ── Class instructor nav (new role-based) ────────────────────
     const hasClassAccess = isClassInstructor || instrPerms?.can_mark_attendance || instrPerms?.can_post_announcements || instrPerms?.can_manage_students;
     if (hasClassAccess) {
       links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
@@ -98,12 +91,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       links.push({ to: "/instructor/students",      label: "Students",      icon: Users,       group: "People"  });
     }
 
-    // ── Legacy-only flags not covered above ──────────────────────
-    if (instrPerms?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock,        group: "Academic" });
+    if (instrPerms?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock,      group: "Academic" });
     if (instrPerms?.can_view_results && !hasSubjectAccess) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
-    if (instrPerms?.can_manage_fees)     links.push({ to: "/instructor/fees",      label: "Fees",      icon: DollarSign,   group: "Records" });
+    if (instrPerms?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
 
-    // De-duplicate by `to` (in case legacy + new role both add the same link)
     const seen = new Set<string>();
     return links.filter(l => { if (seen.has(l.to)) return false; seen.add(l.to); return true; });
   })();
@@ -111,14 +102,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
 
   const handleSignOut = async () => {
-    // schoolSlug is fetched during login and stored in the auth cache.
-    // Capture it before signOut() clears auth state so there is no race.
     const redirectTo = schoolSlug ? `/school/${schoolSlug}` : "/";
     await signOut();
     navigate(redirectTo);
   };
 
-  // Group links for admin/instructor
   const grouped = links.reduce((acc, link) => {
     const g = link.group || "";
     if (!acc[g]) acc[g] = [];
@@ -209,6 +197,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           ))}
+
+          {/* External CBT Portal button — shown if school has configured a CBT link */}
+          {cbtLink && (
+            <div className="pt-2 border-t border-white/5">
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                External
+              </p>
+              <a
+                href={cbtLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all group"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
+                <span className="truncate">CBT Portal</span>
+              </a>
+            </div>
+          )}
         </nav>
 
         {/* Footer */}
@@ -243,14 +250,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Menu className="h-4 w-4" />
           </button>
 
-          {/* Page title from current route */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">
               {links.find(l => l.to === location.pathname)?.label || "Dashboard"}
             </p>
           </div>
 
-          {/* Role badge on header */}
+          {/* External CBT launch button in header (visible on mobile when sidebar is closed) */}
+          {cbtLink && (
+            <a
+              href={cbtLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            >
+              <ExternalLink className="h-3 w-3" />
+              CBT Portal
+            </a>
+          )}
+
           <span className={cn("hidden sm:inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize shrink-0", badgeClass)}>
             {role}
           </span>
