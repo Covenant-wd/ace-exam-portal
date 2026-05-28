@@ -3,15 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Link } from "react-router-dom";
 import {
-  BookOpen, FileText, Users, BarChart3, Calendar, Loader2,
+  BookOpen, Users, BarChart3, Calendar, Loader2,
   CheckSquare, Award, DollarSign, Megaphone, ChevronRight,
-  GraduationCap, BookMarked, ClipboardList,
+  GraduationCap, BookMarked, ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useInstructorRoles } from "@/hooks/useInstructorRoles";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
 const permLabels: Record<string, { label: string; icon: any; to: string; color: string }> = {
-  can_manage_exams:       { label: "Manage Exams",     icon: FileText,    to: "/instructor/exams",        color: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" },
   can_view_results:       { label: "View Results",     icon: BarChart3,   to: "/instructor/results",      color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
   can_manage_students:    { label: "Manage Students",  icon: Users,       to: "/instructor/students",     color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
   can_manage_subjects:    { label: "Manage Subjects",  icon: BookOpen,    to: "/instructor/subjects",     color: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400" },
@@ -24,6 +24,7 @@ const permLabels: Record<string, { label: string; icon: any; to: string; color: 
 
 export default function InstructorDashboard() {
   const { user, schoolId } = useAuth();
+  const { cbtLink } = useSchoolCbtLink();
   const [permissions, setPermissions] = useState<any>(null);
   const [legacyClasses, setLegacyClasses] = useState<{ id: string; name: string }[]>([]);
   const [activeSession, setActiveSession] = useState("");
@@ -61,7 +62,10 @@ export default function InstructorDashboard() {
     load();
   }, [user, schoolId]);
 
-  const activePerms = permissions ? Object.entries(permLabels).filter(([key]) => permissions[key]) : [];
+  // Exclude can_manage_exams from instructor permissions — CBT is now external
+  const activePerms = permissions
+    ? Object.entries(permLabels).filter(([key]) => permissions[key] && key !== "can_manage_exams")
+    : [];
 
   if (loading || rolesLoading) {
     return <div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -86,15 +90,28 @@ export default function InstructorDashboard() {
               {subjectCount === 0 && classCount === 0 && "No assignments yet"}
             </p>
           </div>
-          {(activeSession || activeTerm) && (
-            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
-              <Calendar className="h-4 w-4 text-white/60 shrink-0" />
-              <div>
-                {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
-                {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
+          <div className="flex flex-wrap items-center gap-3">
+            {(activeSession || activeTerm) && (
+              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
+                <Calendar className="h-4 w-4 text-white/60 shrink-0" />
+                <div>
+                  {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
+                  {activeTerm && <p className="text-xs text-white/60">{activeTerm}</p>}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {cbtLink && (
+              <a
+                href={cbtLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/20 transition-colors text-sm font-semibold text-white"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                CBT Portal
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
@@ -119,12 +136,11 @@ export default function InstructorDashboard() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
-              { label: "Exams",     icon: FileText,      to: "/instructor/exams",    color: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" },
-              { label: "Grades",    icon: Award,         to: "/instructor/grades",   color: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" },
-              { label: "Questions", icon: ClipboardList, to: "/instructor/questions",color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
-              { label: "Results",   icon: BarChart3,     to: "/instructor/results",  color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
+              { label: "Grades",   icon: Award,     to: "/instructor/grades",   color: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" },
+              { label: "Results",  icon: BarChart3,  to: "/instructor/results",  color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
+              { label: "Subjects", icon: BookOpen,   to: "/instructor/subjects", color: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400" },
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -179,7 +195,7 @@ export default function InstructorDashboard() {
         </div>
       )}
 
-      {/* Legacy assigned classes (backwards compat) */}
+      {/* Legacy assigned classes */}
       {!isClassInstructor && legacyClasses.length > 0 && (
         <div>
           <h2 className="text-base font-bold text-foreground mb-3">My Classes</h2>
