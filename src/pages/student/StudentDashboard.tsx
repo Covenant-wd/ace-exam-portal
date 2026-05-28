@@ -5,37 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3 } from "lucide-react";
+import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, ExternalLink } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
-interface AttendanceRecord {
-  date: string;
-  status: string;
-}
-
-interface GradeRecord {
-  subject_name: string;
-  category_name: string;
-  category_max_score: number;
-  score: number;
-}
-
-interface FeeRecord {
-  fee_name: string;
-  amount: number;
-  amount_paid: number;
-  payment_date: string;
-}
-
-interface AnnouncementItem {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-}
+interface AttendanceRecord { date: string; status: string; }
+interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
+interface FeeRecord { fee_name: string; amount: number; amount_paid: number; payment_date: string; }
+interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
 export default function StudentDashboard() {
   const { user, schoolId } = useAuth();
+  const { cbtLink } = useSchoolCbtLink();
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
@@ -48,26 +29,13 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      // Load active session & term for this school
       if (schoolId) {
-        const { data: sessData } = await supabase
-          .from("sessions")
-          .select("name")
-          .eq("school_id", schoolId)
-          .eq("is_active", true)
-          .single();
+        const { data: sessData } = await supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single();
         if (sessData) setActiveSession(sessData.name);
-
-        const { data: termData } = await supabase
-          .from("terms")
-          .select("name")
-          .eq("school_id", schoolId)
-          .eq("is_active", true)
-          .single();
+        const { data: termData } = await supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single();
         if (termData) setActiveTerm(termData.name);
       }
 
-      // Load attendance
       const { data: attData } = await supabase.from("attendance").select("date, status")
         .eq("student_id", user.id).order("date", { ascending: false }).limit(50);
       const attRecords = (attData || []) as AttendanceRecord[];
@@ -79,44 +47,33 @@ export default function StudentDashboard() {
         late: attRecords.filter((a) => a.status === "late").length,
       });
 
-      // Load grades with subject and category names
       const { data: gradeData } = await supabase.from("grades").select(`
         score, max_score,
         subjects:subject_id(name),
         grade_categories:category_id(name, max_score)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
-      const gradeRecords = (gradeData || []).map((g: any) => ({
+      setGrades((gradeData || []).map((g: any) => ({
         subject_name: g.subjects?.name || "—",
         category_name: g.grade_categories?.name || "—",
         category_max_score: g.grade_categories?.max_score ?? g.max_score,
         score: g.score,
-      }));
-      setGrades(gradeRecords);
+      })));
 
-      // Load fee payments
       const { data: feeData } = await supabase.from("fee_payments").select(`
         amount_paid, payment_date,
         fee_types:fee_type_id(name, amount)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
-      const feeRecords = (feeData || []).map((f: any) => ({
+      setFees((feeData || []).map((f: any) => ({
         fee_name: f.fee_types?.name || "—",
         amount: f.fee_types?.amount || 0,
         amount_paid: f.amount_paid,
         payment_date: f.payment_date,
-      }));
-      setFees(feeRecords);
+      })));
 
-      // Load announcements — scoped to this student's school so they only see
-      // their own school's posts. Without the school_id filter, students from
-      // every school would see each other's announcements.
-      const annQuery = supabase
-        .from("announcements")
-        .select("id, title, content, created_at")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const annQuery = supabase.from("announcements").select("id, title, content, created_at")
+        .eq("is_active", true).order("created_at", { ascending: false }).limit(10);
       if (schoolId) annQuery.eq("school_id", schoolId);
       const { data: annData } = await annQuery;
       setAnnouncements((annData as AnnouncementItem[]) || []);
@@ -130,7 +87,21 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">My Dashboard</h1>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">My Dashboard</h1>
+        {/* CBT Portal button — only shown if school has configured an external CBT link */}
+        {cbtLink && (
+          <a
+            href={cbtLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Take Exam (CBT Portal)
+          </a>
+        )}
+      </div>
 
       {/* Active Session & Term Banner */}
       {(activeSession || activeTerm) && (
@@ -140,16 +111,8 @@ export default function StudentDashboard() {
               <Clock className="h-4 w-4 text-primary" />
               <span>Current Period:</span>
             </div>
-            {activeSession && (
-              <Badge variant="outline" className="text-sm font-medium">
-                {activeSession}
-              </Badge>
-            )}
-            {activeTerm && (
-              <Badge className="text-sm font-medium">
-                {activeTerm}
-              </Badge>
-            )}
+            {activeSession && <Badge variant="outline" className="text-sm font-medium">{activeSession}</Badge>}
+            {activeTerm && <Badge className="text-sm font-medium">{activeTerm}</Badge>}
           </CardContent>
         </Card>
       )}
@@ -242,11 +205,7 @@ export default function StudentDashboard() {
         </TabsContent>
 
         <TabsContent value="grades">
-          <ReportCard
-            grades={grades}
-            term={activeTerm}
-            session={activeSession}
-          />
+          <ReportCard grades={grades} term={activeTerm} session={activeSession} />
         </TabsContent>
 
         <TabsContent value="fees">
