@@ -258,7 +258,7 @@ export default function Settings() {
           <div className="rounded-lg bg-muted/50 p-4 space-y-1.5">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">How it works</p>
             {[
-              "Students, instructors, and admins see a "CBT Portal" button in their sidebar",
+              "Students, instructors, and admins see a &quot;CBT Portal&quot; button in their sidebar",
               "Clicking the button opens your external CBT platform in a new tab",
               "Leave the URL blank to hide the CBT Portal button entirely",
             ].map((item, i) => (
