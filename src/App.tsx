@@ -26,8 +26,6 @@ const OutreachEarnings = lazy(() => import("./pages/outreach/OutreachEarnings"))
 const SchoolLogin = lazy(() => import("./pages/school/SchoolLogin"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const Subjects = lazy(() => import("./pages/admin/Subjects"));
-const Exams = lazy(() => import("./pages/admin/Exams"));
-const Questions = lazy(() => import("./pages/admin/Questions"));
 const Results = lazy(() => import("./pages/admin/Results"));
 const Students = lazy(() => import("./pages/admin/Students"));
 const Settings = lazy(() => import("./pages/admin/Settings"));
@@ -42,20 +40,12 @@ const Fees = lazy(() => import("./pages/admin/Fees"));
 const Debtors = lazy(() => import("./pages/admin/Debtors"));
 const Announcements = lazy(() => import("./pages/admin/Announcements"));
 const StudentDashboard = lazy(() => import("./pages/student/StudentDashboard"));
-const StudentExams = lazy(() => import("./pages/student/StudentExams"));
-const TakeExam = lazy(() => import("./pages/student/TakeExam"));
-const ViewTheoryExam = lazy(() => import("./pages/student/ViewTheoryExam"));
 const StudentResults = lazy(() => import("./pages/student/StudentResults"));
-const TheoryQuestions = lazy(() => import("./pages/admin/TheoryQuestions"));
 const InstructorDashboard = lazy(() => import("./pages/instructor/InstructorDashboard"));
 const Parents = lazy(() => import("./pages/admin/Parents"));
 const ParentDashboard = lazy(() => import("./pages/parent/ParentDashboard"));
-const ExamReview = lazy(() => import("./pages/admin/ExamReview"));
 
 // ─── React Query ─────────────────────────────────────────────────────────────
-// Disable all automatic refetch-on-focus/reconnect behaviour.
-// Pages fetch data on mount via useEffect — we don't need React Query to
-// trigger additional fetches when the user switches tabs.
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -73,11 +63,6 @@ const PageLoader = () => (
   </div>
 );
 
-// ─── ProtectedRoute ───────────────────────────────────────────────────────────
-// Key behaviour change: when `loading` is true OR when `user` is set but `role`
-// is not yet resolved, we render a loader — never a redirect. This prevents
-// the page from unmounting (and remounting with a fresh data fetch) during the
-// brief window between a TOKEN_REFRESHED event and role resolution.
 function ProtectedRoute({
   children,
   requiredRole,
@@ -87,21 +72,16 @@ function ProtectedRoute({
 }) {
   const { user, role, loading } = useAuth();
 
-  // Still initialising — hold position, never redirect
   if (loading) return <PageLoader />;
 
-  // No session at all → send to login
   if (!user) {
     if (requiredRole === "super_admin") return <Navigate to="/super-admin/login" replace />;
     if (requiredRole === "outreach_officer") return <Navigate to="/outreach/login" replace />;
     return <Navigate to="/" replace />;
   }
 
-  // User exists but role hasn't resolved yet (should be instant from cache,
-  // but guard against edge cases without triggering a redirect)
   if (!role) return <PageLoader />;
 
-  // Wrong role → redirect to the correct home
   if (role !== requiredRole) {
     if (role === "super_admin") return <Navigate to="/super-admin" replace />;
     if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
@@ -115,7 +95,6 @@ function ProtectedRoute({
   return <>{children}</>;
 }
 
-// Redirects /:slug → /school/:slug so short URLs work
 function SlugRedirect() {
   const { slug } = useParams<{ slug: string }>();
   return <Navigate to={`/school/${slug}`} replace />;
@@ -156,11 +135,7 @@ function AppRoutes() {
         <Route path="/admin/students" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/instructors" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Instructors /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/subjects" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/results" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/admin/results/:attemptId/review" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><ExamReview /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Settings /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/attendance" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
         <Route path="/admin/timetable" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
@@ -174,11 +149,7 @@ function AppRoutes() {
         {/* Instructor routes */}
         <Route path="/instructor" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><InstructorDashboard /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/subjects" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/instructor/exams" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Questions /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><TheoryQuestions /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/results" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/instructor/results/:attemptId/review" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><ExamReview /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/attendance" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/grades" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
@@ -188,10 +159,20 @@ function AppRoutes() {
 
         {/* Student routes */}
         <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentDashboard /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><TakeExam /></ProtectedRoute>} />
-        <Route path="/student/theory-exam/:examId" element={<ProtectedRoute requiredRole="student"><ViewTheoryExam /></ProtectedRoute>} />
         <Route path="/student/results" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentResults /></DashboardLayout></ProtectedRoute>} />
+
+        {/* Redirect old CBT exam routes to dashboard (graceful fallback) */}
+        <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
+        <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
+        <Route path="/student/theory-exam/:examId" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
+        <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
+        <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
+        <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
+        <Route path="/admin/results/:attemptId/review" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin/results" replace /></ProtectedRoute>} />
+        <Route path="/instructor/exams" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
+        <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
+        <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
+        <Route path="/instructor/results/:attemptId/review" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor/results" replace /></ProtectedRoute>} />
 
         {/* Parent routes */}
         <Route path="/parent" element={<ProtectedRoute requiredRole="parent"><DashboardLayout><ParentDashboard /></DashboardLayout></ProtectedRoute>} />
