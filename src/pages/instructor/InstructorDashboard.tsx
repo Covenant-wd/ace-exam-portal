@@ -143,7 +143,7 @@ export default function InstructorDashboard() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <Link key={item.label} to={item.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-3 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <Link key={item.label} to={item.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-3 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150">
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.color.split(" ").slice(0, 2).join(" ")}`}>
                     <Icon className={`h-4 w-4 ${item.color.split(" ").slice(2).join(" ")}`} />
                   </div>
@@ -182,7 +182,7 @@ export default function InstructorDashboard() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <Link key={item.label} to={item.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-3 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <Link key={item.label} to={item.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-3 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150">
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.color.split(" ").slice(0, 2).join(" ")}`}>
                     <Icon className={`h-4 w-4 ${item.color.split(" ").slice(2).join(" ")}`} />
                   </div>
@@ -219,7 +219,7 @@ export default function InstructorDashboard() {
             {activePerms.map(([key, cfg]) => {
               const Icon = cfg.icon;
               return (
-                <Link key={key} to={cfg.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-all group">
+                <Link key={key} to={cfg.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-4 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150 group">
                   <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${cfg.color.split(" ").slice(0, 2).join(" ")}`}>
                     <Icon className={`h-4 w-4 ${cfg.color.split(" ").slice(2).join(" ")}`} />
                   </div>
