@@ -119,3 +119,26 @@
 a[href*="lovable.dev"] {
   display: none !important;
 }
+
+/* ── Mobile rendering fixes ────────────────────────────────────────────────
+   Prevents GPU compositing layer conflicts (black static/noise artifacts)
+   on Android Chrome when fixed/sticky elements overlap scroll containers.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* Smooth momentum scrolling on iOS; contain overscroll on Android */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Prevent layout paint bleed from fixed sidebar into adjacent scroll areas */
+#root {
+  isolation: isolate;
+}
+
+/* Avoid creating unnecessary compositing layers on mobile */
+@media (max-width: 1023px) {
+  .transition-\[box-shadow\,transform\] {
+    will-change: auto;
+  }
+}
