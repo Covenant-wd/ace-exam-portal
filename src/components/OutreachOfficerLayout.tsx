@@ -23,7 +23,7 @@ export default function OutreachOfficerLayout({ children }: { children: ReactNod
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
@@ -80,14 +80,14 @@ export default function OutreachOfficerLayout({ children }: { children: ReactNod
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-4 border-b bg-card px-4 py-3 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1" />
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

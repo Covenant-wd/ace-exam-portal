@@ -118,7 +118,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="flex min-h-screen bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="flex h-screen overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -131,7 +131,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className={cn(
         "fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300",
-        "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shrink-0",
+        "lg:static lg:h-full lg:translate-x-0 lg:shrink-0",
         "bg-[#13131a] text-white",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
@@ -239,10 +239,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
 
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
+        <header className="shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
           <button
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
             onClick={() => setSidebarOpen(true)}
@@ -274,7 +274,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </span>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
           <SubscriptionGuard>
             <SubscriptionBanner />
             {children}
