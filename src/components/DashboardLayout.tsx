@@ -123,7 +123,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -242,7 +242,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <div className="flex flex-1 flex-col min-w-0">
 
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white/80 dark:bg-[#13131a]/80 backdrop-blur-xl px-4 py-3 lg:px-6">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
           <button
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
             onClick={() => setSidebarOpen(true)}

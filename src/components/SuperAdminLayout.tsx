@@ -27,7 +27,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   return (
     <div className="flex min-h-screen bg-background">
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
