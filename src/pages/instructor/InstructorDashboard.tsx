@@ -78,9 +78,8 @@ export default function InstructorDashboard() {
     <div className="space-y-6">
 
       {/* Welcome banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-lg">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, white 1px, transparent 1px)", backgroundSize: "25px 25px" }} />
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">Instructor Dashboard</h1>
             <p className="text-white/70 text-sm mt-1">
@@ -92,7 +91,7 @@ export default function InstructorDashboard() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {(activeSession || activeTerm) && (
-              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/10">
+              <div className="flex items-center gap-2 bg-white/20 rounded-xl px-4 py-2.5 border border-white/10">
                 <Calendar className="h-4 w-4 text-white/60 shrink-0" />
                 <div>
                   {activeSession && <p className="text-xs font-semibold text-white">{activeSession}</p>}
@@ -105,7 +104,7 @@ export default function InstructorDashboard() {
                 href={cbtLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl px-4 py-2.5 backdrop-blur-sm border border-white/20 transition-colors text-sm font-semibold text-white"
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2.5 border border-white/20 transition-colors text-sm font-semibold text-white"
               >
                 <ExternalLink className="h-4 w-4 shrink-0" />
                 CBT Portal
