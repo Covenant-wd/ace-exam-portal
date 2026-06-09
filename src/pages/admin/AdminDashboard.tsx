@@ -145,7 +145,7 @@ export default function AdminDashboard() {
           <Link
             key={stat.label}
             to={stat.to}
-            className="group relative bg-white dark:bg-white/5 rounded-2xl p-4 shadow-sm border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150"
+            className="group relative bg-white dark:bg-white/5 rounded-2xl p-4 shadow-sm border border-black/5 dark:border-white/5 lg:hover:shadow-md lg:hover:-translate-y-0.5 lg:transition-[box-shadow,transform] lg:duration-150"
           >
             <div className="flex items-start justify-between mb-3">
               <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.light}`}>
