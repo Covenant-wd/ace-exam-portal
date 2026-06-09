@@ -139,8 +139,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* Stats grid — Fixed for balanced mobile layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {primaryStats.map((stat) => (
           <Link
             key={stat.label}
@@ -164,7 +164,7 @@ export default function AdminDashboard() {
       {/* Fee summary */}
       <div>
         <h2 className="text-base font-bold text-foreground mb-3">Fee Summary — Current Term</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {feeCards.map((card) => (
             <Link
               key={card.label}
@@ -184,7 +184,7 @@ export default function AdminDashboard() {
       {/* Quick actions */}
       <div>
         <h2 className="text-base font-bold text-foreground mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {quickLinks.map((item) => (
             <Link
               key={item.label}
