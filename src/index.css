@@ -142,3 +142,16 @@ a[href*="lovable.dev"] {
     will-change: auto;
   }
 }
+
+/* Safety net: on touch-only devices, disable :hover transforms project-wide.
+   Sticky :hover after tap was promoting many cards to GPU layers at once,
+   producing black-noise artifacts on Android Chrome while scrolling. */
+@media (hover: none) {
+  a:hover,
+  button:hover,
+  .group:hover,
+  [class*="hover:-translate"]:hover,
+  [class*="hover:translate"]:hover {
+    transform: none !important;
+  }
+}
