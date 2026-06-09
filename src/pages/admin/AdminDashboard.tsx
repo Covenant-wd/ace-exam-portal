@@ -169,7 +169,7 @@ export default function AdminDashboard() {
             <Link
               key={card.label}
               to="/admin/fees"
-              className={`rounded-2xl p-5 text-white shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150 bg-gradient-to-br ${card.colorClass}`}
+              className={`rounded-2xl p-5 text-white shadow-sm lg:hover:shadow-md lg:hover:-translate-y-0.5 lg:transition-[box-shadow,transform] lg:duration-150 bg-gradient-to-br ${card.colorClass}`}
             >
               <p className="text-xs font-semibold text-white/70 uppercase tracking-wide">{card.label}</p>
               <p className="text-2xl font-extrabold mt-1">
