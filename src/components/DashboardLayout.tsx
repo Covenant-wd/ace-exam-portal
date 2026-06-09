@@ -120,7 +120,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 lg:hidden"
@@ -128,12 +128,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — on mobile, only mounted when open (prevents idle fixed layer that
+          caused black-noise artifacts on Android Chrome). Desktop sidebar is always mounted. */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300",
-        "lg:static lg:h-full lg:translate-x-0 lg:shrink-0",
+        "z-50 flex w-64 flex-col",
+        "lg:static lg:flex lg:h-full lg:shrink-0 lg:translate-x-0",
         "bg-[#13131a] text-white",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        sidebarOpen
+          ? "fixed inset-y-0 left-0 translate-x-0 transition-transform duration-300"
+          : "hidden lg:flex"
       )}>
 
         {/* Header */}
