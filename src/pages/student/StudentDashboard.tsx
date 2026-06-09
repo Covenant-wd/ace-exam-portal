@@ -87,7 +87,7 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">My Dashboard</h1>
         {/* CBT Portal button — only shown if school has configured an external CBT link */}
         {cbtLink && (
@@ -95,9 +95,9 @@ export default function StudentDashboard() {
             href={cbtLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
           >
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className="h-4 w-4 shrink-0" />
             Take Exam (CBT Portal)
           </a>
         )}
@@ -108,7 +108,7 @@ export default function StudentDashboard() {
         <Card className="border-0 bg-primary/5">
           <CardContent className="flex flex-wrap items-center gap-3 py-3 px-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4 text-primary" />
+              <Clock className="h-4 w-4 text-primary shrink-0" />
               <span>Current Period:</span>
             </div>
             {activeSession && <Badge variant="outline" className="text-sm font-medium">{activeSession}</Badge>}
@@ -117,8 +117,8 @@ export default function StudentDashboard() {
         </Card>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Quick Stats — Fixed for balanced mobile layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-emerald-600" />
@@ -150,7 +150,7 @@ export default function StudentDashboard() {
       </div>
 
       <Tabs defaultValue="announcements">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto w-full justify-start">
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="grades">Grades</TabsTrigger>
@@ -175,7 +175,7 @@ export default function StudentDashboard() {
 
         <TabsContent value="attendance">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -210,7 +210,7 @@ export default function StudentDashboard() {
 
         <TabsContent value="fees">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
