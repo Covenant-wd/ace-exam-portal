@@ -477,6 +477,22 @@ function HomePage() {
             >
               Explore Features
             </motion.a>
+            <motion.div
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              transition={spring}
+            >
+              <Link
+                to="/register"
+                className={`inline-flex items-center gap-2 rounded-xl border px-6 py-3 text-sm font-semibold transition-colors
+                  ${isDark
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm"}`}
+              >
+                <School className="h-4 w-4" />
+                Register Your School
+              </Link>
+            </motion.div>
           </motion.div>
 
           <motion.div
@@ -523,6 +539,67 @@ function HomePage() {
           <div className="relative">
             <SchoolFinder />
           </div>
+        </div>
+      </section>
+
+      {/* ── Register School CTA ── */}
+      <section className="py-16">
+        <div className="mx-auto max-w-4xl px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className={`relative overflow-hidden rounded-3xl border p-8 sm:p-12 text-center
+              ${isDark
+                ? "border-emerald-500/20 bg-gradient-to-br from-emerald-900/20 via-background to-teal-900/10"
+                : "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50"}`}
+          >
+            {/* Decorative orb */}
+            <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-teal-400/10 blur-3xl pointer-events-none" />
+
+            <div className="relative">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/25">
+                <School className="h-7 w-7 text-white" />
+              </div>
+              <h2 className={`text-2xl font-extrabold tracking-tight sm:text-3xl mb-3 ${text}`}>
+                Is Your School Not Listed?
+              </h2>
+              <p className={`text-base max-w-lg mx-auto mb-8 ${mutedText}`}>
+                Register your school on Academia HQ. Submit a quick application and our team will review it within 24–48 hours.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }} transition={spring}>
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-shadow"
+                  >
+                    Register Your School
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </motion.div>
+                <p className={`text-xs ${mutedText}`}>Free to apply · No credit card required</p>
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left max-w-xl mx-auto">
+                {[
+                  { step: "1", label: "Submit Application", desc: "Fill out a short form with your school details" },
+                  { step: "2", label: "Admin Review",       desc: "Our team reviews your request within 24–48 hrs" },
+                  { step: "3", label: "Go Live",            desc: "Receive admin credentials and start onboarding" },
+                ].map((item) => (
+                  <div key={item.step} className={`rounded-xl border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-gray-200 bg-white shadow-sm"}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">{item.step}</span>
+                      <p className={`text-xs font-semibold ${text}`}>{item.label}</p>
+                    </div>
+                    <p className={`text-xs ${mutedText}`}>{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
