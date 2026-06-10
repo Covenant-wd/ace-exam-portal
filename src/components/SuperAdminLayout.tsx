@@ -1,16 +1,18 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, Menu, School, ShieldCheck, Users, Briefcase, CreditCard, ClipboardList } from "lucide-react";
+import { LogOut, Menu, School, ShieldCheck, Users, Briefcase, CreditCard, ClipboardList, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const links = [
-  { to: "/super-admin",                          label: "Schools",                 icon: School         },
-  { to: "/super-admin/subscriptions",            label: "Payment History",         icon: CreditCard     },
-  { to: "/super-admin/users",                    label: "All Users",               icon: Users          },
-  { to: "/super-admin/outreach-officers",        label: "Outreach Officers",       icon: Briefcase      },
-  { to: "/super-admin/implementation-requests",  label: "Implementation Requests", icon: ClipboardList  },
+  { to: "/super-admin",                             label: "Schools",                  icon: School,          badgeKey: null              },
+  { to: "/super-admin/registration-requests",       label: "Registration Requests",    icon: ClipboardCheck,  badgeKey: "registrations"   },
+  { to: "/super-admin/subscriptions",               label: "Payment History",          icon: CreditCard,      badgeKey: null              },
+  { to: "/super-admin/users",                       label: "All Users",                icon: Users,           badgeKey: null              },
+  { to: "/super-admin/outreach-officers",           label: "Outreach Officers",        icon: Briefcase,       badgeKey: null              },
+  { to: "/super-admin/implementation-requests",     label: "Implementation Requests",  icon: ClipboardList,   badgeKey: null              },
 ];
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
@@ -18,6 +20,25 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingRegistrations, setPendingRegistrations] = useState(0);
+
+  useEffect(() => {
+    async function fetchPendingCount() {
+      const { count } = await (supabase as any)
+        .from("school_registration_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (count !== null) setPendingRegistrations(count);
+    }
+    fetchPendingCount();
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchPendingCount, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const badgeCounts: Record<string, number> = {
+    registrations: pendingRegistrations,
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -49,6 +70,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
         <nav className="flex-1 space-y-1 px-3 py-4">
           {links.map((link) => {
             const active = location.pathname === link.to;
+            const badgeCount = link.badgeKey ? (badgeCounts[link.badgeKey] ?? 0) : 0;
             return (
               <Link
                 key={link.to}
@@ -61,8 +83,13 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 )}
               >
-                <link.icon className="h-4 w-4" />
-                {link.label}
+                <link.icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1">{link.label}</span>
+                {badgeCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                    {badgeCount}
+                  </span>
+                )}
               </Link>
             );
           })}
