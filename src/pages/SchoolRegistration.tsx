@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
 // ── Status check helper ───────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   pending:  { label: "Under Review",  icon: Clock,        className: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200" },
@@ -68,25 +70,16 @@ export default function SchoolRegistration() {
         return;
       }
 
-      // Check for duplicate email before calling edge function
-      const { data: existing } = await (supabase as any)
-        .from("school_registration_requests")
-        .select("status")
-        .eq("email", formData.email.trim().toLowerCase())
-        .maybeSingle();
+      // NOTE: duplicate-email check is intentionally handled server-side inside
+      // handle-school-registration (which runs under service role and can actually
+      // read the table). A client-side check here would always return null because
+      // RLS blocks unauthenticated SELECT on school_registration_requests.
 
-      if (existing) {
-        const status = existing.status as RequestStatus;
-        if (status === "pending") {
-          toast.error("A registration request with this email is already under review.");
-        } else if (status === "approved") {
-          toast.error("This email has already been approved. Contact support if you need help.");
-        } else if (status === "rejected") {
-          toast.error("A previous request with this email was rejected. Please use a different email or contact support.");
-        }
-        setLoading(false);
-        return;
-      }
+      // Use the anon key as the Authorization token for unauthenticated callers.
+      // Sending "Bearer " (empty string) causes Supabase's edge function gateway
+      // to return 401 before the function even executes.
+      const session = (await supabase.auth.getSession()).data.session;
+      const authToken = session?.access_token ?? SUPABASE_ANON_KEY;
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/handle-school-registration`,
@@ -94,7 +87,7 @@ export default function SchoolRegistration() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ""}`,
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify(formData),
         }
