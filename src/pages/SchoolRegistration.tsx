@@ -13,8 +13,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
 // ── Status check helper ───────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   pending:  { label: "Under Review",  icon: Clock,        className: "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200" },
@@ -75,33 +73,27 @@ export default function SchoolRegistration() {
       // read the table). A client-side check here would always return null because
       // RLS blocks unauthenticated SELECT on school_registration_requests.
 
-      // Use the anon key as the Authorization token for unauthenticated callers.
-      // Sending "Bearer " (empty string) causes Supabase's edge function gateway
-      // to return 401 before the function even executes.
-      const session = (await supabase.auth.getSession()).data.session;
-      const authToken = session?.access_token ?? SUPABASE_ANON_KEY;
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/handle-school-registration`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(formData),
-        }
+      // Use supabase.functions.invoke() — consistent with the rest of the app.
+      // Raw fetch() was failing with "Failed to fetch" because VITE_SUPABASE_URL
+      // can be undefined at runtime in the built bundle, making the URL invalid.
+      // invoke() uses the URL already embedded in the supabase client instance,
+      // auto-injects the anon key for unauthenticated callers, and handles CORS.
+      const { data, error } = await supabase.functions.invoke(
+        "handle-school-registration",
+        { body: formData }
       );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error(data.error || "Registration failed. Please try again.");
+      if (error) {
+        // FunctionsHttpError carries the edge function's JSON error body
+        const message = (error as any)?.context?.error
+          || (error as any)?.message
+          || "Registration failed. Please try again.";
+        toast.error(message);
         setLoading(false);
         return;
       }
 
-      toast.success(data.message || "Registration submitted successfully!");
+      toast.success(data?.message || "Registration submitted successfully!");
       setStep("success");
     } catch (error: any) {
       console.error("Registration error:", error);
