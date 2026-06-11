@@ -179,26 +179,22 @@ export default function SuperAdminRegistrationRequests() {
       //   2. Creates the admin auth user via service role
       //   3. Assigns role + school_admins mapping
       //   4. Sends the approval email to the school contact
-      const session = (await supabase.auth.getSession()).data.session;
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/approve-school-registration`,
+      const { data: approveData, error: approveError } = await supabase.functions.invoke(
+        "approve-school-registration",
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token || ""}`,
-          },
-          body: JSON.stringify({
+          body: {
             action: "approve",
             registration_id: approveTarget.id,
             admin_email: adminEmail.trim(),
             admin_password: adminPassword.trim(),
-          }),
+          },
         }
       );
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Approval failed");
+      if (approveError) {
+        const msg = (approveError as any)?.context?.error || approveError?.message || "Approval failed";
+        throw new Error(msg);
+      }
 
       toast.success(`✅ ${approveTarget.school_name} approved! Confirmation email sent to ${approveTarget.email}.`);
       setApproveOpen(false);
@@ -230,25 +226,21 @@ export default function SuperAdminRegistrationRequests() {
     try {
       // Call the approve-school-registration edge function with action=reject
       // so it runs the SQL RPC AND sends the rejection email to the school
-      const session = (await supabase.auth.getSession()).data.session;
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/approve-school-registration`,
+      const { data: rejectData, error: rejectError } = await supabase.functions.invoke(
+        "approve-school-registration",
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token || ""}`,
-          },
-          body: JSON.stringify({
+          body: {
             action: "reject",
             registration_id: rejectTarget.id,
             rejection_reason: rejectReason.trim(),
-          }),
+          },
         }
       );
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Rejection failed");
+      if (rejectError) {
+        const msg = (rejectError as any)?.context?.error || rejectError?.message || "Rejection failed";
+        throw new Error(msg);
+      }
 
       toast.success(`Registration for ${rejectTarget.school_name} rejected. Email sent to ${rejectTarget.email}.`);
       setRejectOpen(false);
