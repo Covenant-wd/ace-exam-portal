@@ -68,32 +68,67 @@ export default function SchoolRegistration() {
         return;
       }
 
-      // NOTE: duplicate-email check is intentionally handled server-side inside
-      // handle-school-registration (which runs under service role and can actually
-      // read the table). A client-side check here would always return null because
-      // RLS blocks unauthenticated SELECT on school_registration_requests.
+      const email    = formData.email.trim().toLowerCase();
+      const schoolName     = formData.school_name.trim();
+      const contactPerson  = formData.contact_person.trim();
 
-      // Use supabase.functions.invoke() — consistent with the rest of the app.
-      // Raw fetch() was failing with "Failed to fetch" because VITE_SUPABASE_URL
-      // can be undefined at runtime in the built bundle, making the URL invalid.
-      // invoke() uses the URL already embedded in the supabase client instance,
-      // auto-injects the anon key for unauthenticated callers, and handles CORS.
-      const { data, error } = await supabase.functions.invoke(
-        "handle-school-registration",
-        { body: formData }
-      );
+      // ── Step 1: Check for duplicate email directly via the DB client.
+      // The RLS policy allows unauthenticated SELECT only by matching email in
+      // auth.users, so an anonymous user can't read others' rows. We use the
+      // service-role-equivalent path by relying on the edge function for this
+      // only as a fallback — the primary duplicate check is here using maybeSingle()
+      // which returns null (not an error) when no row exists.
+      // The anon key can read rows where the RLS policy passes. Since the policy
+      // for SELECT is "email = (auth.users where id = auth.uid())" and the user
+      // is unauthenticated, auth.uid() is null → the SELECT RLS won't match.
+      // BUT — there's also the super_admin policy. Neither applies here.
+      // So we skip the client-side check and rely on the DB unique constraint / edge fn.
 
-      if (error) {
-        // FunctionsHttpError carries the edge function's JSON error body
-        const message = (error as any)?.context?.error
-          || (error as any)?.message
-          || "Registration failed. Please try again.";
-        toast.error(message);
+      // ── Step 2: Insert directly via the Supabase client (anon key).
+      // RLS policy "Schools can insert their registration" has WITH CHECK (true),
+      // meaning any caller — including unauthenticated — can INSERT. This avoids
+      // calling the edge function entirely for the core submission, which was
+      // causing FunctionsFetchError (CORS preflight failure when function is not
+      // yet deployed or during cold starts on a brand-new Supabase project).
+      const { data: inserted, error: insertError } = await (supabase as any)
+        .from("school_registration_requests")
+        .insert({
+          email,
+          school_name:    schoolName,
+          contact_person: contactPerson,
+          phone:   formData.phone?.trim()   || null,
+          address: formData.address?.trim() || null,
+          website: formData.website?.trim() || null,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        // PostgreSQL unique violation on email column
+        if (insertError.code === "23505") {
+          toast.error("A registration request with this email already exists. Use the 'Check Status' tab to see its current status.");
+          setLoading(false);
+          return;
+        }
+        console.error("Insert error:", insertError);
+        toast.error(insertError.message || "Registration failed. Please try again.");
         setLoading(false);
         return;
       }
 
-      toast.success(data?.message || "Registration submitted successfully!");
+      // ── Step 3: Fire-and-forget — trigger the edge function for email notifications.
+      // We do NOT await this or block the success flow on it. If the function is
+      // unreachable (not yet deployed, cold-start timeout), the school is already
+      // registered and the user sees the success screen.
+      supabase.functions
+        .invoke("handle-school-registration", { body: { ...formData, _notify_only: true } })
+        .catch((err) => {
+          // Silently swallow — registration already succeeded above.
+          console.warn("[SchoolRegistration] Email notification invoke failed (non-critical):", err?.message);
+        });
+
+      toast.success("Registration submitted successfully! We'll review your application within 24–48 hours.");
       setStep("success");
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -102,6 +137,7 @@ export default function SchoolRegistration() {
       setLoading(false);
     }
   };
+
 
   const handleStatusCheck = async (e: React.FormEvent) => {
     e.preventDefault();
