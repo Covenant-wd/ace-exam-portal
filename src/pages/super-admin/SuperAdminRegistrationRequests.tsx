@@ -110,19 +110,28 @@ export default function SuperAdminRegistrationRequests() {
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from("school_registration_requests")
-      .select("*")
-      .order("requested_at", { ascending: false });
+    try {
+      const { data, error } = await (supabase as any)
+        .from("school_registration_requests")
+        .select("*")
+        .order("requested_at", { ascending: false });
 
-    if (error) {
-      toast.error("Failed to load registration requests");
-      console.error(error);
-    } else {
-      setRequests(data || []);
+      if (error) {
+        toast.error("Failed to load registration requests");
+        console.error(error);
+      } else {
+        setRequests(data || []);
+      }
+    } catch (err: any) {
+      // Network error or timeout — ensure loading is cleared so the
+      // Refresh button is re-enabled and the user can retry manually.
+      toast.error("Network error — could not load requests. Please refresh.");
+      console.error("[fetchRequests] unexpected error:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
+
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
