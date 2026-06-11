@@ -90,7 +90,7 @@ export default function SchoolRegistration() {
       // calling the edge function entirely for the core submission, which was
       // causing FunctionsFetchError (CORS preflight failure when function is not
       // yet deployed or during cold starts on a brand-new Supabase project).
-      const { data: inserted, error: insertError } = await (supabase as any)
+      const { error: insertError } = await (supabase as any)
         .from("school_registration_requests")
         .insert({
           email,
@@ -100,9 +100,12 @@ export default function SchoolRegistration() {
           address: formData.address?.trim() || null,
           website: formData.website?.trim() || null,
           status: "pending",
-        })
-        .select("id")
-        .single();
+        });
+        // NOTE: No .select() here — the SELECT RLS policies block unauthenticated
+        // users from reading back rows. PostgREST translates .select() into an
+        // INSERT...RETURNING clause, and a blocked RETURNING is reported by
+        // PostgREST as "new row violates row-level security policy". We don't
+        // need the returned ID for anything, so simply omit .select().
 
       if (insertError) {
         // PostgreSQL unique violation on email column
