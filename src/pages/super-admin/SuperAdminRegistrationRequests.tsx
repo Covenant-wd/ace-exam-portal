@@ -165,28 +165,14 @@ export default function SuperAdminRegistrationRequests() {
 
     setApproveSaving(true);
     try {
-      // 1. Call the DB function to approve (creates school, updates request)
-      const { data: approvalResult, error: approvalError } = await (supabase as any)
-        .rpc("approve_school_registration", {
-          _req_id: approveTarget.id,
-          _reviewed_by: user.id,
-        });
-
-      if (approvalError) throw approvalError;
-
-      const schoolId = approvalResult?.[0]?.school_id;
-      if (!schoolId) throw new Error("School ID not returned from approval function");
-
-      // 2. Create auth user for the admin
-      const { data: authData, error: authError } = await supabase.auth.admin
-        ? // Service-role path (if available in edge function context)
-          { data: null, error: new Error("Use edge function") }
-        : { data: null, error: new Error("Use edge function") };
-
-      // 3. Use the edge function for admin user creation (same pattern as SuperAdminDashboard)
+      // Call the approve-school-registration edge function — it handles everything:
+      //   1. approve_school_registration() SQL RPC (creates school, updates request)
+      //   2. Creates the admin auth user via service role
+      //   3. Assigns role + school_admins mapping
+      //   4. Sends the approval email to the school contact
       const session = (await supabase.auth.getSession()).data.session;
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-school-admin`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/approve-school-registration`,
         {
           method: "POST",
           headers: {
@@ -194,18 +180,18 @@ export default function SuperAdminRegistrationRequests() {
             Authorization: `Bearer ${session?.access_token || ""}`,
           },
           body: JSON.stringify({
-            email: adminEmail.trim(),
-            password: adminPassword.trim(),
-            name: adminName.trim(),
-            school_id: schoolId,
+            action: "approve",
+            registration_id: approveTarget.id,
+            admin_email: adminEmail.trim(),
+            admin_password: adminPassword.trim(),
           }),
         }
       );
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Failed to create admin user");
+      if (!response.ok) throw new Error(result.error || "Approval failed");
 
-      toast.success(`✅ ${approveTarget.school_name} approved and admin account created!`);
+      toast.success(`✅ ${approveTarget.school_name} approved! Confirmation email sent to ${approveTarget.email}.`);
       setApproveOpen(false);
       setApproveTarget(null);
       fetchRequests();
@@ -233,15 +219,29 @@ export default function SuperAdminRegistrationRequests() {
 
     setRejectSaving(true);
     try {
-      const { error } = await (supabase as any).rpc("reject_school_registration", {
-        _req_id: rejectTarget.id,
-        _reviewed_by: user.id,
-        _rejection_reason: rejectReason.trim(),
-      });
+      // Call the approve-school-registration edge function with action=reject
+      // so it runs the SQL RPC AND sends the rejection email to the school
+      const session = (await supabase.auth.getSession()).data.session;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/approve-school-registration`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token || ""}`,
+          },
+          body: JSON.stringify({
+            action: "reject",
+            registration_id: rejectTarget.id,
+            rejection_reason: rejectReason.trim(),
+          }),
+        }
+      );
 
-      if (error) throw error;
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Rejection failed");
 
-      toast.success(`Registration for ${rejectTarget.school_name} has been rejected.`);
+      toast.success(`Registration for ${rejectTarget.school_name} rejected. Email sent to ${rejectTarget.email}.`);
       setRejectOpen(false);
       setRejectTarget(null);
       fetchRequests();
