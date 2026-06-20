@@ -885,7 +885,6 @@ export type Database = {
       }
       schools: {
         Row: {
-          cbt_link: string | null
           created_at: string
           id: string
           logo_url: string | null
@@ -893,7 +892,6 @@ export type Database = {
           slug: string
         }
         Insert: {
-          cbt_link?: string | null
           created_at?: string
           id?: string
           logo_url?: string | null
@@ -901,7 +899,6 @@ export type Database = {
           slug: string
         }
         Update: {
-          cbt_link?: string | null
           created_at?: string
           id?: string
           logo_url?: string | null
