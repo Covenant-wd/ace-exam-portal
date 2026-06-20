@@ -1,41 +1,41 @@
-## Problem
+# Compare live database against GitHub migrations
 
-On the admin dashboard (`/admin`), mobile Chrome on Android shows black flashes / static / noise while scrolling. This is a GPU compositing-layer bug triggered by:
+You asked to restore the database from the migrations stored in GitHub, but also said to "compare first." That's the right call — doing a destructive rebuild blindly could break things that are working. Here's the two-phase approach.
 
-- Every card on `AdminDashboard.tsx` uses `hover:-translate-y-0.5` + `transition-[box-shadow,transform]`. On touch, Chrome treats taps as a sticky `:hover`, which promotes a lot of cards to their own compositing layers at the same time the page is scrolling.
-- The mobile sidebar in `DashboardLayout.tsx` is `fixed inset-y-0 left-0 z-50 ... -translate-x-full` even when closed, leaving a permanent off-screen composited layer that interacts badly with the scrolling main area.
-- The white "welcome banner" + 6 gradient stat cards + 3 gradient fee cards stacked vertically on mobile create many overlapping painted gradients, amplifying the artifacting on scroll.
+## Phase 1 — Audit (read-only, no changes)
 
-The fix already attempted in `src/index.css` (lines ~120-145) only resets `will-change` but doesn't stop the hover-transform from re-promoting layers on tap.
+I'll inspect the live database and diff it against everything in `supabase/migrations/` (the same files that live in your GitHub repo, since GitHub is two-way synced with this project). Specifically I'll compare:
 
-## Fix
+- **Tables** — names and columns
+- **Row Level Security policies** — names and definitions per table
+- **Database functions** — the `public.*` functions like `has_role`, `create_school_user`, `handle_new_user`, etc.
+- **Triggers** — currently the live DB reports none; migrations expect at least `on_auth_user_created` on `auth.users` and `updated_at` triggers — likely drift
+- **Enums** — `app_role` values
+- **Storage buckets** — `question-images`, `school-logo`
+- **GRANT statements** — common source of "permission denied" errors
 
-### 1. `src/pages/admin/AdminDashboard.tsx`
-For all three card groups (primary stats, fee cards, quick links):
-- Drop `hover:-translate-y-0.5` and `transition-[box-shadow,transform]` on mobile.
-- Keep the lift effect on desktop only by prefixing with `lg:` (e.g. `lg:hover:-translate-y-0.5 lg:transition-[box-shadow,transform]`).
-- Keep `hover:shadow-md` only on `lg:` too — shadow changes alone do not glitch but pairing helps consistency.
+I'll write the findings to `/mnt/documents/db-audit.md` and summarise in chat: what's missing, what's extra, what differs.
 
-### 2. `src/components/DashboardLayout.tsx`
-- Render the mobile sidebar conditionally instead of leaving a permanent fixed off-screen layer. Keep the desktop sidebar (lg+) always mounted, but on `< lg` only mount it (and its overlay) when `sidebarOpen` is true. This removes the idle composited layer entirely on mobile so scrolling the main content paints cleanly.
-- Keep the slide animation by mounting the mobile sidebar with the closed `-translate-x-full` class first, then flipping to `translate-x-0` on next frame (small `useEffect` toggle), so it still slides in.
+What I already see at a glance:
+- 27 public tables in the live DB, which lines up with the migration set.
+- One extra object: `student_list_view` (a view) — present live, may or may not be in migrations.
+- Live DB reports **zero triggers**, but migrations create several. This is suspicious and likely the real source of any bug you're chasing.
 
-### 3. `src/index.css`
-- Add a `@media (hover: none)` block that force-disables `:hover` transforms on cards/links project-wide, as a safety net for other dashboards (instructor, parent, student) that copy the same pattern:
-  ```css
-  @media (hover: none) {
-    a:hover, button:hover, .group:hover { transform: none !important; }
-  }
-  ```
-- Keep the existing mobile `will-change: auto` rule.
+## Phase 2 — Decide based on the audit
 
-## Verification
+After you read the audit, you pick one of:
 
-- Open `/admin` on mobile Chrome viewport (380px) and scroll the stat grid + fee summary repeatedly — no black flashes.
-- Open and close the sidebar — slide animation still works, overlay still dims.
-- Desktop view (`lg:`) keeps the hover lift on cards.
-- No layout shift on any breakpoint.
+1. **Targeted fix** — I write a single new migration that adds only the missing pieces (e.g. recreate the triggers). Keeps all data. Lowest risk. This is almost certainly what you'll actually want.
+2. **Full wipe and rebuild** — Drop the `public` schema, then re-run every file in `supabase/migrations/` in order. You confirmed data can be wiped, but this also wipes every school, student, exam, grade, fee record, and every auth user's role mapping. Auth users themselves live in `auth.users` and would survive, but they'd lose all role/school links and be effectively locked out until re-provisioned.
 
-## Scope
+I will **not** execute Phase 2 without you explicitly approving it after seeing the audit.
 
-Touches only `src/pages/admin/AdminDashboard.tsx`, `src/components/DashboardLayout.tsx`, and `src/index.css`. No data, auth, or routing changes.
+## Technical notes
+
+- Migration files in `supabase/migrations/` are the source of truth for the GitHub-tracked schema (the repo is two-way synced).
+- The audit runs via `psql` (read-only, already authenticated in this sandbox) plus parsing the migration `.sql` files. No writes.
+- A "full rebuild" cannot be done with the standard migration tool's incremental model — it requires a single migration that does `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` followed by concatenated migration contents, replayed in order. I'd prepare that for your review before running.
+
+## Deliverable from this plan
+
+`/mnt/documents/db-audit.md` plus a chat summary of drift, ending with a recommendation (targeted fix vs full rebuild) for you to approve.
