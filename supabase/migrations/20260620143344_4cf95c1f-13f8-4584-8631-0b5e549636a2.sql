@@ -174,14 +174,18 @@ DO $$ BEGIN
   END IF;
 END $$;
 
-DROP POLICY IF EXISTS "Subject instructors can manage own subject questions" ON public.questions;
-CREATE POLICY "Subject instructors can manage own subject questions" ON public.questions FOR ALL TO authenticated
-  USING (public.has_role(auth.uid(), 'instructor'::public.app_role)
-    AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
-      WHERE e.id = questions.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())))
-  WITH CHECK (public.has_role(auth.uid(), 'instructor'::public.app_role)
-    AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
-      WHERE e.id = questions.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())));
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'questions') THEN
+    DROP POLICY IF EXISTS "Subject instructors can manage own subject questions" ON public.questions;
+    CREATE POLICY "Subject instructors can manage own subject questions" ON public.questions FOR ALL TO authenticated
+      USING (public.has_role(auth.uid(), 'instructor'::public.app_role)
+        AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
+          WHERE e.id = questions.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())))
+      WITH CHECK (public.has_role(auth.uid(), 'instructor'::public.app_role)
+        AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
+          WHERE e.id = questions.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())));
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Subject instructors can manage own subject grades" ON public.grades;
 CREATE POLICY "Subject instructors can manage own subject grades" ON public.grades FOR ALL TO authenticated
@@ -192,11 +196,15 @@ CREATE POLICY "Subject instructors can manage own subject grades" ON public.grad
     AND EXISTS (SELECT 1 FROM public.instructor_subjects ins WHERE ins.instructor_id = auth.uid()
       AND ins.subject_id = grades.subject_id AND ins.class_id = grades.class_id AND ins.school_id = grades.school_id));
 
-DROP POLICY IF EXISTS "Subject instructors can view own subject exam attempts" ON public.exam_attempts;
-CREATE POLICY "Subject instructors can view own subject exam attempts" ON public.exam_attempts FOR SELECT TO authenticated
-  USING (public.has_role(auth.uid(), 'instructor'::public.app_role)
-    AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
-      WHERE e.id = exam_attempts.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())));
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'exam_attempts') THEN
+    DROP POLICY IF EXISTS "Subject instructors can view own subject exam attempts" ON public.exam_attempts;
+    CREATE POLICY "Subject instructors can view own subject exam attempts" ON public.exam_attempts FOR SELECT TO authenticated
+      USING (public.has_role(auth.uid(), 'instructor'::public.app_role)
+        AND EXISTS (SELECT 1 FROM public.exams e JOIN public.instructor_subjects ins ON ins.subject_id = e.subject_id
+          WHERE e.id = exam_attempts.exam_id AND ins.instructor_id = auth.uid() AND ins.school_id = public.get_user_school_id(auth.uid())));
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Class instructors can manage attendance" ON public.attendance;
 CREATE POLICY "Class instructors can manage attendance" ON public.attendance FOR ALL TO authenticated
