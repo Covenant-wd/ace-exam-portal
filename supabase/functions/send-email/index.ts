@@ -1,6 +1,6 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-email-invoke-secret',
 };
 
 Deno.serve(async (req) => {
@@ -10,6 +10,27 @@ Deno.serve(async (req) => {
 
   try {
     console.log("[send-email] invoked");
+
+    // ── Auth: accept either a valid Supabase JWT (frontend callers)
+    //         or the shared invoke secret (server-side edge function callers).
+    // This lets us set verify_jwt: false in config.toml while still blocking
+    // anonymous abuse.
+    const INVOKE_SECRET = Deno.env.get("EMAIL_INVOKE_SECRET");
+    const incomingSecret = req.headers.get("x-email-invoke-secret");
+    const authHeader = req.headers.get("Authorization") ?? "";
+
+    // If a secret is configured, server-side callers must supply it.
+    // Frontend callers send a Bearer JWT instead — we accept either.
+    const hasValidSecret = INVOKE_SECRET && incomingSecret === INVOKE_SECRET;
+    const hasAuthHeader = authHeader.startsWith("Bearer ");
+
+    if (!hasValidSecret && !hasAuthHeader) {
+      console.error("[send-email] Unauthorized: missing valid secret or Bearer token");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) {
@@ -39,9 +60,6 @@ Deno.serve(async (req) => {
       )
     );
 
-    // FIX 3: Hard cap on recipients per call — prevents abuse of
-    // this function as a spam relay. The frontend already batches
-    // at 45; this enforces it server-side regardless of caller.
     if (recipients.length === 0) {
       return new Response(
         JSON.stringify({ success: true, data: { message: "No recipients" } }),
