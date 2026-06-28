@@ -163,12 +163,16 @@ DROP POLICY IF EXISTS "Instructors can read own class assignments" ON public.cla
 CREATE POLICY "Instructors can read own class assignments" ON public.class_instructors FOR SELECT TO authenticated
   USING (instructor_id = auth.uid() OR (public.has_role(auth.uid(), 'admin'::public.app_role) AND school_id = public.get_user_school_id(auth.uid())));
 
-DROP POLICY IF EXISTS "Subject instructors can manage own subject exams" ON public.exams;
-CREATE POLICY "Subject instructors can manage own subject exams" ON public.exams FOR ALL TO authenticated
-  USING (school_id = public.get_user_school_id(auth.uid()) AND public.has_role(auth.uid(), 'instructor'::public.app_role)
-    AND EXISTS (SELECT 1 FROM public.instructor_subjects ins WHERE ins.instructor_id = auth.uid() AND ins.subject_id = exams.subject_id AND ins.school_id = exams.school_id))
-  WITH CHECK (school_id = public.get_user_school_id(auth.uid()) AND public.has_role(auth.uid(), 'instructor'::public.app_role)
-    AND EXISTS (SELECT 1 FROM public.instructor_subjects ins WHERE ins.instructor_id = auth.uid() AND ins.subject_id = exams.subject_id AND ins.school_id = exams.school_id));
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'exams') THEN
+    DROP POLICY IF EXISTS "Subject instructors can manage own subject exams" ON public.exams;
+    CREATE POLICY "Subject instructors can manage own subject exams" ON public.exams FOR ALL TO authenticated
+      USING (school_id = public.get_user_school_id(auth.uid()) AND public.has_role(auth.uid(), 'instructor'::public.app_role)
+        AND EXISTS (SELECT 1 FROM public.instructor_subjects ins WHERE ins.instructor_id = auth.uid() AND ins.subject_id = exams.subject_id AND ins.school_id = exams.school_id))
+      WITH CHECK (school_id = public.get_user_school_id(auth.uid()) AND public.has_role(auth.uid(), 'instructor'::public.app_role)
+        AND EXISTS (SELECT 1 FROM public.instructor_subjects ins WHERE ins.instructor_id = auth.uid() AND ins.subject_id = exams.subject_id AND ins.school_id = exams.school_id));
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Subject instructors can manage own subject questions" ON public.questions;
 CREATE POLICY "Subject instructors can manage own subject questions" ON public.questions FOR ALL TO authenticated
