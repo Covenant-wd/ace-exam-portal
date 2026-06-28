@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
       await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "x-email-invoke-secret": Deno.env.get("EMAIL_INVOKE_SECRET") ?? "",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -271,9 +271,7 @@ Deno.serve(async (req) => {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${Deno.env.get(
-                "SUPABASE_SERVICE_ROLE_KEY"
-              )}`,
+              "x-email-invoke-secret": Deno.env.get("EMAIL_INVOKE_SECRET") ?? "",
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
