@@ -3,11 +3,11 @@ import { useAuth } from "@/lib/auth";
 import { Navigate } from "react-router-dom";
 import {
   Loader2, GraduationCap, BarChart3, Shield, Users, Zap,
-  ArrowRight, CheckCircle2, Search, School, Bell, CalendarDays,
+  ArrowRight, Search, School, Bell, CalendarDays,
   DollarSign, ClipboardList, Award, ChevronRight, Sun, Moon, MessageCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import RequestDemoSection from "@/components/RequestDemoSection";
 
@@ -20,18 +20,7 @@ interface SchoolItem { id: string; name: string; slug: string; logo_url: string;
 
 const spring = { type: "spring" as const, stiffness: 400, damping: 28 };
 
-// ── Unsplash photo helpers (free, no key needed) ───────────────────────────
-// Using curated Unsplash photo IDs that fit our contexts
-const PHOTOS = {
-  // Students with laptops in school/exam settings
-  studentExam:    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&q=80", // students with laptops
-  studentResults: "https://images.unsplash.com/photo-1571260899304-425eee4c7efc?w=800&q=80", // student on laptop happy
-  // School owner / admin with laptop
-  schoolAdmin:    "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&q=80", // woman professional laptop
-  schoolOwner:    "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=80",    // confident school leader
-  // Hero – classroom / modern school
-  hero:           "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1200&q=80", // classroom overhead
-};
+
 
 // ── Theme Toggle ────────────────────────────────────────────────────────────
 function ThemeToggle() {
@@ -210,20 +199,6 @@ const features = [
   { icon: Zap,           title: "Multi-School SaaS",      desc: "Each school gets a branded portal with its own data, settings and login URL.",              color: "from-yellow-500 to-orange-500"},
 ];
 
-// ── Photo card ──────────────────────────────────────────────────────────────
-function PhotoCard({ src, alt, caption, className = "" }: { src: string; alt: string; caption: string; className?: string }) {
-  return (
-    <motion.div
-      className={`relative overflow-hidden rounded-3xl shadow-2xl ${className}`}
-      initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <img src={src} alt={alt} className="h-full w-full object-cover" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-      <p className="absolute bottom-4 left-4 right-4 text-sm font-medium text-white/90">{caption}</p>
-    </motion.div>
-  );
-}
 
 // ── Main page ───────────────────────────────────────────────────────────────
 function HomePage() {
@@ -312,27 +287,15 @@ function HomePage() {
         </div>
 
         <div className="mx-auto max-w-7xl px-6">
-          {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-            transition={{ ...spring, delay: 0.1 }}
-            className="mb-6 flex justify-center"
-          >
-            <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-1.5 text-sm text-violet-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
-              Complete School Management System
-            </span>
-          </motion.div>
-
           {/* Headline */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="mx-auto max-w-4xl text-center text-5xl font-extrabold tracking-tight sm:text-6xl md:text-7xl leading-[1.05]"
           >
-            The Smarter Way to{" "}
+            Manage Your School{" "}
             <span className="bg-gradient-to-r from-violet-400 via-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              Run Your School
+              Smarter
             </span>
           </motion.h1>
 
@@ -371,74 +334,34 @@ function HomePage() {
             </motion.div>
           </motion.div>
 
-          {/* ── Hero photo collage ── */}
+          {/* ── Hero photo — single Nigerian classroom image ── */}
           <motion.div
             initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="relative mt-16 grid grid-cols-12 gap-4 h-[420px] md:h-[480px]"
+            transition={{ duration: 0.8, delay: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            className="relative mt-16 overflow-hidden rounded-3xl shadow-2xl h-[420px] md:h-[500px]"
           >
-            {/* Large left – students */}
-            <div className="col-span-7 relative overflow-hidden rounded-3xl shadow-2xl">
-              <img
-                src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1000&q=80"
-                alt="Students working on laptops during a computer-based exam"
-                className="h-full w-full object-cover"
-                loading="eager"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-              <div className="absolute bottom-5 left-5 right-5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-600/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
-                  <CheckCircle2 className="h-3 w-3" /> CBT Exams — instant auto-grading
-                </span>
-              </div>
-            </div>
+            <img
+              src="https://images.unsplash.com/photo-1604881991720-f91add269bed?w=1400&q=85"
+              alt="Nigerian students in a classroom engaged in computer-based learning"
+              className="h-full w-full object-cover object-center"
+              loading="eager"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
-            {/* Right column – two stacked photos */}
-            <div className="col-span-5 flex flex-col gap-4">
-              <div className="flex-1 relative overflow-hidden rounded-3xl shadow-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=700&q=80"
-                  alt="School administrator reviewing student data on a laptop"
-                  className="h-full w-full object-cover object-top"
-                  loading="eager"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
-                    <BarChart3 className="h-3 w-3" /> Admin dashboard — full control
-                  </span>
-                </div>
-              </div>
-              <div className="flex-1 relative overflow-hidden rounded-3xl shadow-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1571260899304-425eee4c7efc?w=700&q=80"
-                  alt="Student viewing exam results on laptop, looking pleased"
-                  className="h-full w-full object-cover"
-                  loading="eager"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-600/90 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
-                    <Award className="h-3 w-3" /> Results & reports in seconds
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Floating stat pills */}
+            {/* Floating stat pills on the photo */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 1.1 }}
-              className="absolute -bottom-5 left-8 flex gap-3 flex-wrap"
+              className="absolute bottom-6 left-6 flex gap-3 flex-wrap"
             >
               {[
                 { v: "9+",    l: "Modules"  },
                 { v: "99.9%", l: "Uptime"   },
                 { v: "24/7",  l: "Available"},
               ].map(s => (
-                <div key={s.l} className={`rounded-2xl border px-4 py-2.5 backdrop-blur-xl ${isDark ? "border-white/10 bg-[#0a0a0f]/80" : "border-gray-200 bg-white/90 shadow-lg"}`}>
-                  <div className={`text-lg font-extrabold ${txt}`}>{s.v}</div>
-                  <div className={`text-[10px] ${muted}`}>{s.l}</div>
+                <div key={s.l} className="rounded-2xl border border-white/20 bg-black/40 px-4 py-2.5 backdrop-blur-xl">
+                  <div className="text-lg font-extrabold text-white">{s.v}</div>
+                  <div className="text-[10px] text-white/60">{s.l}</div>
                 </div>
               ))}
             </motion.div>
@@ -447,7 +370,7 @@ function HomePage() {
       </section>
 
       {/* ── School Finder ── */}
-      <section id="schools" className={`pt-24 pb-20 border-y mt-8 ${isDark ? "border-white/5" : "border-gray-100"}`}>
+      <section id="schools" className={`pt-20 pb-20 border-y ${isDark ? "border-white/5" : "border-gray-100"}`}>
         <div className="mx-auto max-w-5xl px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
@@ -491,84 +414,6 @@ function HomePage() {
                 <p className={`mt-2 text-sm leading-relaxed ${muted}`}>{f.desc}</p>
               </motion.div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── For Students | For Schools — split visual section ── */}
-      <section className={`py-24 border-t ${isDark ? "border-white/5" : "border-gray-100"}`}>
-        <div className="mx-auto max-w-7xl px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="mx-auto max-w-2xl text-center mb-14"
-          >
-            <h2 className={`text-3xl font-extrabold tracking-tight sm:text-4xl ${txt}`}>Built for Everyone in School</h2>
-            <p className={`mt-4 text-lg ${sub}`}>Whether you're sitting an exam or running the institution.</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* For Students */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className={`relative overflow-hidden rounded-3xl border ${cardBg}`}
-            >
-              <div className="relative h-64 overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1509062522246-3755977927d7?w=900&q=80"
-                  alt="Students in a modern classroom using laptops for computer-based testing"
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
-              </div>
-              <div className="p-6">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-400">
-                  For Students
-                </div>
-                <h3 className={`text-xl font-bold mb-3 ${txt}`}>Your School, Your Portal</h3>
-                <ul className="space-y-2">
-                  {["Sit CBT exams online from any device", "See results the moment you submit", "Track your grades, attendance & timetable", "Access fee statements and receipts"].map(item => (
-                    <li key={item} className={`flex items-start gap-2.5 text-sm ${sub}`}>
-                      <CheckCircle2 className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </motion.div>
-
-            {/* For School Owners */}
-            <motion.div
-              initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className={`relative overflow-hidden rounded-3xl border ${cardBg}`}
-            >
-              <div className="relative h-64 overflow-hidden">
-                <img
-                  src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=900&q=80"
-                  alt="School owner and administrator reviewing school management platform on laptop"
-                  className="h-full w-full object-cover object-top"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
-              </div>
-              <div className="p-6">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                  For School Owners & Admins
-                </div>
-                <h3 className={`text-xl font-bold mb-3 ${txt}`}>One Dashboard, Total Control</h3>
-                <ul className="space-y-2">
-                  {["Set up classes, subjects, and instructors", "Manage fees, payments and receipts", "Create and schedule CBT exams in minutes", "Generate report cards and analytics instantly"].map(item => (
-                    <li key={item} className={`flex items-start gap-2.5 text-sm ${sub}`}>
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </motion.div>
           </div>
         </div>
       </section>
