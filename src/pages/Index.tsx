@@ -187,18 +187,16 @@ function SchoolFinder() {
 
 // ── Feature card data ───────────────────────────────────────────────────────
 const features = [
-  { icon: ClipboardList, title: "CBT Examinations",       desc: "Create, publish and auto-grade timed computer-based exams with instant results.",          color: "from-blue-500 to-blue-700"     },
-  { icon: Users,         title: "Student Management",     desc: "Enroll students, manage profiles, assign classes and track academic journeys.",             color: "from-indigo-500 to-indigo-700" },
-  { icon: CalendarDays,  title: "Timetable & Attendance", desc: "Schedule classes, manage periods and track daily attendance with ease.",                    color: "from-sky-500 to-sky-700"       },
-  { icon: Award,         title: "Grades & Reports",       desc: "Record scores, compute weighted grades and generate printable report cards.",               color: "from-blue-600 to-cyan-600"     },
-  { icon: DollarSign,    title: "Fee Management",         desc: "Create fee types, record payments, track outstanding balances and generate receipts.",      color: "from-blue-500 to-blue-800"     },
-  { icon: Bell,          title: "Announcements",          desc: "Broadcast targeted notices to students, staff or specific classes instantly.",               color: "from-indigo-600 to-blue-600"   },
-  { icon: Shield,        title: "Role-Based Access",      desc: "Super admins, school admins, instructors and students each get precisely scoped access.",   color: "from-slate-600 to-blue-700"    },
-  { icon: BarChart3,     title: "Analytics",              desc: "Track exam performance, attendance trends and fee collection with real-time dashboards.",   color: "from-blue-600 to-indigo-600"   },
-  { icon: Zap,           title: "Multi-School SaaS",      desc: "Each school gets a branded portal with its own data, settings and login URL.",              color: "from-blue-500 to-blue-700"     },
+  { icon: ClipboardList, title: "CBT Examinations",       desc: "Create, publish and auto-grade timed computer-based exams with instant results.",          color: "from-blue-500 to-blue-700",     bg: "bg-blue-50",   ring: "ring-blue-100" },
+  { icon: Users,         title: "Student Management",     desc: "Enroll students, manage profiles, assign classes and track academic journeys.",             color: "from-indigo-500 to-indigo-700", bg: "bg-indigo-50", ring: "ring-indigo-100" },
+  { icon: CalendarDays,  title: "Timetable & Attendance", desc: "Schedule classes, manage periods and track daily attendance with ease.",                    color: "from-sky-500 to-sky-700",       bg: "bg-sky-50",    ring: "ring-sky-100" },
+  { icon: Award,         title: "Grades & Reports",       desc: "Record scores, compute weighted grades and generate printable report cards.",               color: "from-blue-600 to-cyan-600",     bg: "bg-cyan-50",   ring: "ring-cyan-100" },
+  { icon: DollarSign,    title: "Fee Management",         desc: "Create fee types, record payments, track outstanding balances and generate receipts.",      color: "from-blue-500 to-blue-800",     bg: "bg-blue-50",   ring: "ring-blue-100" },
+  { icon: Bell,          title: "Announcements",          desc: "Broadcast targeted notices to students, staff or specific classes instantly.",               color: "from-indigo-600 to-blue-600",   bg: "bg-indigo-50", ring: "ring-indigo-100" },
+  { icon: Shield,        title: "Role-Based Access",      desc: "Super admins, school admins, instructors and students each get precisely scoped access.",   color: "from-slate-600 to-blue-700",    bg: "bg-slate-50",  ring: "ring-slate-100" },
+  { icon: BarChart3,     title: "Analytics",              desc: "Track exam performance, attendance trends and fee collection with real-time dashboards.",   color: "from-blue-600 to-indigo-600",   bg: "bg-blue-50",   ring: "ring-blue-100" },
+  { icon: Zap,           title: "Multi-School SaaS",      desc: "Each school gets a branded portal with its own data, settings and login URL.",              color: "from-blue-500 to-blue-700",     bg: "bg-blue-50",   ring: "ring-blue-100" },
 ];
-
-const HERO_IMAGE = "https://drive.google.com/uc?export=view&id=1_QGVmx5uTWr1s02w470aLo-Rc19zkjPa";
 
 // ── Main page ───────────────────────────────────────────────────────────────
 function HomePage() {
@@ -208,7 +206,7 @@ function HomePage() {
   const whatsappLink = "https://wa.me/2349039580317";
 
   if (loading) return (
-    <div className={`flex min-h-screen items-center justify-center ${isDark ? "bg-[#060914]" : "bg-white"}`}>
+    <div className={`flex min-h-screen items-center justify-center ${isDark ? "bg-[#0a0a0f]" : "bg-white"}`}>
       <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
     </div>
   );
@@ -224,12 +222,13 @@ function HomePage() {
   }
 
   // ── Design tokens
-  const bg     = isDark ? "bg-[#060914]"                       : "bg-white";
-  const txt    = isDark ? "text-white"                          : "text-gray-900";
-  const sub    = isDark ? "text-white/55"                       : "text-gray-500";
-  const muted  = isDark ? "text-white/40"                       : "text-gray-400";
-  const navBg  = isDark ? "bg-[#060914]/90 border-white/5"      : "bg-white/95 border-blue-50 shadow-sm shadow-blue-900/5";
-  const cardBg = isDark ? "bg-white/[0.03] border-white/8"      : "bg-white border-gray-100 shadow-md shadow-blue-900/5";
+  const bg        = isDark ? "bg-[#060914]"              : "bg-white";
+  const txt       = isDark ? "text-white"                : "text-gray-900";
+  const sub       = isDark ? "text-white/55"             : "text-gray-500";
+  const muted     = isDark ? "text-white/40"             : "text-gray-400";
+  const navBg     = isDark ? "bg-[#060914]/90 border-white/5" : "bg-white/95 border-blue-50 shadow-sm shadow-blue-900/5";
+  const cardBg    = isDark ? "bg-white/[0.03] border-white/8" : "bg-white border-gray-100 shadow-md shadow-blue-900/5";
+  const altSection = isDark ? "bg-white/[0.02]"          : "bg-blue-50/40";
 
   return (
     <div
@@ -277,7 +276,7 @@ function HomePage() {
       {/* ── HERO ── */}
       <section className="relative min-h-[calc(100vh-73px)] flex items-center overflow-hidden pt-8 pb-16 lg:pt-0 lg:pb-0">
 
-        {/* Background */}
+        {/* Background: gradient sphere + grid */}
         <div className="absolute inset-0 -z-10">
           {isDark ? (
             <>
@@ -287,16 +286,18 @@ function HomePage() {
             </>
           ) : (
             <>
+              {/* Large soft blue gradient sphere top-right */}
               <div className="absolute -top-32 -right-32 h-[700px] w-[700px] rounded-full bg-gradient-to-bl from-blue-100 via-blue-50 to-transparent opacity-80" />
               <div className="absolute top-1/2 right-0 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-blue-600/6 blur-[80px]" />
               <div className="absolute bottom-0 left-0 h-[300px] w-[300px] rounded-full bg-blue-500/4 blur-[60px]" />
+              {/* Subtle dot grid */}
               <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle, rgba(30,64,175,0.6) 1px, transparent 1px)", backgroundSize: "36px 36px" }} />
             </>
           )}
         </div>
 
         <div className="mx-auto max-w-7xl px-6 w-full">
-          <div className="grid lg:grid-cols-2 gap-16 items-center lg:py-20">
+          <div className="grid lg:grid-cols-2 gap-16 items-center min-h-[calc(100vh-160px)] lg:min-h-0 lg:py-20">
 
             {/* ── Left: copy ── */}
             <div className="flex flex-col items-start">
@@ -352,9 +353,7 @@ function HomePage() {
                 className="mt-8 flex flex-wrap items-center gap-4"
               >
                 <motion.a
-                  href="#schools"
-                  whileHover={{ scale: 1.05, boxShadow: "0 12px 36px rgba(37,99,235,0.35)" }}
-                  whileTap={{ scale: 0.97 }} transition={spring}
+                  href="#schools" whileHover={{ scale: 1.05, boxShadow: "0 12px 36px rgba(37,99,235,0.35)" }} whileTap={{ scale: 0.97 }} transition={spring}
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30"
                 >
                   Find Your School
@@ -372,7 +371,7 @@ function HomePage() {
                 </motion.div>
               </motion.div>
 
-              {/* Social proof */}
+              {/* Social proof row */}
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.75 }}
@@ -402,32 +401,34 @@ function HomePage() {
               transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="relative flex items-center justify-center"
             >
-              {/* Glow circles behind image */}
-              <div className="absolute inset-0 -z-10">
-                <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[480px] w-[480px] rounded-full blur-[60px] ${isDark ? "bg-blue-600/10" : "bg-blue-500/8"}`} />
-                <div className={`absolute -bottom-10 -right-10 h-[280px] w-[280px] rounded-full blur-[50px] ${isDark ? "bg-blue-700/12" : "bg-blue-600/6"}`} />
+              {/* Background glow circles */}
+              <div className={`absolute inset-0 -z-10 ${isDark ? "" : ""}`}>
+                <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[480px] w-[480px] rounded-full ${isDark ? "bg-blue-600/10" : "bg-blue-500/8"} blur-[60px]`} />
+                <div className={`absolute -bottom-10 -right-10 h-[280px] w-[280px] rounded-full ${isDark ? "bg-blue-700/12" : "bg-blue-600/6"} blur-[50px]`} />
               </div>
 
+              {/* Main image container */}
               <div className="relative w-full max-w-lg">
-                {/* Tilted background card */}
-                <div className={`absolute inset-0 rounded-3xl -rotate-2 scale-[1.02] ${isDark ? "bg-gradient-to-br from-blue-600/20 to-blue-900/20" : "bg-gradient-to-br from-blue-100/60 to-blue-200/30"}`} />
+                {/* Outer ring decoration */}
+                <div className={`absolute inset-0 rounded-3xl ${isDark ? "bg-gradient-to-br from-blue-600/20 to-blue-900/20" : "bg-gradient-to-br from-blue-100/60 to-blue-200/30"} -rotate-2 scale-[1.02]`} />
 
-                {/* Image */}
+                {/* Image wrapper with fade */}
                 <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-blue-900/20">
                   <img
-                    src={HERO_IMAGE}
+                    src="/students-hero.png"
                     alt="Nigerian students engaged in computer-based learning"
                     className="w-full h-[420px] object-cover object-top"
                     loading="eager"
-                    crossOrigin="anonymous"
                   />
-                  {/* Edge fades */}
-                  <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? "from-[#060914]/70 via-transparent to-transparent" : "from-white/10 via-transparent to-transparent"}`} />
-                  <div className={`absolute inset-y-0 left-0 w-10 bg-gradient-to-r ${isDark ? "from-[#060914]/20 to-transparent" : "from-blue-50/10 to-transparent"}`} />
-                  <div className={`absolute inset-y-0 right-0 w-10 bg-gradient-to-l ${isDark ? "from-[#060914]/20 to-transparent" : "from-blue-50/10 to-transparent"}`} />
+                  {/* Bottom fade for seamless blend */}
+                  <div className={`absolute inset-0 bg-gradient-to-t ${isDark ? "from-[#060914]/80 via-transparent to-transparent" : "from-white/20 via-transparent to-transparent"}`} />
+                  {/* Left edge fade */}
+                  <div className={`absolute inset-y-0 left-0 w-12 bg-gradient-to-r ${isDark ? "from-[#060914]/30 to-transparent" : "from-blue-50/20 to-transparent"}`} />
+                  {/* Right edge fade */}
+                  <div className={`absolute inset-y-0 right-0 w-12 bg-gradient-to-l ${isDark ? "from-[#060914]/30 to-transparent" : "from-blue-50/20 to-transparent"}`} />
                 </div>
 
-                {/* Floating card — top left */}
+                {/* Floating stat card — top left */}
                 <motion.div
                   initial={{ opacity: 0, y: 16, x: -16 }} animate={{ opacity: 1, y: 0, x: 0 }}
                   transition={{ ...spring, delay: 1.0 }}
@@ -437,7 +438,7 @@ function HomePage() {
                     animate={{ y: [0, -6, 0] }}
                     transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
                     className={`rounded-2xl border px-4 py-3 shadow-xl backdrop-blur-xl
-                      ${isDark ? "border-white/10 bg-white/10" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
+                      ${isDark ? "border-white/10 bg-white/8" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700">
@@ -451,7 +452,7 @@ function HomePage() {
                   </motion.div>
                 </motion.div>
 
-                {/* Floating card — bottom right */}
+                {/* Floating stat card — bottom right */}
                 <motion.div
                   initial={{ opacity: 0, y: 16, x: 16 }} animate={{ opacity: 1, y: 0, x: 0 }}
                   transition={{ ...spring, delay: 1.15 }}
@@ -461,7 +462,7 @@ function HomePage() {
                     animate={{ y: [0, 6, 0] }}
                     transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
                     className={`rounded-2xl border px-4 py-3 shadow-xl backdrop-blur-xl
-                      ${isDark ? "border-white/10 bg-white/10" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
+                      ${isDark ? "border-white/10 bg-white/8" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600">
@@ -485,7 +486,7 @@ function HomePage() {
                     animate={{ y: [0, -4, 0] }}
                     transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                     className={`rounded-2xl border px-3.5 py-2.5 shadow-lg backdrop-blur-xl
-                      ${isDark ? "border-white/10 bg-white/10" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
+                      ${isDark ? "border-white/10 bg-white/8" : "border-white/80 bg-white/90 shadow-blue-900/15"}`}
                   >
                     <div className="flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600">
@@ -504,7 +505,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* ── Gradient divider ── */}
+      {/* ── Divider wave / gradient strip ── */}
       <div className={`h-px w-full ${isDark ? "bg-gradient-to-r from-transparent via-white/8 to-transparent" : "bg-gradient-to-r from-transparent via-blue-200/60 to-transparent"}`} />
 
       {/* ── School Finder ── */}
@@ -557,13 +558,17 @@ function HomePage() {
                 whileHover={{ y: -6, boxShadow: isDark ? "0 20px 48px rgba(0,0,0,0.4)" : "0 20px 48px rgba(37,99,235,0.12)" }}
                 className={`group relative rounded-2xl border p-7 cursor-default overflow-hidden transition-all duration-300 ${cardBg}`}
               >
+                {/* Hover glow */}
                 <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl
                   ${isDark ? "bg-gradient-to-br from-blue-600/5 to-transparent" : "bg-gradient-to-br from-blue-50/80 to-transparent"}`} />
+
                 <div className={`mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${f.color} shadow-md`}>
-                  <f.icon className="h-6 w-6 text-white" />
+                  <f.icon className="h-5.5 w-5.5 h-6 w-6 text-white" />
                 </div>
                 <h3 className={`text-base font-bold ${txt}`}>{f.title}</h3>
                 <p className={`mt-2.5 text-sm leading-relaxed ${muted}`}>{f.desc}</p>
+
+                {/* Bottom accent line on hover */}
                 <div className={`absolute bottom-0 left-0 h-0.5 w-0 group-hover:w-full transition-all duration-500 rounded-full bg-gradient-to-r ${f.color}`} />
               </motion.div>
             ))}
@@ -589,11 +594,12 @@ function HomePage() {
           </motion.div>
 
           <div className="grid gap-8 md:grid-cols-3 relative">
+            {/* Connector line */}
             <div className={`hidden md:block absolute top-10 left-[33%] right-[33%] h-px
               ${isDark ? "bg-gradient-to-r from-blue-600/30 via-blue-600/50 to-blue-600/30" : "bg-gradient-to-r from-blue-200 via-blue-300 to-blue-200"}`} />
 
             {[
-              { step: "01", title: "School Gets Onboarded",      desc: "Super admin creates your school, assigns an admin and generates your unique school login URL.", color: "from-blue-500 to-blue-700"    },
+              { step: "01", title: "School Gets Onboarded",      desc: "Super admin creates your school, assigns an admin and generates your unique school login URL.", color: "from-blue-500 to-blue-700" },
               { step: "02", title: "Admin Sets Everything Up",   desc: "Add sessions, classes, subjects, instructors and students. Configure fees, grades and timetable.",  color: "from-blue-600 to-indigo-600" },
               { step: "03", title: "Teaching & Learning Begins", desc: "Instructors manage their classes. Students access exams, view results, timetables and fees.",       color: "from-indigo-500 to-blue-700" },
             ].map((item, i) => (
@@ -625,8 +631,10 @@ function HomePage() {
                 ? "border-blue-500/20 bg-gradient-to-br from-blue-900/20 via-[#060914] to-blue-900/10"
                 : "border-blue-200 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800"}`}
           >
+            {/* Decorative circles */}
             <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm shadow-lg">
               <School className="h-7 w-7 text-white" />
             </div>
