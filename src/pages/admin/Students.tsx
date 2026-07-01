@@ -10,12 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff, Download } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
-import * as XLSX from "xlsx";
 
 
 interface Student {
@@ -279,34 +278,6 @@ export default function Students() {
     return !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
   });
 
-  const handleDownloadExcel = () => {
-    if (filtered.length === 0) { toast.error("No students to export"); return; }
-
-    const rows = filtered.map(s => ({
-      full_name: s.full_name || "",
-      email: s.email || "",
-      role: "student",
-      password: "",
-      admission_number: s.username || "",
-      phone: "",
-      class_name: getClassName(s.class_id) === "—" ? "" : getClassName(s.class_id),
-    }));
-
-    const sheet = XLSX.utils.json_to_sheet(rows, {
-      header: ["full_name", "email", "role", "password", "admission_number", "phone", "class_name"],
-    });
-    sheet["!cols"] = [
-      { wch: 24 }, { wch: 28 }, { wch: 10 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 14 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, "Students");
-
-    const fileName = `${(schoolName || "school").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-students-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
-    toast.success("Students exported");
-  };
-
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   return (
@@ -317,9 +288,6 @@ export default function Students() {
           <p className="text-muted-foreground">{students.length} student{students.length !== 1 ? "s" : ""} registered</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleDownloadExcel} disabled={students.length === 0}>
-            <Download className="mr-2 h-4 w-4" />Download Excel
-          </Button>
           <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }} disabled={isRestricted || isSuspended}>
             <ArrowRightLeft className="mr-2 h-4 w-4" />Move Students
           </Button>
