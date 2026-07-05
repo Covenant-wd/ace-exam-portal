@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
         <p>Once approved, you will receive credentials to set up your admin account and access your school's dashboard.</p>
         
         <p style="margin-top: 30px;">
-          <strong>Questions?</strong> Contact us at <a href="mailto:support@academiahq.digital">support@academiahq.digital</a>
+          <strong>Questions?</strong> Contact us at <a href="mailto:support@academiahq.pro">support@academiahq.pro</a>
         </p>
 
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
