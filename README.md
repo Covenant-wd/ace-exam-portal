@@ -2,9 +2,9 @@
 
 **A complete, multi-school management platform for Nigerian schools** — CBT examinations, student management, attendance, fee tracking, grade reports, timetable scheduling and real-time email notifications, all in one production-ready web application.
 
-🌐 **Live:** [academiahq.digital](https://academiahq.digital)
+🌐 **Live:** [academiahq.pro](https://academiahq.pro)
 📞 **Support:** [+2349039580317](https://wa.me/2349039580317)
-📧 **Email:** support@academiahq.digital
+📧 **Email:** support@academiahq.pro
 
 ---
 
@@ -333,7 +333,7 @@ All user-management functions use the **service role key** server-side so they c
 3. If enabled, it fetches recipient emails via Supabase RPC: `get_user_emails_by_ids`, `get_email_by_user_id`, or `get_school_students_only`
 4. Calls `sendEmail({ to, subject, html })` in `src/lib/email.ts`
 5. `sendEmail` invokes the `send-email` Edge Function in batches of up to 45 recipients
-6. The Edge Function sends via Resend using `Academia HQ <support@academiahq.digital>`
+6. The Edge Function sends via Resend using `Academia HQ <support@academiahq.pro>`
 
 ### Notification settings
 
@@ -404,8 +404,8 @@ To apply migrations to an existing Supabase project, run each `.sql` file in the
 | Channel | Details |
 |---|---|
 | WhatsApp | [+2349039580317](https://wa.me/2349039580317) |
-| Email | support@academiahq.digital |
-| Website | [academiahq.digital](https://academiahq.digital) |
+| Email | support@academiahq.pro |
+| Website | [academiahq.pro](https://academiahq.pro) |
 
 ---
 
