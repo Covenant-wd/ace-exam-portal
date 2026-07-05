@@ -7,4 +7,4 @@ Disallow: /instructor/
 Disallow: /parent/
 Disallow: /outreach/
 
-Sitemap: https://academiahq.digital/sitemap.xml
+Sitemap: https://academiahq.pro/sitemap.xml
