@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
 
           <h3>Next Steps</h3>
           <ol style="margin: 15px 0; padding-left: 20px;">
-            <li>Visit your school portal: <a href="https://academiahq.digital/school/${school_slug}">/school/${school_slug}</a></li>
+            <li>Visit your school portal: <a href="https://academiahq.pro/school/${school_slug}">/school/${school_slug}</a></li>
             <li>Log in with your admin credentials</li>
             <li>Update your school settings (logo, contact info, etc.)</li>
             <li>Add instructors, classes, and students</li>
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
 
           <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
             <p><strong>Need Help?</strong></p>
-            <p>Contact us at <a href="mailto:support@academiahq.digital">support@academiahq.digital</a></p>
+            <p>Contact us at <a href="mailto:support@academiahq.pro">support@academiahq.pro</a></p>
             <p>WhatsApp: <a href="https://wa.me/2349039580317">+234-903-958-0317</a></p>
           </div>
 
@@ -358,7 +358,7 @@ Deno.serve(async (req) => {
 
           <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">
             <p><strong>Questions?</strong></p>
-            <p>Contact us at <a href="mailto:support@academiahq.digital">support@academiahq.digital</a></p>
+            <p>Contact us at <a href="mailto:support@academiahq.pro">support@academiahq.pro</a></p>
             <p>WhatsApp: <a href="https://wa.me/2349039580317">+234-903-958-0317</a></p>
           </div>
 
