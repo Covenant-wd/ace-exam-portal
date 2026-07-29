@@ -463,3 +463,26 @@ export async function sendImplementationConfirmationEmail({
     html,
   });
 }
+
+// ─────────────────────────────────────────────
+// 14. Super Admin — Platform Broadcast (targeted user or all users)
+// ─────────────────────────────────────────────
+export async function sendPlatformBroadcastEmail({
+  to, subject, message, loginUrl,
+}: { to: string | string[]; subject: string; message: string; loginUrl: string }) {
+  // Preserve line breaks/paragraphs from the admin's plain-text message
+  const bodyHtml = message
+    .trim()
+    .split(/\n{2,}/)
+    .map((block) => para(block.replace(/\n/g, "<br/>")))
+    .join("");
+
+  const html = baseTemplate(`
+    ${heading(subject)}
+    ${bodyHtml}
+    ${btn("Log In to Academia HQ", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">This message was sent to you by the Academia HQ team.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({ to, subject, html });
+}
