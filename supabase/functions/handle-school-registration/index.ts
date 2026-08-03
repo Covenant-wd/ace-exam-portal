@@ -51,10 +51,19 @@ async function sendRegistrationConfirmationEmail(
   `;
 
   try {
-    await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
+    // FIX: Don't rely solely on EMAIL_INVOKE_SECRET matching between this
+    // function and send-email — that secret is set independently per
+    // function via `supabase secrets set` and is an easy silent
+    // misconfiguration. send-email also accepts a Bearer token as an
+    // alternative auth path, so we send the service-role key (a legitimate
+    // JWT this function already holds) as a fallback. We also now log the
+    // response status/body instead of swallowing it, so a failure here is
+    // visible in the function logs.
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
       method: "POST",
       headers: {
         "x-email-invoke-secret": Deno.env.get("EMAIL_INVOKE_SECRET") ?? "",
+        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -63,7 +72,15 @@ async function sendRegistrationConfirmationEmail(
         html: confirmationEmailHtml,
       }),
     });
-    console.log("[handle-school-registration] Confirmation email sent to", email);
+    const resBody = await res.text();
+    if (!res.ok) {
+      console.error(
+        `[handle-school-registration] Confirmation email send-email call failed (${res.status}):`,
+        resBody
+      );
+    } else {
+      console.log("[handle-school-registration] Confirmation email sent to", email, resBody);
+    }
   } catch (emailError) {
     console.error(
       "[handle-school-registration] Failed to send confirmation email:",
@@ -124,10 +141,11 @@ async function notifySuperAdminsOfRegistration(
         </div>
       `;
 
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
+      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`, {
         method: "POST",
         headers: {
           "x-email-invoke-secret": Deno.env.get("EMAIL_INVOKE_SECRET") ?? "",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -136,9 +154,19 @@ async function notifySuperAdminsOfRegistration(
           html: notificationHtml,
         }),
       });
-      console.log(
-        "[handle-school-registration] Notification sent to super admins"
-      );
+      const resBody = await res.text();
+      if (!res.ok) {
+        console.error(
+          `[handle-school-registration] Super admin notification send-email call failed (${res.status}):`,
+          resBody
+        );
+      } else {
+        console.log(
+          "[handle-school-registration] Notification sent to super admins:",
+          superAdminEmails,
+          resBody
+        );
+      }
     } else {
       console.warn(
         "[handle-school-registration] No super admin emails found to notify"
