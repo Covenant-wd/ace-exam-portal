@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "x-email-invoke-secret": Deno.env.get("EMAIL_INVOKE_SECRET") ?? "",
+        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -132,10 +133,21 @@ Deno.serve(async (req) => {
     });
 
     const emailData = await emailRes.json().catch(() => ({}));
-    console.log("[notify-implementation-request] Notification sent to super admins", emailData);
+    if (!emailRes.ok) {
+      console.error(
+        `[notify-implementation-request] send-email call failed (${emailRes.status}):`,
+        emailData
+      );
+    } else {
+      console.log(
+        "[notify-implementation-request] Notification sent to super admins:",
+        superAdminEmails,
+        emailData
+      );
+    }
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({ success: emailRes.ok, detail: emailData }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
