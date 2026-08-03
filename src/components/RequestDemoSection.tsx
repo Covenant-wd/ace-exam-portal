@@ -1,10 +1,7 @@
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  sendImplementationRequestEmail,
-  sendImplementationConfirmationEmail,
-} from "@/lib/email";
+import { sendImplementationConfirmationEmail } from "@/lib/email";
 import {
   Building2, User, Phone, Mail, GraduationCap, Users, MapPin,
   MessageSquare, CheckCircle2, Loader2, ChevronDown, CalendarCheck,
@@ -177,27 +174,22 @@ export default function RequestDemoSection() {
         bookVisit,
       };
 
-      // FIX: Fetch super admin emails from DB instead of a hardcoded address.
-      // We query user_roles for every super_admin user, then resolve their
-      // emails via the get_user_emails_by_ids RPC (SECURITY DEFINER function
-      // that can read auth.users safely from the client).
+      // FIX: Notify super admins via a service-role edge function instead of
+      // querying user_roles / get_user_emails_by_ids directly from the
+      // browser. This form is filled out by anonymous site visitors (school
+      // owners who aren't logged in), and both of those calls require the
+      // caller to already be an authenticated admin — so they always
+      // silently resolved to zero recipients and no notification was ever
+      // sent. The edge function uses the service-role key, so it works
+      // regardless of who (if anyone) is logged in.
       (async () => {
         try {
-          const { data: superAdminRoles } = await supabase
-            .from("user_roles")
-            .select("user_id")
-            .eq("role", "super_admin");
-          const superAdminIds = (superAdminRoles || []).map((r: any) => r.user_id);
-          if (superAdminIds.length > 0) {
-            const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
-              _user_ids: superAdminIds,
-            });
-            const superAdminEmails = (emailRows || [])
-              .map((r: any) => r.email)
-              .filter(Boolean);
-            if (superAdminEmails.length > 0) {
-              await sendImplementationRequestEmail({ to: superAdminEmails, ...payload });
-            }
+          const { error: notifyErr } = await supabase.functions.invoke(
+            "notify-implementation-request",
+            { body: payload },
+          );
+          if (notifyErr) {
+            console.error("Implementation request notification failed:", notifyErr);
           }
         } catch (e) {
           console.error("Implementation request notification failed:", e);
