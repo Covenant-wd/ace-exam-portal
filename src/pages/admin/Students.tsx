@@ -10,8 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useSubscription } from "@/hooks/useSubscription";
+import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 
 interface Student {
@@ -42,6 +45,8 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
+  const { canAddStudent, isRestricted, isSuspended } = useSubscription();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,6 +55,7 @@ export default function Students() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Promotion state
   const [promoOpen, setPromoOpen] = useState(false);
@@ -135,6 +141,7 @@ export default function Students() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAddStudent()) return;
     if (!form.first_name || !form.last_name || !form.email) { toast.error("First name, last name and email are required"); return; }
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
@@ -143,21 +150,29 @@ export default function Students() {
 
     try {
       if (editing) {
-        const { error } = await supabase.from("profiles").update({
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
-          subjects_offered: subjects,
-        }).eq("user_id", editing.user_id);
-        if (error) throw error;
+        // Use update_school_user() SQL RPC — bypasses the edge function entirely
+        // so it works even when the edge function is not deployed / unreachable.
+        const { data: { user: callerUser } } = await supabase.auth.getUser();
+        if (!callerUser) throw new Error("Not authenticated");
+
+        const { error: rpcError } = await supabase.rpc("update_school_user", {
+          _caller_id:       callerUser.id,
+          _user_id:         editing.user_id,
+          _email:           form.email           || null,
+          _password:        form.password         || null,
+          _first_name:      form.first_name       || null,
+          _middle_name:     form.middle_name      || "",
+          _last_name:       form.last_name        || null,
+          _username:        form.username         || null,
+          _class_id:        form.class_id         || null,
+          _date_of_birth:   form.date_of_birth    || null,
+          _address:         form.address          || "",
+          _parent_name:     form.parent_name      || "",
+          _nationality:     form.nationality      || "",
+          _gender:          form.gender           || "",
+          _subjects_offered: subjects,
+        } as any);
+        if (rpcError) throw new Error(rpcError.message);
         // Update local state immediately so changes reflect at once
         const updatedStudent = {
           ...editing!,
@@ -202,6 +217,18 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
         toast.success("Student created");
+        // FIX: Gate behind notify_welcome_email setting (was unconditional before)
+        isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+          if (!enabled) return;
+          sendStudentWelcomeEmail({
+            to: form.email.trim().toLowerCase(),
+            studentName: fullName,
+            schoolName: schoolName || document.title || "School",
+            loginUrl: window.location.origin,
+            password: form.password,
+            username: form.username || undefined,
+          }).catch(() => {});
+        });
       }
       setDialogOpen(false);
       if (!editing) {
@@ -215,6 +242,7 @@ export default function Students() {
   };
 
   const handleBulkPromote = async () => {
+    if (!canAddStudent()) return;
     if (!promoFrom || !promoTo) { toast.error("Select both classes"); return; }
     if (promoFrom === promoTo) { toast.error("Source and destination must differ"); return; }
     setPromoSaving(true);
@@ -227,6 +255,7 @@ export default function Students() {
   };
 
   const handleMoveStudents = async () => {
+    if (!canAddStudent()) return;
     if (!moveToClass || selectedStudents.length === 0) { toast.error("Select students and target class"); return; }
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents).eq("school_id", schoolId!);
@@ -259,13 +288,16 @@ export default function Students() {
           <p className="text-muted-foreground">{students.length} student{students.length !== 1 ? "s" : ""} registered</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }}>
+          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }} disabled={isRestricted || isSuspended}>
             <ArrowRightLeft className="mr-2 h-4 w-4" />Move Students
           </Button>
-          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }}>
+          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }} disabled={isRestricted || isSuspended}>
             Bulk Promote
           </Button>
-          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button>
+          <Button onClick={openCreate} disabled={isRestricted || isSuspended}>
+            {isRestricted || isSuspended ? <Lock className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+            Add Student
+          </Button>
         </div>
       </div>
 
@@ -319,7 +351,7 @@ export default function Students() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setShowPassword(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader><DialogTitle>{editing ? "Edit Student" : "Add New Student"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
@@ -328,7 +360,28 @@ export default function Students() {
             <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.last_name} onChange={set("last_name")} required /></div>
             <div className="space-y-1.5"><Label>Username</Label><Input value={form.username} onChange={set("username")} /></div>
             <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
-            <div className="space-y-1.5"><Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={form.password} onChange={set("password")} required={!editing} /></div>
+            <div className="space-y-1.5">
+              <Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={set("password")}
+                  required={!editing}
+                  placeholder={editing ? "Leave blank to keep current" : "Min 6 characters"}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label>Gender</Label>
               <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>

@@ -1,9 +1,10 @@
-
 -- Add 'instructor' to the app_role enum
 ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'instructor';
 
--- Create instructor_classes table (which classes an instructor is assigned to)
-CREATE TABLE public.instructor_classes (
+-- Create instructor_classes table
+-- IF NOT EXISTS added: idempotency migration creates this table too;
+-- without the guard a fresh replay crashes here.
+CREATE TABLE IF NOT EXISTS public.instructor_classes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id uuid NOT NULL,
   class_id uuid NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
@@ -13,16 +14,19 @@ CREATE TABLE public.instructor_classes (
 
 ALTER TABLE public.instructor_classes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can manage instructor_classes" ON public.instructor_classes;
 CREATE POLICY "Admins can manage instructor_classes"
   ON public.instructor_classes FOR ALL
   USING (has_role(auth.uid(), 'admin'::app_role));
 
+DROP POLICY IF EXISTS "Instructors can view own classes" ON public.instructor_classes;
 CREATE POLICY "Instructors can view own classes"
   ON public.instructor_classes FOR SELECT
   USING (auth.uid() = instructor_id);
 
 -- Create instructor_permissions table
-CREATE TABLE public.instructor_permissions (
+-- IF NOT EXISTS added: same reason as above.
+CREATE TABLE IF NOT EXISTS public.instructor_permissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   instructor_id uuid NOT NULL UNIQUE,
   can_manage_exams boolean NOT NULL DEFAULT false,
@@ -35,10 +39,12 @@ CREATE TABLE public.instructor_permissions (
 
 ALTER TABLE public.instructor_permissions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can manage instructor_permissions" ON public.instructor_permissions;
 CREATE POLICY "Admins can manage instructor_permissions"
   ON public.instructor_permissions FOR ALL
   USING (has_role(auth.uid(), 'admin'::app_role));
 
+DROP POLICY IF EXISTS "Instructors can view own permissions" ON public.instructor_permissions;
 CREATE POLICY "Instructors can view own permissions"
   ON public.instructor_permissions FOR SELECT
   USING (auth.uid() = instructor_id);

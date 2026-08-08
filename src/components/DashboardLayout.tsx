@@ -1,14 +1,18 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
 import {
-  GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
+  GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
-import { supabase } from "@/integrations/supabase/client";
+import SubscriptionBanner from "@/components/SubscriptionBanner";
+import SubscriptionGuard from "@/components/SubscriptionGuard";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
@@ -19,18 +23,18 @@ const adminLinks = [
   { to: "/admin/students", label: "Students", icon: Users, group: "People" },
   { to: "/admin/instructors", label: "Instructors", icon: UserCheck, group: "People" },
   { to: "/admin/parents", label: "Parents", icon: Heart, group: "People" },
-  { to: "/admin/exams", label: "Exams", icon: FileText, group: "Assessment" },
   { to: "/admin/results", label: "Results", icon: BarChart3, group: "Assessment" },
   { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
+  { to: "/admin/report-cards", label: "Report Cards", icon: ClipboardList, group: "Assessment" },
   { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
   { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
+  { to: "/admin/debtors", label: "Defaulters", icon: AlertTriangle, group: "Records" },
   { to: "/admin/announcements", label: "Announcements", icon: Megaphone, group: "Records" },
   { to: "/admin/settings", label: "Settings", icon: Settings, group: "System" },
 ];
 
 const studentLinks = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard, group: "" },
-  { to: "/student/exams", label: "My Exams", icon: ClipboardList, group: "" },
   { to: "/student/results", label: "My Results", icon: BarChart3, group: "" },
 ];
 
@@ -55,41 +59,54 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { role, signOut, user } = useAuth();
+  const { role, signOut, user, schoolId, schoolSlug } = useAuth();
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
+  const { cbtLink } = useSchoolCbtLink();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [instructorLinks, setInstructorLinks] = useState<NavItem[]>([]);
 
-  useEffect(() => {
-    if (role !== "instructor" || !user) return;
-    const loadPerms = async () => {
-      const { data } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
-      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
-      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen, group: "Academic" });
-      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText, group: "Academic" });
-      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock, group: "Academic" });
-      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
-      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award, group: "Assessment" });
-      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users, group: "People" });
-      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare, group: "Records" });
-      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
-      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone, group: "Records" });
-      setInstructorLinks(links);
-    };
-    loadPerms();
-  }, [role, user]);
+  const {
+    permissions: instrPerms,
+    isSubjectInstructor,
+    isClassInstructor,
+  } = useInstructorPermissions();
+
+  const instructorLinks: NavItem[] = (() => {
+    if (role !== "instructor") return [];
+    const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
+
+    const hasSubjectAccess = isSubjectInstructor || instrPerms?.can_manage_subjects || instrPerms?.can_manage_exams || instrPerms?.can_manage_grades;
+    if (hasSubjectAccess) {
+      links.push({ to: "/instructor/subjects", label: "Subjects",  icon: BookOpen,  group: "Academic"   });
+      links.push({ to: "/instructor/grades",   label: "Grades",    icon: Award,     group: "Assessment" });
+      links.push({ to: "/instructor/results",  label: "Results",   icon: BarChart3, group: "Assessment" });
+    }
+
+    const hasClassAccess = isClassInstructor || instrPerms?.can_mark_attendance || instrPerms?.can_post_announcements || instrPerms?.can_manage_students;
+    if (hasClassAccess) {
+      links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
+      links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone,   group: "Records" });
+      links.push({ to: "/instructor/students",      label: "Students",      icon: Users,       group: "People"  });
+    }
+
+    if (instrPerms?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock,      group: "Academic" });
+    if (instrPerms?.can_view_results && !hasSubjectAccess) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
+    if (instrPerms?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
+
+    const seen = new Set<string>();
+    return links.filter(l => { if (seen.has(l.to)) return false; seen.add(l.to); return true; });
+  })();
 
   const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
 
   const handleSignOut = async () => {
+    const redirectTo = schoolSlug ? `/school/${schoolSlug}` : "/";
     await signOut();
-    navigate("/");
+    navigate(redirectTo);
   };
 
-  // Group links for admin/instructor
   const grouped = links.reduce((acc, link) => {
     const g = link.group || "";
     if (!acc[g]) acc[g] = [];
@@ -101,21 +118,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="flex min-h-screen bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="flex h-screen overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — on mobile, only mounted when open (prevents idle fixed layer that
+          caused black-noise artifacts on Android Chrome). Desktop sidebar is always mounted. */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300 lg:static lg:translate-x-0",
+        "z-50 flex w-64 flex-col",
+        "lg:static lg:flex lg:h-full lg:shrink-0 lg:translate-x-0",
         "bg-[#13131a] text-white",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        sidebarOpen
+          ? "fixed inset-y-0 left-0 translate-x-0 transition-transform duration-300"
+          : "hidden lg:flex"
       )}>
 
         {/* Header */}
@@ -179,6 +200,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           ))}
+
+          {/* External CBT Portal button — shown if school has configured a CBT link */}
+          {cbtLink && (
+            <div className="pt-2 border-t border-white/5">
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                External
+              </p>
+              <a
+                href={cbtLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all group"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
+                <span className="truncate">{schoolName || "Academia HQ"}</span>
+              </a>
+            </div>
+          )}
         </nav>
 
         {/* Footer */}
@@ -202,10 +242,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
 
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white/80 dark:bg-[#13131a]/80 backdrop-blur-xl px-4 py-3 lg:px-6">
+        <header className="shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
           <button
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
             onClick={() => setSidebarOpen(true)}
@@ -213,21 +253,35 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Menu className="h-4 w-4" />
           </button>
 
-          {/* Page title from current route */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">
               {links.find(l => l.to === location.pathname)?.label || "Dashboard"}
             </p>
           </div>
 
-          {/* Role badge on header */}
+          {/* External CBT launch button in header (visible on mobile when sidebar is closed) */}
+          {cbtLink && (
+            <a
+              href={cbtLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {schoolName || "Academia HQ"}
+            </a>
+          )}
+
           <span className={cn("hidden sm:inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize shrink-0", badgeClass)}>
             {role}
           </span>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
+          <SubscriptionGuard>
+            <SubscriptionBanner />
+            {children}
+          </SubscriptionGuard>
         </main>
       </div>
     </div>

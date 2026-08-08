@@ -1,79 +1,41 @@
+# Compare live database against GitHub migrations
 
+You asked to restore the database from the migrations stored in GitHub, but also said to "compare first." That's the right call — doing a destructive rebuild blindly could break things that are working. Here's the two-phase approach.
 
-# Add School Outreach Officer Role
+## Phase 1 — Audit (read-only, no changes)
 
-## Overview
-Add a new **"outreach_officer"** role to the platform. These are platform-level workers who refer schools to Academia. They earn per school referred, can manage and communicate with their referred schools, and have a dedicated dashboard showing their referrals and earnings.
+I'll inspect the live database and diff it against everything in `supabase/migrations/` (the same files that live in your GitHub repo, since GitHub is two-way synced with this project). Specifically I'll compare:
 
-## What Gets Built
+- **Tables** — names and columns
+- **Row Level Security policies** — names and definitions per table
+- **Database functions** — the `public.*` functions like `has_role`, `create_school_user`, `handle_new_user`, etc.
+- **Triggers** — currently the live DB reports none; migrations expect at least `on_auth_user_created` on `auth.users` and `updated_at` triggers — likely drift
+- **Enums** — `app_role` values
+- **Storage buckets** — `question-images`, `school-logo`
+- **GRANT statements** — common source of "permission denied" errors
 
-### 1. Database Changes
+I'll write the findings to `/mnt/documents/db-audit.md` and summarise in chat: what's missing, what's extra, what differs.
 
-**Add `outreach_officer` to the `app_role` enum**
-- Alter the existing `app_role` enum to include `outreach_officer`
+What I already see at a glance:
+- 27 public tables in the live DB, which lines up with the migration set.
+- One extra object: `student_list_view` (a view) — present live, may or may not be in migrations.
+- Live DB reports **zero triggers**, but migrations create several. This is suspicious and likely the real source of any bug you're chasing.
 
-**New table: `school_referrals`**
-- Tracks which outreach officer referred which school
-- Columns: `id`, `officer_id` (uuid), `school_id` (uuid), `commission_amount` (numeric), `commission_paid` (boolean), `created_at`
-- RLS: Officers see only their own referrals; Super Admins see all
+## Phase 2 — Decide based on the audit
 
-**New table: `officer_earnings`** (optional — can be derived from `school_referrals`, but a summary table simplifies queries)
-- Or we calculate earnings dynamically from `school_referrals`
+After you read the audit, you pick one of:
 
-**Update `get_all_school_users` function** to include outreach officers (currently excludes only `super_admin`)
+1. **Targeted fix** — I write a single new migration that adds only the missing pieces (e.g. recreate the triggers). Keeps all data. Lowest risk. This is almost certainly what you'll actually want.
+2. **Full wipe and rebuild** — Drop the `public` schema, then re-run every file in `supabase/migrations/` in order. You confirmed data can be wiped, but this also wipes every school, student, exam, grade, fee record, and every auth user's role mapping. Auth users themselves live in `auth.users` and would survive, but they'd lose all role/school links and be effectively locked out until re-provisioned.
 
-**Update `create_school_user` function** to support the new role (it already accepts any `app_role` text, so this should work after the enum update)
+I will **not** execute Phase 2 without you explicitly approving it after seeing the audit.
 
-### 2. Super Admin Dashboard Updates
+## Technical notes
 
-**Outreach Officers management page** (`/super-admin/outreach-officers`)
-- Create outreach officer accounts (name, email, password)
-- View list of all officers with their referral counts and total earnings
-- Set commission amount per referral
-- Assign/link schools to officers as referrals
+- Migration files in `supabase/migrations/` are the source of truth for the GitHub-tracked schema (the repo is two-way synced).
+- The audit runs via `psql` (read-only, already authenticated in this sandbox) plus parsing the migration `.sql` files. No writes.
+- A "full rebuild" cannot be done with the standard migration tool's incremental model — it requires a single migration that does `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` followed by concatenated migration contents, replayed in order. I'd prepare that for your review before running.
 
-**Add nav link** in `SuperAdminLayout` for "Outreach Officers"
+## Deliverable from this plan
 
-### 3. Outreach Officer Dashboard
-
-**New layout**: `OutreachOfficerLayout` (similar to `SuperAdminLayout` but branded for the officer role)
-
-**Login**: Officers log in via `/super-admin/login` or a new `/outreach/login` page
-
-**Dashboard page** (`/outreach`):
-- Summary cards: Total schools referred, total earnings, pending payouts
-- List of referred schools with stats (student count, status)
-- Ability to view school details
-
-**Routes and protected pages**:
-- `/outreach` — Dashboard
-- `/outreach/schools` — Manage referred schools
-- `/outreach/earnings` — Earnings breakdown
-
-### 4. Auth & Routing Updates
-
-- Add `outreach_officer` to the `AppRole` type in `auth.tsx`
-- Add `ProtectedRoute` entries for the outreach officer routes in `App.tsx`
-- Update the `ProtectedRoute` component to redirect outreach officers to their login page
-
-### 5. Fix Existing Build Errors
-
-- **Settings.tsx**: Remove duplicate imports (`useState`, `useEffect` imported twice)
-- **Announcements.tsx**: Cast the role array to the proper type
-
-## Technical Details
-
-- The `app_role` Postgres enum needs `ALTER TYPE app_role ADD VALUE 'outreach_officer'`
-- The `school_referrals` table links officers to schools with commission tracking
-- Earnings are computed as `SUM(commission_amount)` from `school_referrals` where `commission_paid = true`
-- RLS on `school_referrals`: officer sees own rows, super_admin sees all
-- The outreach officer has **no direct access** to school admin features — they only see aggregate data about their referred schools
-
-## Implementation Order
-
-1. Fix existing build errors (Settings.tsx, Announcements.tsx)
-2. Database migration: add enum value, create `school_referrals` table with RLS
-3. Create Outreach Officer layout and dashboard pages
-4. Add Super Admin management UI for outreach officers
-5. Update auth types and routing
-
+`/mnt/documents/db-audit.md` plus a chat summary of drift, ending with a recommendation (targeted fix vs full rebuild) for you to approve.
