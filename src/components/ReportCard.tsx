@@ -15,6 +15,7 @@
 // — those props still work. All new props are optional so nothing breaks.
 
 import { useRef } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
 
@@ -323,30 +324,11 @@ export default function ReportCard({
 
   const maxRows = Math.max(psychomotorFields.length, affectiveFields.length);
 
-  return (
-    <>
-      {/* ── Print button (hidden during print) ─────────────────── */}
-      {showPrintButton && (
-        <div className="flex justify-end mb-4 print:hidden">
-          <Button onClick={handlePrint} className="gap-2">
-            <Printer className="h-4 w-4" />
-            Print / Save as PDF
-          </Button>
-        </div>
-      )}
-
-      {/* ── Print styles injected inline so they travel with the component */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #report-card-print-root,
-          #report-card-print-root * { visibility: visible !important; }
-          #report-card-print-root { position: fixed; inset: 0; padding: 0; margin: 0; }
-          @page { size: A4 portrait; margin: 10mm; }
-        }
-      `}</style>
-
-      <div id="report-card-print-root" ref={printRef}>
+  // ── The actual visual card markup, built once and reused for both the
+  //    on-screen preview (which may sit inside a transformed/clipped Dialog)
+  //    and the print copy (portaled straight to <body> so it isn't affected
+  //    by any ancestor's `transform` or `overflow` — see note below). ──────
+  const cardMarkup = (
         <div style={{
           fontFamily: "'Segoe UI', Arial, sans-serif",
           backgroundColor: "white",
@@ -614,7 +596,62 @@ export default function ReportCard({
 
           </div>
         </div>
+  );
+
+  return (
+    <>
+      {/* ── Print button (hidden during print) ─────────────────── */}
+      {showPrintButton && (
+        <div className="flex justify-end mb-4 print:hidden">
+          <Button onClick={handlePrint} className="gap-2">
+            <Printer className="h-4 w-4" />
+            Print / Save as PDF
+          </Button>
+        </div>
+      )}
+
+      {/* ── Print styles injected inline so they travel with the component.
+             #report-card-print-root only exists inside the portal below,
+             which is mounted directly on document.body — NOT inside this
+             component's normal DOM position. That matters because callers
+             (e.g. the admin preview Dialog) may render <ReportCard /> inside
+             a container with `transform` (Radix Dialog uses translate-x/y to
+             center itself) and/or `overflow: auto`. A `transform` on any
+             ancestor creates a new containing block for `position: fixed`
+             descendants, so "fixed; inset:0" would resolve against that
+             small, scrollable dialog box instead of the viewport — getting
+             clipped to whatever was currently scrolled into view (this was
+             the cause of print/PDF output showing only the header and
+             nothing else). Portaling to <body> guarantees no such ancestor
+             exists between the print root and the viewport. ────────────── */}
+      <style>{`
+        #report-card-print-root { display: none; }
+        @media print {
+          body * { visibility: hidden !important; }
+          #report-card-print-root,
+          #report-card-print-root * { visibility: visible !important; }
+          #report-card-print-root {
+            display: block !important;
+            position: fixed; inset: 0; padding: 0; margin: 0;
+          }
+          @page { size: A4 portrait; margin: 10mm; }
+        }
+      `}</style>
+
+      {/* On-screen preview — renders wherever the caller placed <ReportCard />
+          (e.g. inside the admin preview Dialog). Hidden during print since
+          the portal copy below is what actually gets printed. */}
+      <div className="print:hidden" ref={printRef}>
+        {cardMarkup}
       </div>
+
+      {/* Print-only copy, portaled to <body> so `position: fixed` works
+          correctly regardless of any transformed/clipped ancestor. */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <div id="report-card-print-root">{cardMarkup}</div>,
+          document.body,
+        )}
     </>
   );
 }
