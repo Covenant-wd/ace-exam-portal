@@ -49,6 +49,36 @@ function clearCache() {
     localStorage.removeItem("ace_auth_cache_v1"); // remove legacy key if present
   } catch {}
 }
+
+// ─── Stuck-session recovery ───────────────────────────────────────────────────
+// supabase-js coordinates auth refresh across tabs using a browser Navigator
+// LockManager lock. If a tab is closed mid-refresh, or a long-idle session
+// leaves a stale/invalid refresh token in localStorage, `getSession()` can
+// hang forever waiting on that lock instead of resolving OR rejecting — so a
+// try/finally around it never runs. The user is stuck on the loading spinner
+// with no way out except manually clearing site data. We guard every "should
+// finish quickly" auth call with a timeout, and if it fires, wipe the stale
+// Supabase auth token(s) from localStorage so the next load starts clean.
+const AUTH_TIMEOUT_MS = 8000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
+function clearStaleSupabaseSession() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {}
+  clearCache();
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -105,16 +135,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── 1. Initialise from the persisted Supabase session ─────────────────
     (async () => {
       try {
-        const { data: { session: s } } = await supabase.auth.getSession();
+        let s;
+        try {
+          const result = await withTimeout(
+            supabase.auth.getSession(),
+            AUTH_TIMEOUT_MS,
+            "getSession()"
+          );
+          s = result.data.session;
+        } catch (err) {
+          // getSession() hung (stuck lock) or rejected (invalid/corrupted
+          // refresh token). Either way, the stored session can't be trusted —
+          // wipe it and fall through to a logged-out state instead of leaving
+          // the person stuck on the spinner forever.
+          console.warn("Auth session restore failed, clearing stale session:", err);
+          clearStaleSupabaseSession();
+          s = null;
+        }
         if (!alive) return;
 
-        setSession(s);
+        setSession(s ?? null);
         setUser(s?.user ?? null);
 
         if (s?.user) {
           // Only hit the DB if we don't already have this user's role cached.
           if (fetchedForRef.current !== s.user.id) {
-            await fetchRole(s.user.id);
+            try {
+              await withTimeout(fetchRole(s.user.id), AUTH_TIMEOUT_MS, "fetchRole()");
+            } catch (err) {
+              // Role fetch hung/failed — don't block the app forever; let it
+              // render with role null (route guards will redirect as needed).
+              console.warn("Role fetch failed or timed out:", err);
+            }
           }
         } else {
           setRole(null);
@@ -175,8 +227,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (newSession?.user) {
           // New user we haven't seen — fetch role with loading indicator.
           setLoading(true);
-          await fetchRole(newSession.user.id);
-          if (alive) setLoading(false);
+          try {
+            await withTimeout(fetchRole(newSession.user.id), AUTH_TIMEOUT_MS, "fetchRole()");
+          } catch (err) {
+            console.warn("Role fetch failed or timed out:", err);
+          } finally {
+            if (alive) setLoading(false);
+          }
         } else {
           // Signed out
           setRole(null);
