@@ -192,7 +192,16 @@ export default function SuperAdminRegistrationRequests() {
       );
 
       if (approveError) {
-        const msg = (approveError as any)?.context?.error || approveError?.message || "Approval failed";
+        let msg = approveError?.message || "Approval failed";
+        try {
+          const ctx = (approveError as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {
+          // context wasn't valid JSON (or already consumed) — fall back to approveError.message
+        }
         throw new Error(msg);
       }
 
@@ -238,7 +247,18 @@ export default function SuperAdminRegistrationRequests() {
       );
 
       if (rejectError) {
-        const msg = (rejectError as any)?.context?.error || rejectError?.message || "Rejection failed";
+        let msg = rejectError?.message || "Rejection failed";
+        // supabase-js puts the raw fetch Response on `.context` for FunctionsHttpError,
+        // not a parsed body — so we have to read it ourselves to get the real error text.
+        try {
+          const ctx = (rejectError as any)?.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {
+          // context wasn't valid JSON (or already consumed) — fall back to rejectError.message
+        }
         throw new Error(msg);
       }
 
