@@ -282,7 +282,7 @@ export default function SchoolRegistration() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="website">School Website</Label>
+                    <Label htmlFor="website">School Website (optional)</Label>
                     <Input id="website" name="website" type="url" value={formData.website} onChange={handleChange} placeholder="https://yourschool.com" />
                   </div>
 
