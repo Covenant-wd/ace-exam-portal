@@ -1,3 +1,4 @@
+// src/components/DashboardLayout.tsx
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -8,7 +9,7 @@ import {
   CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
   ExternalLink,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getFullName, isPlaceholderEmail } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import SubscriptionGuard from "@/components/SubscriptionGuard";
@@ -225,10 +226,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="border-t border-white/5 p-3">
           <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-1">
             <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white", gradientClass)}>
-              {user?.email?.charAt(0).toUpperCase()}
+              {(getFullName(user) || user?.email || "?").charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-white/60 truncate">{user?.email}</p>
+              <p className="text-xs text-white/80 font-medium truncate">{getFullName(user) || "My Account"}</p>
+              {user?.email && !isPlaceholderEmail(user.email) && (
+                <p className="text-[11px] text-white/50 truncate">{user.email}</p>
+              )}
             </div>
           </div>
           <button
