@@ -1,3 +1,4 @@
+// src/pages/admin/Students.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { isPlaceholderEmail } from "@/lib/utils";
 
 
 interface Student {
@@ -128,7 +130,7 @@ export default function Students() {
   const openEdit = (s: Student) => {
     setEditing(s);
     setForm({
-      email: s.email, password: "",
+      email: isPlaceholderEmail(s.email) ? "" : s.email, password: "",
       first_name: s.first_name || "", middle_name: s.middle_name || "",
       last_name: s.last_name || "", username: s.username || "",
       class_id: s.class_id || "", date_of_birth: s.date_of_birth || "",
@@ -142,7 +144,11 @@ export default function Students() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canAddStudent()) return;
-    if (!form.first_name || !form.last_name || !form.email) { toast.error("First name, last name and email are required"); return; }
+    if (!form.first_name || !form.last_name) { toast.error("First name and last name are required"); return; }
+    if (!form.email.trim() && !form.username.trim()) {
+      toast.error("Provide an email or a username so the student can sign in");
+      return;
+    }
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
     const subjects = form.subjects_offered.split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -158,7 +164,10 @@ export default function Students() {
         const { error: rpcError } = await supabase.rpc("update_school_user", {
           _caller_id:       callerUser.id,
           _user_id:         editing.user_id,
-          _email:           form.email           || null,
+          // Fall back to the existing email if the field was left blank —
+          // clearing an existing student's email isn't supported here yet,
+          // only skipping it is supported at registration time.
+          _email:           form.email.trim()    || editing.email || null,
           _password:        form.password         || null,
           _first_name:      form.first_name       || null,
           _middle_name:     form.middle_name      || "",
@@ -194,7 +203,7 @@ export default function Students() {
         toast.success("Student updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
-          _email:     form.email.trim().toLowerCase(),
+          _email:     form.email.trim() ? form.email.trim().toLowerCase() : null,
           _password:  form.password,
           _full_name: fullName,
           _role:      "student",
@@ -217,8 +226,9 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
         toast.success("Student created");
-        // FIX: Gate behind notify_welcome_email setting (was unconditional before)
-        isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+        // Only attempt a welcome email when a real address was provided —
+        // students registered without one sign in with username + password.
+        if (form.email.trim()) isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
           if (!enabled) return;
           sendStudentWelcomeEmail({
             to: form.email.trim().toLowerCase(),
@@ -333,7 +343,7 @@ export default function Students() {
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="font-medium">{s.full_name || "—"}</TableCell>
                     <TableCell>{s.username || "—"}</TableCell>
-                    <TableCell>{s.email}</TableCell>
+                    <TableCell>{isPlaceholderEmail(s.email) ? <span className="text-muted-foreground">No email</span> : s.email}</TableCell>
                     <TableCell>{s.gender || "—"}</TableCell>
                     <TableCell><Badge variant="secondary">{getClassName(s.class_id)}</Badge></TableCell>
                     <TableCell>{s.nationality || "—"}</TableCell>
@@ -358,8 +368,17 @@ export default function Students() {
             <div className="space-y-1.5"><Label>First Name *</Label><Input value={form.first_name} onChange={set("first_name")} required /></div>
             <div className="space-y-1.5"><Label>Middle Name</Label><Input value={form.middle_name} onChange={set("middle_name")} /></div>
             <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.last_name} onChange={set("last_name")} required /></div>
-            <div className="space-y-1.5"><Label>Username</Label><Input value={form.username} onChange={set("username")} /></div>
-            <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
+            <div className="space-y-1.5">
+              <Label>Username{!form.email.trim() && " *"}</Label>
+              <Input value={form.username} onChange={set("username")} required={!form.email.trim()} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email (optional)</Label>
+              <Input type="email" value={form.email} onChange={set("email")} placeholder="Leave blank to use username-only login" />
+              {!form.email.trim() && (
+                <p className="text-xs text-muted-foreground">No email? The student will sign in with just their username and password.</p>
+              )}
+            </div>
             <div className="space-y-1.5">
               <Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label>
               <div className="relative">
