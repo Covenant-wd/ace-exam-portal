@@ -62,7 +62,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-tight">Academia</h1>
+            <h1 className="font-bold text-lg leading-tight">Academia HQ</h1>
             <p className="text-xs opacity-80">Super Admin</p>
           </div>
         </div>
