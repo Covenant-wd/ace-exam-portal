@@ -1,3 +1,4 @@
+// src/pages/instructor/InstructorDashboard.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -10,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useInstructorRoles } from "@/hooks/useInstructorRoles";
 import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
+import { getFirstName } from "@/lib/utils";
 
 const permLabels: Record<string, { label: string; icon: any; to: string; color: string }> = {
   can_view_results:       { label: "View Results",     icon: BarChart3,   to: "/instructor/results",      color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
@@ -81,7 +83,7 @@ export default function InstructorDashboard() {
       <div className="rounded-2xl bg-gradient-to-br from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Instructor Dashboard</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, {getFirstName(user)}</h1>
             <p className="text-white/70 text-sm mt-1">
               {subjectCount > 0 && `${subjectCount} subject${subjectCount > 1 ? "s" : ""}`}
               {subjectCount > 0 && classCount > 0 && " · "}
