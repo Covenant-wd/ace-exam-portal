@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff, Download } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
@@ -57,6 +57,7 @@ export default function Students() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState<string>("all");
   const [showPassword, setShowPassword] = useState(false);
 
   // Promotion state
@@ -283,10 +284,49 @@ export default function Students() {
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }));
 
-  const filtered = students.filter(s => {
-    const q = search.toLowerCase();
-    return !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
-  });
+  const filtered = students
+    .filter(s => {
+      const q = search.toLowerCase();
+      const matchesSearch = !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
+      const matchesClass = classFilter === "all" || s.class_id === classFilter;
+      return matchesSearch && matchesClass;
+    })
+    .sort((a, b) => {
+      // Group by class name first (so "All Classes" view is easy to scan),
+      // then alphabetically by name within each class.
+      const classCompare = getClassName(a.class_id).localeCompare(getClassName(b.class_id));
+      if (classCompare !== 0) return classCompare;
+      return (a.full_name || "").localeCompare(b.full_name || "");
+    });
+
+  const handleDownload = () => {
+    if (filtered.length === 0) { toast.error("No students to download"); return; }
+    const headers = ["Name", "Username", "Class", "Email", "Gender", "Nationality", "Date of Birth", "Parent's Name", "Address", "Subjects Offered"];
+    const escapeCsv = (val: string) => `"${(val ?? "").toString().replace(/"/g, '""')}"`;
+    const rows = filtered.map(s => [
+      s.full_name || "",
+      s.username || "",
+      getClassName(s.class_id),
+      isPlaceholderEmail(s.email) ? "" : (s.email || ""),
+      s.gender || "",
+      s.nationality || "",
+      s.date_of_birth || "",
+      s.parent_name || "",
+      s.address || "",
+      (s.subjects_offered || []).join("; "),
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const classLabel = classFilter === "all" ? "all-classes" : getClassName(classFilter).replace(/\s+/g, "-").toLowerCase();
+    link.href = url;
+    link.download = `students-${classLabel}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
@@ -313,9 +353,23 @@ export default function Students() {
 
       <Card className="border-0 shadow-md">
         <CardHeader className="pb-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by class" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes</SelectItem>
+                  {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              <Download className="mr-2 h-4 w-4" />Download ({filtered.length})
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
