@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff, Download } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff, Download, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
@@ -70,6 +70,12 @@ export default function Students() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [moveToClass, setMoveToClass] = useState("");
+
+  // Delete state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState<Student | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [delSaving, setDelSaving] = useState(false);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -277,6 +283,30 @@ export default function Students() {
     fetchStudents();
   };
 
+  const openDelete = (s: Student) => {
+    setDeleting(s);
+    setDeleteConfirm("");
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    if (deleteConfirm !== deleting.full_name) {
+      toast.error("Name does not match");
+      return;
+    }
+    setDelSaving(true);
+    const { error } = await supabase.rpc("delete_school_user", {
+      _user_id: deleting.user_id,
+    } as any);
+    setDelSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Student permanently deleted");
+    setStudents(prev => prev.filter(s => s.user_id !== deleting.user_id));
+    setDeleteOpen(false);
+    setDeleting(null);
+  };
+
   const toggleStudentSelect = (userId: string) => {
     setSelectedStudents((prev) => prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]);
   };
@@ -404,6 +434,9 @@ export default function Students() {
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         <Pencil className="mr-1 h-3.5 w-3.5" />Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => openDelete(s)}>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />Delete
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -541,6 +574,45 @@ export default function Students() {
             <Button onClick={handleMoveStudents} className="w-full" disabled={saving || selectedStudents.length === 0}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Move {selectedStudents.length} Student(s)
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleting(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Permanently Delete Student</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-1">
+              <p className="font-semibold text-sm">{deleting?.full_name}</p>
+              <p className="text-xs text-muted-foreground">{deleting?.username ? `@${deleting.username}` : (isPlaceholderEmail(deleting?.email || "") ? "No email" : deleting?.email)}</p>
+              <Badge variant="secondary" className="mt-1">{getClassName(deleting?.class_id ?? null)}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This will <strong>permanently delete</strong> this student and all their data including attendance, grades, results and payments. This action <strong>cannot be undone</strong>.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Type the student's full name to confirm</Label>
+              <Input
+                placeholder={deleting?.full_name}
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleDelete}
+                disabled={delSaving || deleteConfirm !== deleting?.full_name}
+              >
+                {delSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete Permanently
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
