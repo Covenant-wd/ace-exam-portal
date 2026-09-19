@@ -673,7 +673,14 @@ function HomePage() {
               <span className={`text-sm font-bold ${txt}`}>Academia <span className="text-blue-600">HQ</span></span>
             </div>
             <p className={`text-sm ${isDark ? "text-white/30" : "text-gray-400"}`}>Complete School Management System — CBT, Grades, Fees, Attendance &amp; More</p>
-            <p className={`text-xs ${isDark ? "text-white/20" : "text-gray-300"}`}>© {new Date().getFullYear()} Academia HQ. All rights reserved.</p>
+            <div className="flex flex-col items-center gap-1.5 md:items-end">
+              <p className={`text-xs ${isDark ? "text-white/20" : "text-gray-300"}`}>© {new Date().getFullYear()} Academia HQ. All rights reserved.</p>
+              <div className="flex items-center gap-3 text-xs">
+                <Link to="/privacy-policy" className={`transition-colors ${isDark ? "text-white/40 hover:text-white/70" : "text-gray-500 hover:text-gray-800"}`}>Privacy Policy</Link>
+                <span className={isDark ? "text-white/20" : "text-gray-300"} aria-hidden="true">·</span>
+                <Link to="/terms-and-conditions" className={`transition-colors ${isDark ? "text-white/40 hover:text-white/70" : "text-gray-500 hover:text-gray-800"}`}>Terms &amp; Conditions</Link>
+              </div>
+            </div>
           </div>
         </div>
       </footer>

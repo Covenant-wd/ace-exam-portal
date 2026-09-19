@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import {
   Loader2, GraduationCap, CheckCircle2, AlertCircle,
   XCircle, Clock, Search, ArrowLeft,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { LEGAL_VERSION } from "@/lib/legalContent";
 
 // ── Status check helper ───────────────────────────────────────────────────────
 const STATUS_CONFIG = {
@@ -46,6 +48,9 @@ export default function SchoolRegistration() {
     website: "",
   });
 
+  // The school must accept the Terms and Privacy Policy before it can submit
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
+
   // Status check state
   const [statusEmail, setStatusEmail] = useState("");
   const [statusLoading, setStatusLoading] = useState(false);
@@ -64,6 +69,12 @@ export default function SchoolRegistration() {
     try {
       if (!formData.email.trim() || !formData.school_name.trim() || !formData.contact_person.trim()) {
         toast.error("Please fill in all required fields");
+        setLoading(false);
+        return;
+      }
+
+      if (!acceptedLegal) {
+        toast.error("Please accept the Terms and Conditions and Privacy Policy to continue");
         setLoading(false);
         return;
       }
@@ -100,6 +111,9 @@ export default function SchoolRegistration() {
           address: formData.address?.trim() || null,
           website: formData.website?.trim() || null,
           status: "pending",
+          // Proof of consent — the database rejects registrations without these
+          terms_accepted_at: new Date().toISOString(),
+          legal_version: LEGAL_VERSION,
         });
         // NOTE: No .select() here — the SELECT RLS policies block unauthenticated
         // users from reading back rows. PostgREST translates .select() into an
@@ -132,6 +146,7 @@ export default function SchoolRegistration() {
         });
 
       toast.success("Registration submitted successfully! We'll review your application within 24–48 hours.");
+      setAcceptedLegal(false);
       setStep("success");
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -291,13 +306,43 @@ export default function SchoolRegistration() {
                     <p>Once approved, you'll receive login credentials to start configuring your school dashboard.</p>
                   </div>
 
-                  <Button type="submit" disabled={loading} className="w-full" size="lg">
+                  <div className="flex items-start gap-3 rounded-lg border p-3">
+                    <Checkbox
+                      id="accept_legal"
+                      checked={acceptedLegal}
+                      onCheckedChange={(checked) => setAcceptedLegal(checked === true)}
+                      aria-required="true"
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="accept_legal" className="text-sm font-normal leading-snug cursor-pointer">
+                        I have read and agree to the{" "}
+                        <Link
+                          to="/terms-and-conditions"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-primary underline underline-offset-2"
+                        >
+                          Terms and Conditions
+                        </Link>{" "}
+                        and the{" "}
+                        <Link
+                          to="/privacy-policy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-primary underline underline-offset-2"
+                        >
+                          Privacy Policy
+                        </Link>{" "}
+                        on behalf of my school. <span className="text-destructive">*</span>
+                      </Label>
+                      <p className="text-xs text-muted-foreground">Opens in a new tab, so you won't lose your form.</p>
+                    </div>
+                  </div>
+
+                  <Button type="submit" disabled={loading || !acceptedLegal} className="w-full" size="lg">
                     {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</> : "Submit Registration"}
                   </Button>
-
-                  <p className="text-center text-xs text-muted-foreground">
-                    By registering, you agree to our Terms of Service and Privacy Policy
-                  </p>
                 </form>
               </TabsContent>
 
