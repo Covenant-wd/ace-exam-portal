@@ -21,6 +21,8 @@ const SuperAdminSubscriptions = lazy(() => import("./pages/super-admin/SuperAdmi
 const ImplementationRequests = lazy(() => import("./pages/super-admin/ImplementationRequests"));
 const SuperAdminRegistrationRequests = lazy(() => import("./pages/super-admin/SuperAdminRegistrationRequests"));
 const SchoolRegistration = lazy(() => import("./pages/SchoolRegistration"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsAndConditions = lazy(() => import("./pages/TermsAndConditions"));
 const OutreachLogin = lazy(() => import("./pages/outreach/OutreachLogin"));
 const OutreachDashboard = lazy(() => import("./pages/outreach/OutreachDashboard"));
 const OutreachSchools = lazy(() => import("./pages/outreach/OutreachSchools"));
@@ -107,6 +109,12 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<Index />} />
+
+        {/* Public legal pages (must stay above the /:slug catch-all) */}
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+        <Route path="/privacy" element={<Navigate to="/privacy-policy" replace />} />
+        <Route path="/terms" element={<Navigate to="/terms-and-conditions" replace />} />
 
         {/* School-specific login */}
         <Route path="/school/:slug" element={<SchoolLogin />} />
