@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { sendAbsentNotificationEmail } from "@/lib/email";
+import { sendAbsentNotificationEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,6 +25,7 @@ const statusConfig: Record<AttendanceStatus, { label: string; icon: any; color: 
 
 export default function Attendance() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
@@ -120,33 +122,64 @@ export default function Attendance() {
       if (error) throw error;
       toast.success("Attendance saved successfully");
       setExistingRecords(true);
-      // Send absent notifications to parents
+      // Send absent notifications to parents (if enabled)
       try {
+        const notifEnabled = await isNotificationEnabled(schoolId!, "notify_attendance_absent");
+        if (!notifEnabled) throw new Error("skip");
         const absentStudents = Array.from(records.values()).filter(r => r.status === "absent");
-        for (const absent of absentStudents) {
-          const { data: parentLinks } = await supabase.from("parent_students").select("parent_id").eq("student_id", absent.student_id);
-          if (!parentLinks || parentLinks.length === 0) continue;
-          const parentIds = parentLinks.map((p: any) => p.parent_id);
-          const { data: parentEmailRows } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
-          const parentEmails = (parentEmailRows || []).map((r: any) => r.email).filter(Boolean);
-          if (parentEmails.length === 0) continue;
-          const studentProfile = students.find(s => s.user_id === absent.student_id);
-          const className = classes.find(c => c.id === selectedClass)?.name || "";
-          // Get parent names
-          const { data: parentProfiles } = await supabase.from("profiles").select("full_name").in("user_id", parentIds);
-          const parentName = parentProfiles?.[0]?.full_name || "Parent";
-          if (studentProfile) {
-            await sendAbsentNotificationEmail({
-              to: parentEmails,
-              parentName,
-              studentName: studentProfile.full_name,
-              schoolName: document.title || "School",
-              className,
-              date: selectedDate,
-              loginUrl: window.location.origin,
-            });
-          }
+        const className = classes.find(c => c.id === selectedClass)?.name || "";
+        const resolvedSchoolName = schoolName || document.title || "School";
+        // BUG FIX: Collect all student IDs and fetch parent data in bulk instead of
+        // sequential per-student await calls (which time out for large classes)
+        const absentStudentIds = absentStudents.map(a => a.student_id);
+        if (absentStudentIds.length === 0) throw new Error("skip");
+        const [parentLinksRes, parentProfilesRes] = await Promise.all([
+          supabase.from("parent_students").select("parent_id, student_id").in("student_id", absentStudentIds),
+          supabase.from("profiles").select("user_id, full_name").in("user_id",
+            // We'll refetch with actual parent IDs below — placeholder for the structure
+            absentStudentIds
+          ),
+        ]);
+        // Group parent IDs by student
+        const studentParentMap = new Map<string, string[]>();
+        for (const link of (parentLinksRes.data || [])) {
+          if (!studentParentMap.has(link.student_id)) studentParentMap.set(link.student_id, []);
+          studentParentMap.get(link.student_id)!.push(link.parent_id);
         }
+        // Fetch all unique parent emails in one RPC call
+        const allParentIds = [...new Set((parentLinksRes.data || []).map((l: any) => l.parent_id))];
+        const [parentEmailRows, parentProfileRows] = allParentIds.length > 0
+          ? await Promise.all([
+              supabase.rpc("get_user_emails_by_ids", { _user_ids: allParentIds }),
+              supabase.from("profiles").select("user_id, full_name").in("user_id", allParentIds),
+            ])
+          : [{ data: [] }, { data: [] }];
+        const parentEmailMap = new Map<string, string>();
+        for (const r of (parentEmailRows.data || [])) {
+          if (r.email) parentEmailMap.set(r.user_id, r.email);
+        }
+        const parentNameMap = new Map<string, string>();
+        for (const r of (parentProfileRows.data || [])) {
+          parentNameMap.set(r.user_id, r.full_name);
+        }
+        // Send all emails in parallel
+        await Promise.all(absentStudents.map(async (absent) => {
+          const studentProfile = students.find(s => s.user_id === absent.student_id);
+          if (!studentProfile) return;
+          const parentIds = studentParentMap.get(absent.student_id) || [];
+          const emails = parentIds.map(pid => parentEmailMap.get(pid)).filter(Boolean) as string[];
+          if (emails.length === 0) return;
+          const parentName = parentIds.length > 0 ? (parentNameMap.get(parentIds[0]) || "Parent") : "Parent";
+          await sendAbsentNotificationEmail({
+            to: emails,
+            parentName,
+            studentName: studentProfile.full_name,
+            schoolName: resolvedSchoolName,
+            className,
+            date: selectedDate,
+            loginUrl: window.location.origin,
+          });
+        }));
       } catch {}
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);

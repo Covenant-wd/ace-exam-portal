@@ -14,13 +14,19 @@ export default function OutreachSchools() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
-        .from("school_referrals")
-        .select("*, schools(name, slug, created_at)")
-        .eq("officer_id", user.id)
-        .order("created_at", { ascending: false });
-      setReferrals((data as any[]) || []);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from("school_referrals")
+          .select("*, schools(name, slug, created_at)")
+          .eq("officer_id", user.id)
+          .order("created_at", { ascending: false });
+        if (error) console.error("Schools referrals error:", error);
+        setReferrals((data as any[]) || []);
+      } catch (err: any) {
+        console.error("OutreachSchools load error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [user]);

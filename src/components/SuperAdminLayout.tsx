@@ -1,14 +1,18 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, LogOut, Menu, School, ShieldCheck, Users, Briefcase } from "lucide-react";
+import { LogOut, Menu, School, ShieldCheck, Users, Briefcase, CreditCard, ClipboardList, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const links = [
-  { to: "/super-admin", label: "Schools", icon: School },
-  { to: "/super-admin/users", label: "All Users", icon: Users },
-  { to: "/super-admin/outreach-officers", label: "Outreach Officers", icon: Briefcase },
+  { to: "/super-admin",                             label: "Schools",                  icon: School,          badgeKey: null              },
+  { to: "/super-admin/registration-requests",       label: "Registration Requests",    icon: ClipboardCheck,  badgeKey: "registrations"   },
+  { to: "/super-admin/subscriptions",               label: "Payment History",          icon: CreditCard,      badgeKey: null              },
+  { to: "/super-admin/users",                       label: "All Users",                icon: Users,           badgeKey: null              },
+  { to: "/super-admin/outreach-officers",           label: "Outreach Officers",        icon: Briefcase,       badgeKey: null              },
+  { to: "/super-admin/implementation-requests",     label: "Implementation Requests",  icon: ClipboardList,   badgeKey: null              },
 ];
 
 export default function SuperAdminLayout({ children }: { children: ReactNode }) {
@@ -16,6 +20,25 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingRegistrations, setPendingRegistrations] = useState(0);
+
+  useEffect(() => {
+    async function fetchPendingCount() {
+      const { count } = await (supabase as any)
+        .from("school_registration_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (count !== null) setPendingRegistrations(count);
+    }
+    fetchPendingCount();
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchPendingCount, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const badgeCounts: Record<string, number> = {
+    registrations: pendingRegistrations,
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -23,9 +46,9 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
@@ -39,7 +62,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="font-bold text-lg leading-tight">Academia</h1>
+            <h1 className="font-bold text-lg leading-tight">Academia HQ</h1>
             <p className="text-xs opacity-80">Super Admin</p>
           </div>
         </div>
@@ -47,6 +70,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
         <nav className="flex-1 space-y-1 px-3 py-4">
           {links.map((link) => {
             const active = location.pathname === link.to;
+            const badgeCount = link.badgeKey ? (badgeCounts[link.badgeKey] ?? 0) : 0;
             return (
               <Link
                 key={link.to}
@@ -59,8 +83,13 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 )}
               >
-                <link.icon className="h-4 w-4" />
-                {link.label}
+                <link.icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1">{link.label}</span>
+                {badgeCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                    {badgeCount}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -80,14 +109,14 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex items-center gap-4 border-b bg-card px-4 py-3 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1" />
         </header>
-        <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );
