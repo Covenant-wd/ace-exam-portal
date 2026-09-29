@@ -1,5 +1,6 @@
-
 -- Instructors with can_view_results can see exam_attempts for students in their assigned classes
+-- DROP IF EXISTS added: without it, re-running crashes with "policy already exists".
+DROP POLICY IF EXISTS "Instructors can view assigned class attempts" ON public.exam_attempts;
 CREATE POLICY "Instructors can view assigned class attempts"
 ON public.exam_attempts FOR SELECT
 TO authenticated
@@ -15,6 +16,7 @@ USING (
 );
 
 -- Instructors with can_view_results can see student_answers for students in their assigned classes
+DROP POLICY IF EXISTS "Instructors can view assigned class answers" ON public.student_answers;
 CREATE POLICY "Instructors can view assigned class answers"
 ON public.student_answers FOR SELECT
 TO authenticated

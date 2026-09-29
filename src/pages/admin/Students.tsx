@@ -1,3 +1,4 @@
+// src/pages/admin/Students.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,8 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
+import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft, Lock, Eye, EyeOff, Download, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useSubscription } from "@/hooks/useSubscription";
+import { sendStudentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { isPlaceholderEmail } from "@/lib/utils";
 
 
 interface Student {
@@ -42,6 +47,8 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
+  const { canAddStudent, isRestricted, isSuspended } = useSubscription();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,6 +57,8 @@ export default function Students() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState<string>("all");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Promotion state
   const [promoOpen, setPromoOpen] = useState(false);
@@ -61,6 +70,12 @@ export default function Students() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [moveToClass, setMoveToClass] = useState("");
+
+  // Delete state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState<Student | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [delSaving, setDelSaving] = useState(false);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -122,7 +137,7 @@ export default function Students() {
   const openEdit = (s: Student) => {
     setEditing(s);
     setForm({
-      email: s.email, password: "",
+      email: isPlaceholderEmail(s.email) ? "" : s.email, password: "",
       first_name: s.first_name || "", middle_name: s.middle_name || "",
       last_name: s.last_name || "", username: s.username || "",
       class_id: s.class_id || "", date_of_birth: s.date_of_birth || "",
@@ -135,7 +150,12 @@ export default function Students() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.first_name || !form.last_name || !form.email) { toast.error("First name, last name and email are required"); return; }
+    if (!canAddStudent()) return;
+    if (!form.first_name || !form.last_name) { toast.error("First name and last name are required"); return; }
+    if (!form.email.trim() && !form.username.trim()) {
+      toast.error("Provide an email or a username so the student can sign in");
+      return;
+    }
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
     const subjects = form.subjects_offered.split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -143,21 +163,32 @@ export default function Students() {
 
     try {
       if (editing) {
-        const { error } = await supabase.from("profiles").update({
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
-          subjects_offered: subjects,
-        }).eq("user_id", editing.user_id);
-        if (error) throw error;
+        // Use update_school_user() SQL RPC — bypasses the edge function entirely
+        // so it works even when the edge function is not deployed / unreachable.
+        const { data: { user: callerUser } } = await supabase.auth.getUser();
+        if (!callerUser) throw new Error("Not authenticated");
+
+        const { error: rpcError } = await supabase.rpc("update_school_user", {
+          _caller_id:       callerUser.id,
+          _user_id:         editing.user_id,
+          // Fall back to the existing email if the field was left blank —
+          // clearing an existing student's email isn't supported here yet,
+          // only skipping it is supported at registration time.
+          _email:           form.email.trim()    || editing.email || null,
+          _password:        form.password         || null,
+          _first_name:      form.first_name       || null,
+          _middle_name:     form.middle_name      || "",
+          _last_name:       form.last_name        || null,
+          _username:        form.username         || null,
+          _class_id:        form.class_id         || null,
+          _date_of_birth:   form.date_of_birth    || null,
+          _address:         form.address          || "",
+          _parent_name:     form.parent_name      || "",
+          _nationality:     form.nationality      || "",
+          _gender:          form.gender           || "",
+          _subjects_offered: subjects,
+        } as any);
+        if (rpcError) throw new Error(rpcError.message);
         // Update local state immediately so changes reflect at once
         const updatedStudent = {
           ...editing!,
@@ -179,7 +210,7 @@ export default function Students() {
         toast.success("Student updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
-          _email:     form.email.trim().toLowerCase(),
+          _email:     form.email.trim() ? form.email.trim().toLowerCase() : null,
           _password:  form.password,
           _full_name: fullName,
           _role:      "student",
@@ -202,6 +233,19 @@ export default function Students() {
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
         toast.success("Student created");
+        // Only attempt a welcome email when a real address was provided —
+        // students registered without one sign in with username + password.
+        if (form.email.trim()) isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+          if (!enabled) return;
+          sendStudentWelcomeEmail({
+            to: form.email.trim().toLowerCase(),
+            studentName: fullName,
+            schoolName: schoolName || document.title || "School",
+            loginUrl: window.location.origin,
+            password: form.password,
+            username: form.username || undefined,
+          }).catch(() => {});
+        });
       }
       setDialogOpen(false);
       if (!editing) {
@@ -215,6 +259,7 @@ export default function Students() {
   };
 
   const handleBulkPromote = async () => {
+    if (!canAddStudent()) return;
     if (!promoFrom || !promoTo) { toast.error("Select both classes"); return; }
     if (promoFrom === promoTo) { toast.error("Source and destination must differ"); return; }
     setPromoSaving(true);
@@ -227,6 +272,7 @@ export default function Students() {
   };
 
   const handleMoveStudents = async () => {
+    if (!canAddStudent()) return;
     if (!moveToClass || selectedStudents.length === 0) { toast.error("Select students and target class"); return; }
     setSaving(true);
     const { error } = await supabase.from("profiles").update({ class_id: moveToClass }).in("user_id", selectedStudents).eq("school_id", schoolId!);
@@ -237,6 +283,30 @@ export default function Students() {
     fetchStudents();
   };
 
+  const openDelete = (s: Student) => {
+    setDeleting(s);
+    setDeleteConfirm("");
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    if (deleteConfirm !== deleting.full_name) {
+      toast.error("Name does not match");
+      return;
+    }
+    setDelSaving(true);
+    const { error } = await supabase.rpc("delete_school_user", {
+      _user_id: deleting.user_id,
+    } as any);
+    setDelSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Student permanently deleted");
+    setStudents(prev => prev.filter(s => s.user_id !== deleting.user_id));
+    setDeleteOpen(false);
+    setDeleting(null);
+  };
+
   const toggleStudentSelect = (userId: string) => {
     setSelectedStudents((prev) => prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]);
   };
@@ -244,10 +314,49 @@ export default function Students() {
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }));
 
-  const filtered = students.filter(s => {
-    const q = search.toLowerCase();
-    return !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
-  });
+  const filtered = students
+    .filter(s => {
+      const q = search.toLowerCase();
+      const matchesSearch = !q || s.full_name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
+      const matchesClass = classFilter === "all" || s.class_id === classFilter;
+      return matchesSearch && matchesClass;
+    })
+    .sort((a, b) => {
+      // Group by class name first (so "All Classes" view is easy to scan),
+      // then alphabetically by name within each class.
+      const classCompare = getClassName(a.class_id).localeCompare(getClassName(b.class_id));
+      if (classCompare !== 0) return classCompare;
+      return (a.full_name || "").localeCompare(b.full_name || "");
+    });
+
+  const handleDownload = () => {
+    if (filtered.length === 0) { toast.error("No students to download"); return; }
+    const headers = ["Name", "Username", "Class", "Email", "Gender", "Nationality", "Date of Birth", "Parent's Name", "Address", "Subjects Offered"];
+    const escapeCsv = (val: string) => `"${(val ?? "").toString().replace(/"/g, '""')}"`;
+    const rows = filtered.map(s => [
+      s.full_name || "",
+      s.username || "",
+      getClassName(s.class_id),
+      isPlaceholderEmail(s.email) ? "" : (s.email || ""),
+      s.gender || "",
+      s.nationality || "",
+      s.date_of_birth || "",
+      s.parent_name || "",
+      s.address || "",
+      (s.subjects_offered || []).join("; "),
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(escapeCsv).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const classLabel = classFilter === "all" ? "all-classes" : getClassName(classFilter).replace(/\s+/g, "-").toLowerCase();
+    link.href = url;
+    link.download = `students-${classLabel}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
@@ -259,21 +368,38 @@ export default function Students() {
           <p className="text-muted-foreground">{students.length} student{students.length !== 1 ? "s" : ""} registered</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }}>
+          <Button variant="outline" onClick={() => { setSelectedStudents([]); setMoveToClass(""); setMoveOpen(true); }} disabled={isRestricted || isSuspended}>
             <ArrowRightLeft className="mr-2 h-4 w-4" />Move Students
           </Button>
-          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }}>
+          <Button variant="outline" onClick={() => { setPromoFrom(""); setPromoTo(""); setPromoOpen(true); }} disabled={isRestricted || isSuspended}>
             Bulk Promote
           </Button>
-          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Student</Button>
+          <Button onClick={openCreate} disabled={isRestricted || isSuspended}>
+            {isRestricted || isSuspended ? <Lock className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+            Add Student
+          </Button>
         </div>
       </div>
 
       <Card className="border-0 shadow-md">
         <CardHeader className="pb-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by class" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes</SelectItem>
+                  {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              <Download className="mr-2 h-4 w-4" />Download ({filtered.length})
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -301,13 +427,16 @@ export default function Students() {
                     <TableCell>{i + 1}</TableCell>
                     <TableCell className="font-medium">{s.full_name || "—"}</TableCell>
                     <TableCell>{s.username || "—"}</TableCell>
-                    <TableCell>{s.email}</TableCell>
+                    <TableCell>{isPlaceholderEmail(s.email) ? <span className="text-muted-foreground">No email</span> : s.email}</TableCell>
                     <TableCell>{s.gender || "—"}</TableCell>
                     <TableCell><Badge variant="secondary">{getClassName(s.class_id)}</Badge></TableCell>
                     <TableCell>{s.nationality || "—"}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         <Pencil className="mr-1 h-3.5 w-3.5" />Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => openDelete(s)}>
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />Delete
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -319,16 +448,46 @@ export default function Students() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setShowPassword(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader><DialogTitle>{editing ? "Edit Student" : "Add New Student"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5"><Label>First Name *</Label><Input value={form.first_name} onChange={set("first_name")} required /></div>
             <div className="space-y-1.5"><Label>Middle Name</Label><Input value={form.middle_name} onChange={set("middle_name")} /></div>
             <div className="space-y-1.5"><Label>Last Name *</Label><Input value={form.last_name} onChange={set("last_name")} required /></div>
-            <div className="space-y-1.5"><Label>Username</Label><Input value={form.username} onChange={set("username")} /></div>
-            <div className="space-y-1.5"><Label>Email *</Label><Input type="email" value={form.email} onChange={set("email")} required /></div>
-            <div className="space-y-1.5"><Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label><Input type="password" value={form.password} onChange={set("password")} required={!editing} /></div>
+            <div className="space-y-1.5">
+              <Label>Username{!form.email.trim() && " *"}</Label>
+              <Input value={form.username} onChange={set("username")} required={!form.email.trim()} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email (optional)</Label>
+              <Input type="email" value={form.email} onChange={set("email")} placeholder="Leave blank to use username-only login" />
+              {!form.email.trim() && (
+                <p className="text-xs text-muted-foreground">No email? The student will sign in with just their username and password.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>{editing ? "New Password (leave blank to keep)" : "Password *"}</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={set("password")}
+                  required={!editing}
+                  placeholder={editing ? "Leave blank to keep current" : "Min 6 characters"}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label>Gender</Label>
               <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>
@@ -415,6 +574,45 @@ export default function Students() {
             <Button onClick={handleMoveStudents} className="w-full" disabled={saving || selectedStudents.length === 0}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Move {selectedStudents.length} Student(s)
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleting(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Permanently Delete Student</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-xl bg-destructive/5 border border-destructive/20 p-4 space-y-1">
+              <p className="font-semibold text-sm">{deleting?.full_name}</p>
+              <p className="text-xs text-muted-foreground">{deleting?.username ? `@${deleting.username}` : (isPlaceholderEmail(deleting?.email || "") ? "No email" : deleting?.email)}</p>
+              <Badge variant="secondary" className="mt-1">{getClassName(deleting?.class_id ?? null)}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This will <strong>permanently delete</strong> this student and all their data including attendance, grades, results and payments. This action <strong>cannot be undone</strong>.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Type the student's full name to confirm</Label>
+              <Input
+                placeholder={deleting?.full_name}
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleDelete}
+                disabled={delSaving || deleteConfirm !== deleting?.full_name}
+              >
+                {delSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete Permanently
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

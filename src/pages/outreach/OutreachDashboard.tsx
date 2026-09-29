@@ -13,19 +13,25 @@ export default function OutreachDashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
-        .from("school_referrals")
-        .select("*, schools(name)")
-        .eq("officer_id", user.id)
-        .order("created_at", { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from("school_referrals")
+          .select("*, schools(name)")
+          .eq("officer_id", user.id)
+          .order("created_at", { ascending: false });
 
-      const referrals = (data as any[]) || [];
-      const totalEarned = referrals.filter(r => r.commission_paid).reduce((s, r) => s + Number(r.commission_amount), 0);
-      const pendingPayout = referrals.filter(r => !r.commission_paid).reduce((s, r) => s + Number(r.commission_amount), 0);
+        if (error) console.error("Referrals error:", error);
+        const referrals = (data as any[]) || [];
+        const totalEarned = referrals.filter(r => r.commission_paid).reduce((s, r) => s + Number(r.commission_amount), 0);
+        const pendingPayout = referrals.filter(r => !r.commission_paid).reduce((s, r) => s + Number(r.commission_amount), 0);
 
-      setStats({ totalSchools: referrals.length, totalEarned, pendingPayout });
-      setRecentReferrals(referrals.slice(0, 5));
-      setLoading(false);
+        setStats({ totalSchools: referrals.length, totalEarned, pendingPayout });
+        setRecentReferrals(referrals.slice(0, 5));
+      } catch (err: any) {
+        console.error("Dashboard load error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [user]);
