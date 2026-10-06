@@ -24,6 +24,7 @@ interface Instructor {
   user_id: string;
   full_name: string;
   email: string;
+  phone_number: string | null;
   permissions: {
     can_manage_exams: boolean;
     can_view_results: boolean;
@@ -75,6 +76,7 @@ export default function Instructors() {
   const [fullName,   setFullName]   = useState("");
   const [email,      setEmail]      = useState("");
   const [password,   setPassword]   = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [saving,     setSaving]     = useState(false);
 
   // ── Legacy Permissions dialog ───────────────────────────────────
@@ -122,7 +124,7 @@ export default function Instructors() {
       if (instrIds.length === 0) { setInstructors([]); setLoading(false); return; }
 
       const [profilesRes, permsRes, classLinksRes, subjAssignRes, classInstrRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name, email").in("user_id", instrIds).order("full_name"),
+        supabase.from("profiles").select("user_id, full_name, email, phone_number").in("user_id", instrIds).order("full_name"),
         supabase.from("instructor_permissions").select("*").in("instructor_id", instrIds),
         supabase.from("instructor_classes").select("instructor_id, class_id").in("instructor_id", instrIds),
         (supabase as any).from("instructor_subjects").select("instructor_id").in("instructor_id", instrIds),
@@ -145,6 +147,7 @@ export default function Instructors() {
         user_id:               p.user_id,
         full_name:             p.full_name,
         email:                 p.email || "",
+        phone_number:          p.phone_number ?? null,
         permissions:           permsMap.get(p.user_id) || null,
         assigned_classes:      classMap.get(p.user_id) || [],
         subject_count:         subjCount.get(p.user_id) || 0,
@@ -293,6 +296,7 @@ export default function Instructors() {
           first_name: fullName.split(" ")[0] || "",
           last_name:  fullName.split(" ").slice(1).join(" ") || "",
           email:      email.trim().toLowerCase(),
+          phone_number: phoneNumber.trim() || null,
         } as any).eq("user_id", editing.user_id);
         if (error) throw error;
         toast.success("Instructor updated");
@@ -304,6 +308,9 @@ export default function Instructors() {
         } as any);
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create instructor account.");
+        if (phoneNumber.trim()) {
+          await supabase.from("profiles").update({ phone_number: phoneNumber.trim() }).eq("user_id", newUserId);
+        }
         await supabase.from("instructor_permissions").upsert({
           instructor_id: newUserId, school_id: schoolId!,
           can_manage_exams: false, can_view_results: false, can_manage_students: false,
@@ -381,8 +388,8 @@ export default function Instructors() {
     setSaving(false);
   };
 
-  const openNew    = () => { setEditing(null); setFullName(""); setEmail(""); setPassword(""); setDialogOpen(true); };
-  const openEdit   = (i: Instructor) => { setEditing(i); setFullName(i.full_name); setEmail(i.email); setPassword(""); setDialogOpen(true); };
+  const openNew    = () => { setEditing(null); setFullName(""); setEmail(""); setPassword(""); setPhoneNumber(""); setDialogOpen(true); };
+  const openEdit   = (i: Instructor) => { setEditing(i); setFullName(i.full_name); setEmail(i.email); setPassword(""); setPhoneNumber(i.phone_number || ""); setDialogOpen(true); };
   const openPerms  = (i: Instructor) => { setPermsInstructor(i); setPerms(i.permissions || { can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false, can_mark_attendance: false, can_manage_grades: false, can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false }); setPermsOpen(true); };
   const openClasses = (i: Instructor) => { setClassesInstructor(i); setSelectedClasses(i.assigned_classes || []); setClassesOpen(true); };
 
@@ -631,6 +638,7 @@ export default function Instructors() {
           <div className="space-y-4 pt-2">
             <div className="space-y-2"><Label>Full Name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" /></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="instructor@school.com" /></div>
+            <div className="space-y-2"><Label>Phone Number</Label><Input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. 08012345678" /></div>
             <div className="space-y-2"><Label>Password {editing && "(leave blank to keep)"}</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} /></div>
             <Button onClick={handleSave} className="w-full" disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

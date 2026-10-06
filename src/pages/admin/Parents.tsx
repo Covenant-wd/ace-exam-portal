@@ -20,6 +20,7 @@ interface Parent {
   full_name: string;
   email: string;
   username: string | null;
+  phone_number: string | null;
   children: Child[];
 }
 interface StudentItem { user_id: string; full_name: string; }
@@ -36,6 +37,7 @@ export default function Parents() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -78,7 +80,7 @@ export default function Parents() {
       // Get parent profiles
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, full_name, username")
+        .select("user_id, full_name, username, phone_number")
         .in("user_id", parentIds)
         .order("full_name");
 
@@ -114,6 +116,7 @@ export default function Parents() {
         full_name: p.full_name,
         email: emailMap[p.user_id] || p.email || "",
         username: p.username,
+        phone_number: p.phone_number ?? null,
         children: (links || [])
           .filter((l: any) => l.parent_id === p.user_id)
           .map((l: any) => ({ student_id: l.student_id, full_name: studentNameMap[l.student_id] || "Unknown" })),
@@ -130,7 +133,7 @@ export default function Parents() {
 
   const openNew = () => {
     setEditing(null);
-    setFullName(""); setEmail(""); setUsername(""); setPassword("");
+    setFullName(""); setEmail(""); setUsername(""); setPassword(""); setPhoneNumber("");
     setSelectedChildren([]);
     setDialogOpen(true);
   };
@@ -141,6 +144,7 @@ export default function Parents() {
     setEmail(p.email || "");
     setUsername(p.username || "");
     setPassword("");
+    setPhoneNumber(p.phone_number || "");
     setSelectedChildren(p.children.map(c => c.student_id));
     setDialogOpen(true);
   };
@@ -158,6 +162,7 @@ export default function Parents() {
           first_name: fullName.split(" ")[0] || "",
           last_name: fullName.split(" ").slice(1).join(" ") || "",
           username: username || null,
+          phone_number: phoneNumber.trim() || null,
         }).eq("user_id", editing.user_id);
 
         // Update children links
@@ -175,6 +180,7 @@ export default function Parents() {
             ...p,
             full_name: fullName,
             username: username || null,
+            phone_number: phoneNumber.trim() || null,
             children: students
               .filter(s => selectedChildren.includes(s.user_id))
               .map(s => ({ student_id: s.user_id, full_name: s.full_name })),
@@ -193,6 +199,12 @@ export default function Parents() {
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create parent account.");
 
+        // create_school_user() only sets identity fields — persist phone_number
+        // with a direct follow-up update, same as the student creation flow.
+        if (phoneNumber.trim()) {
+          await supabase.from("profiles").update({ phone_number: phoneNumber.trim() }).eq("user_id", newUserId);
+        }
+
         // Link children
         if (selectedChildren.length > 0) {
           await supabase.from("parent_students").insert(
@@ -206,6 +218,7 @@ export default function Parents() {
           full_name: fullName,
           email: email.trim().toLowerCase(),
           username: username || null,
+          phone_number: phoneNumber.trim() || null,
           children: students
             .filter(s => selectedChildren.includes(s.user_id))
             .map(s => ({ student_id: s.user_id, full_name: s.full_name })),
@@ -316,6 +329,7 @@ export default function Parents() {
             <div className="space-y-2"><Label>Full Name *</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Parent full name" /></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@email.com" disabled={!!editing} className={editing ? "opacity-60" : ""} /></div>
             <div className="space-y-2"><Label>Username *</Label><Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username for login" /></div>
+            <div className="space-y-2"><Label>Phone Number</Label><Input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="e.g. 08012345678" /></div>
             {!editing && <div className="space-y-2"><Label>Password *</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6} /></div>}
 
             <div className="space-y-2">

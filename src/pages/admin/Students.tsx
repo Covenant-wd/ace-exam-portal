@@ -35,6 +35,7 @@ interface Student {
   gender: string;
   subjects_offered: string[];
   full_name: string;
+  phone_number: string | null;
 }
 
 interface ClassItem { id: string; name: string; }
@@ -43,6 +44,7 @@ const emptyForm = {
   email: "", password: "", first_name: "", middle_name: "", last_name: "",
   username: "", class_id: "", date_of_birth: "", address: "",
   parent_name: "", nationality: "", subjects_offered: "", gender: "",
+  phone_number: "",
 };
 
 export default function Students() {
@@ -144,6 +146,7 @@ export default function Students() {
       address: s.address || "", parent_name: s.parent_name || "",
       nationality: s.nationality || "", gender: s.gender || "",
       subjects_offered: (s.subjects_offered || []).join(", "),
+      phone_number: s.phone_number || "",
     });
     setDialogOpen(true);
   };
@@ -189,6 +192,16 @@ export default function Students() {
           _subjects_offered: subjects,
         } as any);
         if (rpcError) throw new Error(rpcError.message);
+
+        // update_school_user() doesn't carry phone_number yet, so persist it
+        // with a direct, narrowly-scoped profiles update (admins can already
+        // update any profile under RLS).
+        const { error: phoneError } = await supabase
+          .from("profiles")
+          .update({ phone_number: form.phone_number.trim() || null } as any)
+          .eq("user_id", editing.user_id);
+        if (phoneError) throw new Error(phoneError.message);
+
         // Update local state immediately so changes reflect at once
         const updatedStudent = {
           ...editing!,
@@ -205,6 +218,7 @@ export default function Students() {
           nationality: form.nationality || "",
           gender: form.gender || "",
           subjects_offered: subjects,
+          phone_number: form.phone_number.trim() || null,
         };
         setStudents(prev => prev.map(s => s.user_id === editing!.user_id ? updatedStudent : s));
         toast.success("Student updated");
@@ -231,6 +245,7 @@ export default function Students() {
           nationality:      form.nationality || "",
           gender:           form.gender || "",
           subjects_offered: subjects,
+          phone_number:     form.phone_number.trim() || null,
         }).eq("user_id", newUserId);
         toast.success("Student created");
         // Only attempt a welcome email when a real address was provided —
@@ -511,6 +526,7 @@ export default function Students() {
             <div className="space-y-1.5"><Label>Nationality</Label><Input value={form.nationality} onChange={set("nationality")} /></div>
             <div className="space-y-1.5 sm:col-span-2"><Label>Address</Label><Input value={form.address} onChange={set("address")} /></div>
             <div className="space-y-1.5"><Label>Parent's Name</Label><Input value={form.parent_name} onChange={set("parent_name")} /></div>
+            <div className="space-y-1.5"><Label>Phone Number</Label><Input type="tel" value={form.phone_number} onChange={set("phone_number")} placeholder="e.g. 08012345678" /></div>
             <div className="space-y-1.5 sm:col-span-2"><Label>Subjects Offered (comma-separated)</Label><Input value={form.subjects_offered} onChange={set("subjects_offered")} placeholder="e.g. Mathematics, English, Physics" /></div>
             <div className="sm:col-span-2 flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
