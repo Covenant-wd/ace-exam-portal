@@ -921,6 +921,7 @@ export type Database = {
           middle_name: string | null
           nationality: string | null
           parent_name: string | null
+          phone_number: string | null
           school_id: string | null
           subjects_offered: string[] | null
           updated_at: string
@@ -942,6 +943,7 @@ export type Database = {
           middle_name?: string | null
           nationality?: string | null
           parent_name?: string | null
+          phone_number?: string | null
           school_id?: string | null
           subjects_offered?: string[] | null
           updated_at?: string
@@ -963,6 +965,7 @@ export type Database = {
           middle_name?: string | null
           nationality?: string | null
           parent_name?: string | null
+          phone_number?: string | null
           school_id?: string | null
           subjects_offered?: string[] | null
           updated_at?: string
