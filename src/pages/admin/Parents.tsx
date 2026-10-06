@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { sendParentWelcomeEmail } from "@/lib/email";
+import { sendParentWelcomeEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 interface Child { student_id: string; full_name: string; }
 interface Parent {
@@ -19,12 +20,14 @@ interface Parent {
   full_name: string;
   email: string;
   username: string | null;
+  phone_number: string | null;
   children: Child[];
 }
 interface StudentItem { user_id: string; full_name: string; }
 
 export default function Parents() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [parents, setParents] = useState<Parent[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +37,7 @@ export default function Parents() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -76,7 +80,7 @@ export default function Parents() {
       // Get parent profiles
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, full_name, username")
+        .select("user_id, full_name, username, phone_number")
         .in("user_id", parentIds)
         .order("full_name");
 
@@ -97,11 +101,22 @@ export default function Parents() {
         (sProfiles || []).forEach((p: any) => { studentNameMap[p.user_id] = p.full_name; });
       }
 
+      // Fetch emails for all parents
+      const parentUserIds = (profiles || []).map((p: any) => p.user_id);
+      let emailMap: Record<string, string> = {};
+      if (parentUserIds.length > 0) {
+        const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
+          _user_ids: parentUserIds,
+        });
+        (emailRows || []).forEach((r: any) => { emailMap[r.user_id] = r.email; });
+      }
+
       const parentList: Parent[] = (profiles || []).map((p: any) => ({
         user_id: p.user_id,
         full_name: p.full_name,
-        email: "",
+        email: emailMap[p.user_id] || p.email || "",
         username: p.username,
+        phone_number: p.phone_number ?? null,
         children: (links || [])
           .filter((l: any) => l.parent_id === p.user_id)
           .map((l: any) => ({ student_id: l.student_id, full_name: studentNameMap[l.student_id] || "Unknown" })),
@@ -118,15 +133,18 @@ export default function Parents() {
 
   const openNew = () => {
     setEditing(null);
-    setFullName(""); setEmail(""); setUsername(""); setPassword("");
+    setFullName(""); setEmail(""); setUsername(""); setPassword(""); setPhoneNumber("");
     setSelectedChildren([]);
     setDialogOpen(true);
   };
 
   const openEdit = (p: Parent) => {
     setEditing(p);
-    setFullName(p.full_name); setEmail(p.email);
-    setUsername(p.username || ""); setPassword("");
+    setFullName(p.full_name);
+    setEmail(p.email || "");
+    setUsername(p.username || "");
+    setPassword("");
+    setPhoneNumber(p.phone_number || "");
     setSelectedChildren(p.children.map(c => c.student_id));
     setDialogOpen(true);
   };
@@ -144,6 +162,7 @@ export default function Parents() {
           first_name: fullName.split(" ")[0] || "",
           last_name: fullName.split(" ").slice(1).join(" ") || "",
           username: username || null,
+          phone_number: phoneNumber.trim() || null,
         }).eq("user_id", editing.user_id);
 
         // Update children links
@@ -154,6 +173,19 @@ export default function Parents() {
           );
         }
         toast.success("Parent updated");
+        // Immediately update local state so children reflect right away
+        setParents(prev => prev.map(p => {
+          if (p.user_id !== editing.user_id) return p;
+          return {
+            ...p,
+            full_name: fullName,
+            username: username || null,
+            phone_number: phoneNumber.trim() || null,
+            children: students
+              .filter(s => selectedChildren.includes(s.user_id))
+              .map(s => ({ student_id: s.user_id, full_name: s.full_name })),
+          };
+        }));
       } else {
         // Create user via SQL function
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
@@ -167,6 +199,12 @@ export default function Parents() {
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create parent account.");
 
+        // create_school_user() only sets identity fields — persist phone_number
+        // with a direct follow-up update, same as the student creation flow.
+        if (phoneNumber.trim()) {
+          await supabase.from("profiles").update({ phone_number: phoneNumber.trim() }).eq("user_id", newUserId);
+        }
+
         // Link children
         if (selectedChildren.length > 0) {
           await supabase.from("parent_students").insert(
@@ -174,17 +212,31 @@ export default function Parents() {
           );
         }
         toast.success("Parent created successfully");
-        // Send welcome email to parent
+        // Immediately add to local state so children reflect
+        const newParent: Parent = {
+          user_id: newUserId,
+          full_name: fullName,
+          email: email.trim().toLowerCase(),
+          username: username || null,
+          phone_number: phoneNumber.trim() || null,
+          children: students
+            .filter(s => selectedChildren.includes(s.user_id))
+            .map(s => ({ student_id: s.user_id, full_name: s.full_name })),
+        };
+        setParents(prev => [...prev, newParent]);
+        // BUG FIX: Check notification setting before sending; use real school name
         const childNameList = students.filter(s => selectedChildren.includes(s.user_id)).map(s => s.full_name);
-        const loginUrl = `${window.location.origin}/school/${window.location.hostname}`;
-        sendParentWelcomeEmail({
-          to: email,
-          parentName: fullName,
-          schoolName: document.title || "School",
-          loginUrl: window.location.origin,
-          username,
-          childNames: childNameList,
-        }).catch(() => {});
+        isNotificationEnabled(schoolId!, "notify_welcome_email").then(enabled => {
+          if (!enabled) return;
+          sendParentWelcomeEmail({
+            to: email,
+            parentName: fullName,
+            schoolName: schoolName || document.title || "School",
+            loginUrl: window.location.origin,
+            username,
+            childNames: childNameList,
+          }).catch(() => {});
+        });
       }
       setDialogOpen(false);
       fetchData();
@@ -275,8 +327,9 @@ export default function Parents() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2"><Label>Full Name *</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Parent full name" /></div>
-            {!editing && <div className="space-y-2"><Label>Email *</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@email.com" /></div>}
+            <div className="space-y-2"><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="parent@email.com" disabled={!!editing} className={editing ? "opacity-60" : ""} /></div>
             <div className="space-y-2"><Label>Username *</Label><Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username for login" /></div>
+            <div className="space-y-2"><Label>Phone Number</Label><Input type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="e.g. 08012345678" /></div>
             {!editing && <div className="space-y-2"><Label>Password *</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" minLength={6} /></div>}
 
             <div className="space-y-2">

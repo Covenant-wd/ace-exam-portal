@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { sendFeePaymentEmail } from "@/lib/email";
+import { sendFeePaymentEmail, isNotificationEnabled } from "@/lib/email";
+import { useSubscription } from "@/hooks/useSubscription";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit } from "lucide-react";
+import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit, Lock } from "lucide-react";
 
 interface FeeType { id: string; name: string; amount: number; term_id: string | null; class_id: string | null; description: string; is_active: boolean; }
 interface FeePayment { id: string; student_id: string; fee_type_id: string; amount_paid: number; payment_date: string; payment_method: string; receipt_number: string; notes: string; }
@@ -22,6 +24,8 @@ interface StudentProfile { user_id: string; full_name: string; }
 
 export default function Fees() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
+  const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -46,6 +50,18 @@ export default function Fees() {
   const [payReceipt, setPayReceipt] = useState("");
   const [payNotes, setPayNotes] = useState("");
   const [paySaving, setPaySaving] = useState(false);
+
+  // Pre-fill payment dialog when navigated from debtors page (?student=<id>)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const preStudent = params.get("student");
+    if (preStudent) {
+      setPayStudent(preStudent);
+      setPayDialog(true);
+      // Clean URL without reload
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -79,12 +95,16 @@ export default function Fees() {
   };
 
   const handleSaveFeeType = async () => {
+    if (!canWrite()) return;
     if (!feeName || !feeAmount || !schoolId) { toast.error("Name and amount required"); return; }
     setSaving(true);
     try {
+      // Treat both empty string and "__none__" as null so we never write
+      // a non-UUID sentinel string into a UUID column.
+      const toUuid = (v: string) => (v === "" || v === "__none__" ? null : v);
       const payload: any = {
         name: feeName, amount: parseFloat(feeAmount), school_id: schoolId, description: feeDesc,
-        term_id: feeTermId || null, class_id: feeClassId || null,
+        term_id: toUuid(feeTermId), class_id: toUuid(feeClassId),
       };
       if (editingFee) {
         const { error } = await supabase.from("fee_types").update(payload).eq("id", editingFee.id);
@@ -101,6 +121,7 @@ export default function Fees() {
   };
 
   const handleDeleteFeeType = async (id: string) => {
+    if (!canWrite()) return;
     if (!confirm("Delete this fee type?")) return;
     await supabase.from("fee_types").delete().eq("id", id);
     setFeeTypes(feeTypes.filter((f) => f.id !== id));
@@ -108,6 +129,7 @@ export default function Fees() {
   };
 
   const handleRecordPayment = async () => {
+    if (!canWrite()) return;
     if (!payStudent || !payFeeType || !payAmount || !schoolId || !user) { toast.error("All fields required"); return; }
     setPaySaving(true);
     try {
@@ -118,8 +140,10 @@ export default function Fees() {
       } as any);
       if (error) throw error;
       toast.success("Payment recorded");
-      // Send fee payment email to student and parents
+      // Send fee payment email (if enabled)
       try {
+        const notifEnabled = await isNotificationEnabled(schoolId!, "notify_fee_payment");
+        if (!notifEnabled) throw new Error("skip");
         const { data: profile } = await supabase.from("profiles").select("full_name").eq("user_id", payStudent).single();
         const { data: studentEmail } = await supabase.rpc("get_email_by_user_id", { _user_id: payStudent });
         const emails: string[] = [];
@@ -136,7 +160,7 @@ export default function Fees() {
             to: emails,
             recipientName: profile.full_name,
             studentName: profile.full_name,
-            schoolName: document.title || "School",
+            schoolName: schoolName || document.title || "School",
             feeName,
             amountPaid: parseFloat(payAmount),
             paymentDate: new Date().toISOString(),
@@ -174,7 +198,9 @@ export default function Fees() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Fee Types</CardTitle>
-          <Button size="sm" onClick={() => { setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc(""); setFeeDialog(true); }}><Plus className="mr-1 h-4 w-4" /> Add Fee Type</Button>
+          <Button size="sm" disabled={isRestricted || isSuspended} onClick={() => { setEditingFee(null); setFeeName(""); setFeeAmount(""); setFeeTermId(""); setFeeClassId(""); setFeeDesc(""); setFeeDialog(true); }}>
+            {isRestricted || isSuspended ? <Lock className="mr-1 h-4 w-4" /> : <Plus className="mr-1 h-4 w-4" />} Add Fee Type
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -203,7 +229,9 @@ export default function Fees() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Payments</CardTitle>
-          <Button size="sm" onClick={() => setPayDialog(true)}><Plus className="mr-1 h-4 w-4" /> Record Payment</Button>
+          <Button size="sm" disabled={isRestricted || isSuspended} onClick={() => setPayDialog(true)}>
+            {isRestricted || isSuspended ? <Lock className="mr-1 h-4 w-4" /> : <Plus className="mr-1 h-4 w-4" />} Record Payment
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -239,15 +267,21 @@ export default function Fees() {
               <div className="space-y-2">
                 <Label>Term (optional)</Label>
                 <Select value={feeTermId} onValueChange={setFeeTermId}>
-                  <SelectTrigger><SelectValue placeholder="All terms" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Terms</SelectItem>{terms.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  <SelectTrigger><SelectValue placeholder="All terms (no filter)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">All terms (no filter)</SelectItem>
+                    {terms.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Class (optional)</Label>
                 <Select value={feeClassId} onValueChange={setFeeClassId}>
-                  <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All Classes</SelectItem>{classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectTrigger><SelectValue placeholder="All classes (no filter)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">All classes (no filter)</SelectItem>
+                    {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
