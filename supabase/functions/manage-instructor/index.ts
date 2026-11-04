@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
       const userIds = roles.map(r => r.user_id);
       const { data: profiles } = await supabaseAdmin.from("profiles").select("*").in("user_id", userIds);
       const { data: permissions } = await supabaseAdmin.from("instructor_permissions").select("*").in("instructor_id", userIds);
-      const { data: classes } = await supabaseAdmin.from("instructor_classes").select("*").in("instructor_id", userIds);
+      const { data: classes } = await supabaseAdmin.from("class_instructors").select("instructor_id, class_id").in("instructor_id", userIds);
 
       const instructors = await Promise.all((profiles || []).map(async (p) => {
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(p.user_id);
@@ -146,22 +146,6 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }, { onConflict: "instructor_id" });
       if (error) throw error;
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (action === "assign_classes") {
-      const { instructor_id, class_ids } = body;
-
-      await supabaseAdmin.from("instructor_classes").delete().eq("instructor_id", instructor_id);
-
-      if (class_ids && class_ids.length > 0) {
-        const rows = class_ids.map((class_id: string) => ({ instructor_id, class_id, school_id: callerSchoolId }));
-        const { error } = await supabaseAdmin.from("instructor_classes").insert(rows);
-        if (error) throw error;
-      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
