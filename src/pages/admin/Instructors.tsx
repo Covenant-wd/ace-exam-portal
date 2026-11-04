@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, Shield, School, BookOpen, GraduationCap, X, BookUser } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Shield, BookOpen, GraduationCap, X, BookUser } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { sendInstructorWelcomeEmail, isNotificationEnabled } from "@/lib/email";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
@@ -36,7 +36,6 @@ interface Instructor {
     can_manage_fees: boolean;
     can_post_announcements: boolean;
   } | null;
-  assigned_classes: string[];
   // New role counts (shown as badges in the table)
   subject_count: number;
   class_instructor_count: number;
@@ -88,10 +87,6 @@ export default function Instructors() {
     can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false,
   });
 
-  // ── Legacy Assign Classes dialog ────────────────────────────────
-  const [classesOpen,       setClassesOpen]       = useState(false);
-  const [classesInstructor, setClassesInstructor] = useState<Instructor | null>(null);
-  const [selectedClasses,   setSelectedClasses]   = useState<string[]>([]);
 
   // ── NEW: Role Assignments dialog ────────────────────────────────
   // This is where admins assign:
@@ -123,23 +118,17 @@ export default function Instructors() {
 
       if (instrIds.length === 0) { setInstructors([]); setLoading(false); return; }
 
-      const [profilesRes, permsRes, classLinksRes, subjAssignRes, classInstrRes] = await Promise.all([
+      const [profilesRes, permsRes, subjAssignRes, classInstrRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email, phone_number").in("user_id", instrIds).order("full_name"),
         supabase.from("instructor_permissions").select("*").in("instructor_id", instrIds),
-        supabase.from("instructor_classes").select("instructor_id, class_id").in("instructor_id", instrIds),
         (supabase as any).from("instructor_subjects").select("instructor_id").in("instructor_id", instrIds),
         (supabase as any).from("class_instructors").select("instructor_id").in("instructor_id", instrIds),
       ]);
 
       const permsMap     = new Map((permsRes.data || []).map((p: any) => [p.instructor_id, p]));
-      const classMap     = new Map<string, string[]>();
       const subjCount    = new Map<string, number>();
       const classInstrCount = new Map<string, number>();
 
-      (classLinksRes.data || []).forEach((l: any) => {
-        if (!classMap.has(l.instructor_id)) classMap.set(l.instructor_id, []);
-        classMap.get(l.instructor_id)!.push(l.class_id);
-      });
       (subjAssignRes.data || []).forEach((r: any) => subjCount.set(r.instructor_id, (subjCount.get(r.instructor_id) || 0) + 1));
       (classInstrRes.data || []).forEach((r: any) => classInstrCount.set(r.instructor_id, (classInstrCount.get(r.instructor_id) || 0) + 1));
 
@@ -149,7 +138,6 @@ export default function Instructors() {
         email:                 p.email || "",
         phone_number:          p.phone_number ?? null,
         permissions:           permsMap.get(p.user_id) || null,
-        assigned_classes:      classMap.get(p.user_id) || [],
         subject_count:         subjCount.get(p.user_id) || 0,
         class_instructor_count: classInstrCount.get(p.user_id) || 0,
       })));
@@ -342,7 +330,6 @@ export default function Instructors() {
     try {
       await Promise.all([
         supabase.from("instructor_permissions").delete().eq("instructor_id", userId),
-        supabase.from("instructor_classes").delete().eq("instructor_id", userId),
         (supabase as any).from("instructor_subjects").delete().eq("instructor_id", userId),
         (supabase as any).from("class_instructors").delete().eq("instructor_id", userId),
       ]);
@@ -370,30 +357,10 @@ export default function Instructors() {
     setSaving(false);
   };
 
-  // ── Save legacy class assignments ───────────────────────────────
-  const handleSaveClasses = async () => {
-    if (!classesInstructor || !schoolId) return;
-    setSaving(true);
-    try {
-      await supabase.from("instructor_classes").delete().eq("instructor_id", classesInstructor.user_id);
-      if (selectedClasses.length > 0) {
-        await supabase.from("instructor_classes").insert(
-          selectedClasses.map(classId => ({ instructor_id: classesInstructor.user_id, class_id: classId, school_id: schoolId }))
-        );
-      }
-      toast.success("Classes assigned");
-      setClassesOpen(false);
-      fetchData();
-    } catch (err: any) { toast.error(err.message); }
-    setSaving(false);
-  };
-
   const openNew    = () => { setEditing(null); setFullName(""); setEmail(""); setPassword(""); setPhoneNumber(""); setDialogOpen(true); };
   const openEdit   = (i: Instructor) => { setEditing(i); setFullName(i.full_name); setEmail(i.email); setPassword(""); setPhoneNumber(i.phone_number || ""); setDialogOpen(true); };
   const openPerms  = (i: Instructor) => { setPermsInstructor(i); setPerms(i.permissions || { can_manage_exams: false, can_view_results: false, can_manage_students: false, can_manage_subjects: false, can_mark_attendance: false, can_manage_grades: false, can_manage_timetable: false, can_manage_fees: false, can_post_announcements: false }); setPermsOpen(true); };
-  const openClasses = (i: Instructor) => { setClassesInstructor(i); setSelectedClasses(i.assigned_classes || []); setClassesOpen(true); };
 
-  const getClassNames = (ids: string[]) => ids.map(id => classes.find(c => c.id === id)?.name).filter(Boolean).join(", ") || "None";
 
   const assignedClassIds = classInstructorAssignments.map(a => a.class_id);
 
@@ -462,7 +429,6 @@ export default function Instructors() {
                         Assign Roles
                       </Button>
                       {/* Legacy actions */}
-                      <Button variant="ghost" size="icon" title="Legacy class assign" onClick={() => openClasses(i)}><School className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" title="Legacy permissions" onClick={() => openPerms(i)}><Shield className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(i)}><Pencil className="h-4 w-4" /></Button>
                       <Button variant="ghost" size="icon" title="Delete" onClick={() => handleDelete(i.user_id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
@@ -677,32 +643,6 @@ export default function Instructors() {
               Save Permissions
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Legacy Assign Classes Dialog ────────────────────────────── */}
-      <Dialog open={classesOpen} onOpenChange={setClassesOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Legacy Class Assign — {classesInstructor?.full_name}</DialogTitle>
-            <DialogDescription>This is the old class assignment system. Use <strong>Assign Roles → Class Instructor</strong> for the new approach.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2 max-h-[300px] overflow-auto">
-            {classes.map(c => (
-              <label key={c.id} className="flex items-center gap-3 cursor-pointer">
-                <Checkbox
-                  checked={selectedClasses.includes(c.id)}
-                  onCheckedChange={(checked) => setSelectedClasses(prev => checked ? [...prev, c.id] : prev.filter(id => id !== c.id))}
-                />
-                <span className="text-sm">{c.name}</span>
-              </label>
-            ))}
-            {classes.length === 0 && <p className="text-muted-foreground text-sm">No classes created yet.</p>}
-          </div>
-          <Button onClick={handleSaveClasses} className="w-full" disabled={saving}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Classes
-          </Button>
         </DialogContent>
       </Dialog>
     </div>
