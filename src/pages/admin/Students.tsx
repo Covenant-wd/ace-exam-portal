@@ -169,61 +169,43 @@ export default function Students() {
 
     try {
       if (editing) {
-        // Use update_school_user() SQL RPC — bypasses the edge function entirely
-        // so it works even when the edge function is not deployed / unreachable.
-        const { data: { user: callerUser } } = await supabase.auth.getUser();
-        if (!callerUser) throw new Error("Not authenticated");
-
-        const { error: rpcError } = await supabase.rpc("update_school_user", {
-          _caller_id:       callerUser.id,
-          _user_id:         editing.user_id,
-          // Fall back to the existing email if the field was left blank —
-          // clearing an existing student's email isn't supported here yet,
-          // only skipping it is supported at registration time.
-          _email:           form.email.trim()    || editing.email || null,
-          _password:        form.password         || null,
-          _first_name:      form.first_name       || null,
-          _middle_name:     form.middle_name      || "",
-          _last_name:       form.last_name        || null,
-          _username:        form.username         || null,
-          _class_id:        form.class_id         || null,
-          _date_of_birth:   form.date_of_birth    || null,
-          _address:         form.address          || "",
-          _parent_name:     form.parent_name      || "",
-          _nationality:     form.nationality      || "",
-          _gender:          form.gender           || "",
+        // admin_update_student() is a version-controlled database function that updates the
+        // login (email / password), username and every profile field in one go, and raises
+        // a clear error if anything goes wrong — it can never fail silently.
+        const { error: rpcError } = await (supabase as any).rpc("admin_update_student", {
+          _user_id:          editing.user_id,
+          _email:            form.email.trim() || null,   // blank = leave unchanged
+          _password:         form.password || null,       // blank = leave unchanged
+          _first_name:       form.first_name,
+          _middle_name:      form.middle_name || "",
+          _last_name:        form.last_name,
+          _username:         form.username || null,
+          _class_id:         form.class_id || null,
+          _date_of_birth:    form.date_of_birth || null,
+          _address:          form.address || "",
+          _parent_name:      form.parent_name || "",
+          _nationality:      form.nationality || "",
+          _gender:           form.gender || "",
           _subjects_offered: subjects,
-        } as any);
+          _phone_number:     form.phone_number.trim() || null,
+        });
         if (rpcError) throw new Error(rpcError.message);
 
-        // update_school_user() doesn't carry phone_number yet, so persist it
-        // with a direct, narrowly-scoped profiles update (admins can already
-        // update any profile under RLS).
-        const { error: phoneError } = await supabase
-          .from("profiles")
-          .update({ phone_number: form.phone_number.trim() || null, full_name: fullName } as any)
-          .eq("user_id", editing.user_id);
-        if (phoneError) throw new Error(phoneError.message);
-
-        // Update local state immediately so changes reflect at once
-        const updatedStudent = {
-          ...editing!,
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          class_name: classes.find(c => c.id === form.class_id)?.name || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
-          subjects_offered: subjects,
-          phone_number: form.phone_number.trim() || null,
-        };
-        setStudents(prev => prev.map(s => s.user_id === editing!.user_id ? updatedStudent : s));
+        // Re-read the saved record and show what the DATABASE now holds — never what we
+        // merely hoped was saved. If it doesn't match, say so instead of staying silent.
+        const { data: fresh, error: freshError } = await supabase
+          .from("profiles").select("*").eq("user_id", editing.user_id).single();
+        if (freshError || !fresh) throw new Error("Saved, but could not re-load the student. Please refresh the page.");
+        if ((fresh as any).first_name !== form.first_name.trim() || (fresh as any).last_name !== form.last_name.trim()) {
+          throw new Error("The changes were not saved. Please try again or contact support.");
+        }
+        setStudents(prev => prev.map(s => s.user_id === editing!.user_id
+          ? {
+              ...(fresh as any),
+              email: (fresh as any).email || "",
+              class_name: classes.find(c => c.id === (fresh as any).class_id)?.name || null,
+            }
+          : s));
         toast.success("Student updated");
       } else {
         const { data: newUserId, error: createError } = await supabase.rpc("create_school_user", {
@@ -237,7 +219,7 @@ export default function Students() {
         if (createError) throw new Error(createError.message);
         if (!newUserId) throw new Error("Failed to create student account.");
 
-        await supabase.from("profiles").update({
+        const { data: savedProfile, error: profileError } = await supabase.from("profiles").update({
           full_name:        fullName,
           first_name:       form.first_name,
           middle_name:      form.middle_name || "",
@@ -250,7 +232,12 @@ export default function Students() {
           gender:           form.gender || "",
           subjects_offered: subjects,
           phone_number:     form.phone_number.trim() || null,
-        }).eq("user_id", newUserId);
+        }).eq("user_id", newUserId).select("user_id");
+        // A blocked/ignored update returns no error but also no rows — never treat that as success.
+        if (profileError) throw new Error(profileError.message);
+        if (!savedProfile || savedProfile.length === 0) {
+          throw new Error("The student account was created, but their details could not be saved. Open the student and use Edit to complete them.");
+        }
         toast.success("Student created");
         // Only attempt a welcome email when a real address was provided —
         // students registered without one sign in with username + password.
