@@ -4,6 +4,7 @@
 // state, report card fetch, and the new tab are added.
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
@@ -32,8 +33,14 @@ interface AnnouncementItem { id: string; title: string; content: string; created
 interface TermItem      { id: string; name: string; session_id: string; }
 interface SessionItem   { id: string; name: string; }
 
+const PARENT_TABS = ["announcements", "results", "attendance", "grades", "fees", "reportcard"];
+
 export default function ParentDashboard() {
   const { user, schoolId } = useAuth();
+  // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") || "";
+  const activeTab = PARENT_TABS.includes(tabParam) ? tabParam : "announcements";
   const { schoolName } = useSchoolName();
   const { logoUrl }    = useSchoolLogo();
 
@@ -360,7 +367,7 @@ export default function ParentDashboard() {
             </CardContent></Card>
           </div>
 
-          <Tabs defaultValue="announcements">
+          <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
             <TabsList className="flex-wrap h-auto">
               <TabsTrigger value="announcements">Announcements</TabsTrigger>
               <TabsTrigger value="results">Exam Results</TabsTrigger>
