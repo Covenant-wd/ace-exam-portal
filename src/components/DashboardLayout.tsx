@@ -45,6 +45,25 @@ const parentLinks = [
 
 interface NavItem { to: string; label: string; icon: any; group?: string; }
 
+// ── Mobile bottom bar ─────────────────────────────────────────────
+// At most 5 slots. Items are picked in this priority order from whatever
+// the user actually has access to; if more links exist than fit, the last
+// slot becomes "More" and opens the full menu.
+const BOTTOM_NAV_MAX = 5;
+const BOTTOM_NAV_PRIORITY: Record<string, string[]> = {
+  admin: ["/admin", "/admin/students", "/admin/attendance", "/admin/results", "/admin/fees"],
+  instructor: [
+    "/instructor", "/instructor/students", "/instructor/attendance", "/instructor/grades",
+    "/instructor/results", "/instructor/announcements", "/instructor/subjects",
+  ],
+};
+// Shorter labels so they never get cut off on narrow phones.
+const BOTTOM_NAV_SHORT_LABEL: Record<string, string> = {
+  Announcements: "Notices",
+  "Report Cards": "Reports",
+  "My Results": "Results",
+};
+
 const roleColors: Record<string, string> = {
   admin: "from-violet-600 to-blue-600",
   instructor: "from-blue-600 to-cyan-600",
@@ -121,11 +140,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return acc;
   }, {} as Record<string, NavItem[]>);
 
+  // Bottom bar items
+  const bottomPriority = BOTTOM_NAV_PRIORITY[role || ""] || [];
+  const rank = (to: string) => { const i = bottomPriority.indexOf(to); return i === -1 ? 999 : i; };
+  const needsMore = links.length > BOTTOM_NAV_MAX;
+  const bottomItems = [...links]
+    .sort((a, b) => rank(a.to) - rank(b.to))
+    .slice(0, needsMore ? BOTTOM_NAV_MAX - 1 : BOTTOM_NAV_MAX);
+  const isHomeRoute = (to: string) => ["/admin", "/instructor", "/student", "/parent"].includes(to);
+  const isActiveRoute = (to: string) =>
+    location.pathname === to || (!isHomeRoute(to) && location.pathname.startsWith(to + "/"));
+  const moreActive = needsMore && !bottomItems.some((l) => isActiveRoute(l.to));
+
   const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="flex h-screen h-dvh overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
       {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
@@ -293,6 +324,61 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {children}
           </SubscriptionGuard>
         </main>
+
+        {/* Mobile bottom app bar — a normal flex child (not position:fixed), so it
+            never overlaps page content and stays stable when mobile browser bars
+            show/hide. Hidden on desktop where the sidebar is always visible. */}
+        {bottomItems.length > 0 && (
+          <nav
+            aria-label="Primary"
+            className="lg:hidden shrink-0 border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <ul className="flex items-stretch">
+              {bottomItems.map((link) => {
+                const active = isActiveRoute(link.to);
+                const Icon = link.icon;
+                return (
+                  <li key={link.to} className="min-w-0 flex-1">
+                    <Link
+                      to={link.to}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex min-h-[58px] flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                        active ? "text-primary" : "text-muted-foreground"
+                      )}
+                    >
+                      <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", active && "bg-primary/10")}>
+                        <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />
+                      </span>
+                      <span className={cn("w-full truncate text-center text-[10px] leading-tight", active ? "font-semibold" : "font-medium")}>
+                        {BOTTOM_NAV_SHORT_LABEL[link.label] || link.label}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+              {needsMore && (
+                <li className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(true)}
+                    aria-label="Open full menu"
+                    className={cn(
+                      "flex min-h-[58px] w-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                      moreActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", moreActive && "bg-primary/10")}>
+                      <Menu className="h-[22px] w-[22px]" strokeWidth={moreActive ? 2.4 : 2} />
+                    </span>
+                    <span className={cn("text-[10px] leading-tight", moreActive ? "font-semibold" : "font-medium")}>More</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          </nav>
+        )}
       </div>
     </div>
   );
