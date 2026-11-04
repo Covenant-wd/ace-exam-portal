@@ -86,9 +86,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
 
     const hasClassAccess = isClassInstructor || instrPerms?.can_mark_attendance || instrPerms?.can_post_announcements || instrPerms?.can_manage_students;
+    const canSeeStudents = !!instrPerms?.can_manage_students;
     if (hasClassAccess) {
       links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
       links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone,   group: "Records" });
+    }
+    if (canSeeStudents) {
       links.push({ to: "/instructor/students",      label: "Students",      icon: Users,       group: "People"  });
     }
 
