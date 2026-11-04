@@ -1,5 +1,5 @@
 // src/components/DashboardLayout.tsx
-import { ReactNode, useState } from "react";
+import { ReactNode, Suspense, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
@@ -7,7 +7,7 @@ import {
   GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
   CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
-  ExternalLink,
+  ExternalLink, Loader2,
 } from "lucide-react";
 import { cn, getFullName, isPlaceholderEmail } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
@@ -109,6 +109,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     permissions: instrPerms,
     isSubjectInstructor,
     isClassInstructor,
+    loading: instrLoading,
   } = useInstructorPermissions();
 
   const instructorLinks: NavItem[] = (() => {
@@ -179,14 +180,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return location.pathname === path || location.pathname.startsWith(path + "/");
   };
   const moreActive = needsMore && !bottomItems.some((l) => isActiveRoute(l.to));
+  // Instructor menus depend on permissions fetched from the server. Until they have
+  // arrived we reserve the bar's space (empty) instead of building it from an empty
+  // list and re-building it a moment later — that is what made it flicker.
+  const bottomBarPending = role === "instructor" && instrLoading;
   // A bar with a single button is pointless (e.g. an instructor with no permissions yet).
-  const showBottomBar = bottomItems.length + (needsMore ? 1 : 0) > 1;
+  const showBottomBar = !bottomBarPending && bottomItems.length + (needsMore ? 1 : 0) > 1;
 
   const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="flex h-screen h-dvh overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="app-shell flex overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
       {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
@@ -313,7 +318,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+      <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
 
         {/* Top bar */}
         <header className="shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
@@ -348,16 +353,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </span>
         </header>
 
-        <main className="flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6">
           <SubscriptionGuard>
             <SubscriptionBanner />
-            {children}
+            {/* Local Suspense: while a lazily-loaded page downloads, only this content
+                area shows a spinner — the sidebar and bottom bar stay put instead of
+                vanishing and reappearing with the app-level full-screen loader. */}
+            <Suspense
+              fallback={
+                <div className="flex min-h-[40vh] items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              }
+            >
+              {children}
+            </Suspense>
           </SubscriptionGuard>
         </main>
 
         {/* Mobile bottom app bar — a normal flex child (not position:fixed), so it
             never overlaps page content and stays stable when mobile browser bars
             show/hide. Hidden on desktop where the sidebar is always visible. */}
+        {bottomBarPending && (
+          <div
+            aria-hidden="true"
+            className="lg:hidden shrink-0 min-h-[58px] border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          />
+        )}
         {showBottomBar && (
           <nav
             aria-label="Primary"
