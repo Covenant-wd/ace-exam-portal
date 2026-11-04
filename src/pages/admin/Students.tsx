@@ -155,6 +155,8 @@ export default function Students() {
     e.preventDefault();
     if (!canAddStudent()) return;
     if (!form.first_name || !form.last_name) { toast.error("First name and last name are required"); return; }
+    if (!editing && !form.gender) { toast.error("Please select the student's gender"); return; }
+    if (!editing && !form.class_id) { toast.error("Please select the student's class"); return; }
     if (!form.email.trim() && !form.username.trim()) {
       toast.error("Provide an email or a username so the student can sign in");
       return;
@@ -506,7 +508,7 @@ export default function Students() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Gender</Label>
+              <Label>Gender{!editing && " *"}</Label>
               <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                 <SelectContent>
@@ -516,7 +518,7 @@ export default function Students() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Class</Label>
+              <Label>Class{!editing && " *"}</Label>
               <Select value={form.class_id} onValueChange={(v) => setForm((p) => ({ ...p, class_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
                 <SelectContent>
