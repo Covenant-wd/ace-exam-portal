@@ -4,6 +4,8 @@ import { useAuth } from "@/lib/auth";
 import { sendAnnouncementEmail, isNotificationEnabled } from "@/lib/email";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
+import { useAssignedClasses } from "@/hooks/useAssignedClasses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,8 +33,11 @@ interface ClassItem { id: string; name: string; }
 const ALL_CLASSES_SENTINEL = "__ALL__";
 
 export default function Announcements() {
-  const { user, schoolId } = useAuth();
+  const { user, schoolId, role } = useAuth();
   const { schoolName } = useSchoolName();
+  const isInstructor = role === "instructor";
+  const { permissions: instrPerms, loading: permLoading } = useInstructorPermissions();
+  const { classes: assignedClasses, loading: assignedLoading } = useAssignedClasses();
   const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [items, setItems] = useState<Announcement[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -47,26 +52,34 @@ export default function Announcements() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!schoolId) return;
+    if (!schoolId || !user) return;
+    if (isInstructor && assignedLoading) return;
     const init = async () => {
-      const { data: classData } = await supabase
-        .from("classes")
-        .select("id, name")
-        .eq("school_id", schoolId)
-        .order("name");
-      setClasses((classData as ClassItem[]) || []);
+      if (isInstructor) {
+        // Instructors only work with the classes assigned to them.
+        setClasses(assignedClasses);
+      } else {
+        const { data: classData } = await supabase
+          .from("classes")
+          .select("id, name")
+          .eq("school_id", schoolId)
+          .order("name");
+        setClasses((classData as ClassItem[]) || []);
+      }
       await loadAnnouncements(schoolId);
       setLoading(false);
     };
     init();
-  }, [schoolId]);
+  }, [schoolId, user, isInstructor, assignedLoading, assignedClasses]);
 
   const loadAnnouncements = async (sid: string) => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("announcements")
       .select("*")
-      .eq("school_id", sid)
-      .order("created_at", { ascending: false });
+      .eq("school_id", sid);
+    // Instructors manage only the announcements they posted themselves.
+    if (isInstructor && user) query = query.eq("created_by", user.id);
+    const { data, error } = await query.order("created_at", { ascending: false });
     if (error) {
       toast.error(error.message);
       return;
@@ -78,8 +91,8 @@ export default function Announcements() {
     setEditing(null);
     setTitle("");
     setContent("");
-    setTargetRole("all");
-    setTargetClass(ALL_CLASSES_SENTINEL);
+    setTargetRole(isInstructor ? "student" : "all");
+    setTargetClass(isInstructor ? (assignedClasses[0]?.id ?? ALL_CLASSES_SENTINEL) : ALL_CLASSES_SENTINEL);
     setDialog(true);
   };
 
@@ -100,6 +113,16 @@ export default function Announcements() {
       return;
     }
     if (!schoolId || !user) return;
+    if (isInstructor) {
+      if (!instrPerms?.can_post_announcements) {
+        toast.error("You don't have permission to post announcements.");
+        return;
+      }
+      if (targetClass === ALL_CLASSES_SENTINEL || !assignedClasses.some((c) => c.id === targetClass)) {
+        toast.error("Please choose one of the classes assigned to you.");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload = {
@@ -126,15 +149,24 @@ export default function Announcements() {
         try {
           const notifEnabled = await isNotificationEnabled(schoolId, "notify_announcement");
           if (!notifEnabled) throw new Error("skip");
-          const targetRoles = targetRole === "all"
-            ? ["student", "instructor", "parent"]
-            : [targetRole];
-          const { data: roleRows } = await supabase
-            .from("user_roles")
-            .select("user_id")
-            .in("role", targetRoles as any)
-            .eq("school_id", schoolId);
-          const userIds = (roleRows || []).map((r: any) => r.user_id);
+          let userIds: string[] = [];
+          if (isInstructor) {
+            // Instructors only notify the students of their chosen class.
+            const { data: stu } = await supabase.rpc("get_school_students_only", { _school_id: schoolId });
+            userIds = ((stu as any[]) || [])
+              .filter((s: any) => s.class_id === targetClass)
+              .map((s: any) => s.user_id);
+          } else {
+            const targetRoles = targetRole === "all"
+              ? ["student", "instructor", "parent"]
+              : [targetRole];
+            const { data: roleRows } = await supabase
+              .from("user_roles")
+              .select("user_id")
+              .in("role", targetRoles as any)
+              .eq("school_id", schoolId);
+            userIds = (roleRows || []).map((r: any) => r.user_id);
+          }
           if (userIds.length > 0) {
             const { data: emailRows } = await supabase.rpc("get_user_emails_by_ids", {
               _user_ids: userIds,
@@ -192,7 +224,27 @@ export default function Announcements() {
     );
   };
 
-  if (loading) {
+  if (isInstructor && !permLoading && !assignedLoading && !instrPerms?.can_post_announcements) {
+    return (
+      <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+        <Lock className="h-8 w-8 opacity-50" />
+        <p className="font-medium">You don't have permission to post announcements.</p>
+        <p className="text-sm">Ask your school admin to enable "Post announcements" for your account.</p>
+      </CardContent></Card>
+    );
+  }
+
+  if (isInstructor && !permLoading && !assignedLoading && assignedClasses.length === 0) {
+    return (
+      <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+        <Lock className="h-8 w-8 opacity-50" />
+        <p className="font-medium">You haven't been assigned to a class yet.</p>
+        <p className="text-sm">Ask your school admin to assign you as a class instructor.</p>
+      </CardContent></Card>
+    );
+  }
+
+  if (loading || (isInstructor && permLoading)) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -315,18 +367,18 @@ export default function Announcements() {
               <Select value={targetRole} onValueChange={setTargetRole}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Everyone</SelectItem>
+                  <SelectItem value="all">{isInstructor ? "Everyone in the class" : "Everyone"}</SelectItem>
                   <SelectItem value="student">Students Only</SelectItem>
-                  <SelectItem value="instructor">Instructors Only</SelectItem>
-                  <SelectItem value="admin">Admins Only</SelectItem>
+                  {!isInstructor && <SelectItem value="instructor">Instructors Only</SelectItem>}
+                  {!isInstructor && <SelectItem value="admin">Admins Only</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
               <Label>
-                Specific Class{" "}
-                <span className="font-normal text-muted-foreground">(optional)</span>
+                {isInstructor ? "Class" : "Specific Class"}{" "}
+                {!isInstructor && <span className="font-normal text-muted-foreground">(optional)</span>}
               </Label>
               {/*
                 Radix UI Select v2 does not allow value="" on <SelectItem>.
@@ -341,7 +393,7 @@ export default function Announcements() {
                   <SelectValue placeholder="All classes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_CLASSES_SENTINEL}>All Classes</SelectItem>
+                  {!isInstructor && <SelectItem value={ALL_CLASSES_SENTINEL}>All Classes</SelectItem>}
                   {classes.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}

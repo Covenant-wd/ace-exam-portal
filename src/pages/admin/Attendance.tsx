@@ -3,13 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendAbsentNotificationEmail, isNotificationEnabled } from "@/lib/email";
 import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
+import { useAssignedClasses } from "@/hooks/useAssignedClasses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, XCircle, Clock, AlertCircle, Save } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, AlertCircle, Save, Lock } from "lucide-react";
 
 interface StudentProfile { user_id: string; full_name: string; class_id: string | null; }
 interface ClassItem { id: string; name: string; }
@@ -24,8 +26,11 @@ const statusConfig: Record<AttendanceStatus, { label: string; icon: any; color: 
 };
 
 export default function Attendance() {
-  const { user, schoolId } = useAuth();
+  const { user, schoolId, role } = useAuth();
   const { schoolName } = useSchoolName();
+  const isInstructor = role === "instructor";
+  const { permissions: instrPerms, loading: permLoading } = useInstructorPermissions();
+  const { classes: assignedClasses, loading: assignedLoading } = useAssignedClasses();
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [selectedClass, setSelectedClass] = useState("");
@@ -38,11 +43,18 @@ export default function Attendance() {
 
   useEffect(() => {
     if (!schoolId) return;
+    // Instructors only ever see (and can only mark) the classes assigned to them.
+    if (isInstructor) {
+      if (assignedLoading) return;
+      setClasses(assignedClasses);
+      setLoading(false);
+      return;
+    }
     supabase.from("classes").select("id, name").eq("school_id", schoolId).order("name").then(({ data }) => {
       setClasses((data as ClassItem[]) || []);
       setLoading(false);
     });
-  }, [schoolId]);
+  }, [schoolId, isInstructor, assignedLoading, assignedClasses]);
 
   useEffect(() => {
     if (!selectedClass || !schoolId) return;
@@ -184,6 +196,30 @@ export default function Attendance() {
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };
+
+  if (isInstructor && (permLoading || assignedLoading)) {
+    return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  }
+
+  if (isInstructor && !instrPerms?.can_mark_attendance) {
+    return (
+      <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+        <Lock className="h-8 w-8 opacity-50" />
+        <p className="font-medium">You don't have permission to mark attendance.</p>
+        <p className="text-sm">Ask your school admin to enable "Mark attendance" for your account.</p>
+      </CardContent></Card>
+    );
+  }
+
+  if (isInstructor && assignedClasses.length === 0) {
+    return (
+      <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+        <Lock className="h-8 w-8 opacity-50" />
+        <p className="font-medium">You haven't been assigned to a class yet.</p>
+        <p className="text-sm">Ask your school admin to assign you as a class instructor.</p>
+      </CardContent></Card>
+    );
+  }
 
   if (loading && !selectedClass) {
     return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
