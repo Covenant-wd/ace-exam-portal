@@ -85,10 +85,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       links.push({ to: "/instructor/results",  label: "Results",   icon: BarChart3, group: "Assessment" });
     }
 
-    const hasClassAccess = isClassInstructor || instrPerms?.can_mark_attendance || instrPerms?.can_post_announcements || instrPerms?.can_manage_students;
+    // Each class feature needs its own explicit permission — being assigned
+    // to a class alone never unlocks attendance or announcements.
     const canSeeStudents = !!instrPerms?.can_manage_students;
-    if (hasClassAccess) {
+    if (instrPerms?.can_mark_attendance) {
       links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
+    }
+    if (instrPerms?.can_post_announcements) {
       links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone,   group: "Records" });
     }
     if (canSeeStudents) {
