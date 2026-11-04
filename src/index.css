@@ -125,10 +125,29 @@ a[href*="lovable.dev"] {
    on Android Chrome when fixed/sticky elements overlap scroll containers.
    ────────────────────────────────────────────────────────────────────── */
 
-/* Smooth momentum scrolling on iOS; contain overscroll on Android */
+/* Smooth momentum scrolling on iOS.
+   (We deliberately do NOT set overscroll-behavior: contain here any more — on
+   phones it swallowed swipes at the end of every scrollable area, which felt
+   "sticky".) */
 .overflow-y-auto {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+}
+
+/* App shell height.
+   `100vh` on phones is TALLER than the visible area while the browser's address
+   bar / toolbar is showing, which pushed the mobile bottom bar off-screen until
+   the toolbar collapsed. `100dvh` always equals the visible height; the 100vh line
+   is only a fallback for very old browsers that don't understand dvh. */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+@media (min-width: 1024px) {
+  .app-shell {
+    min-height: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
 }
 
 /* Prevent layout paint bleed from fixed sidebar into adjacent scroll areas */
