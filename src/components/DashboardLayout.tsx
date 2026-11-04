@@ -45,6 +45,24 @@ const parentLinks = [
 
 interface NavItem { to: string; label: string; icon: any; group?: string; }
 
+// Students and parents only have one or two sidebar pages — their real content
+// lives in tabs on the dashboard. The mobile bottom bar links straight to those
+// tabs (?tab=...) so it is just as useful for them as it is for staff.
+const studentBottomLinks: NavItem[] = [
+  { to: "/student",                    label: "Home",       icon: LayoutDashboard },
+  { to: "/student?tab=attendance",     label: "Attendance", icon: CheckSquare },
+  { to: "/student?tab=grades",         label: "Grades",     icon: Award },
+  { to: "/student?tab=fees",           label: "Fees",       icon: DollarSign },
+  { to: "/student/results",            label: "Results",    icon: BarChart3 },
+];
+const parentBottomLinks: NavItem[] = [
+  { to: "/parent",                     label: "Home",        icon: LayoutDashboard },
+  { to: "/parent?tab=results",         label: "Results",     icon: BarChart3 },
+  { to: "/parent?tab=attendance",      label: "Attendance",  icon: CheckSquare },
+  { to: "/parent?tab=fees",            label: "Fees",        icon: DollarSign },
+  { to: "/parent?tab=reportcard",      label: "Report Card", icon: ClipboardList },
+];
+
 // ── Mobile bottom bar ─────────────────────────────────────────────
 // At most 5 slots. Items are picked in this priority order from whatever
 // the user actually has access to; if more links exist than fit, the last
@@ -143,14 +161,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Bottom bar items
   const bottomPriority = BOTTOM_NAV_PRIORITY[role || ""] || [];
   const rank = (to: string) => { const i = bottomPriority.indexOf(to); return i === -1 ? 999 : i; };
-  const needsMore = links.length > BOTTOM_NAV_MAX;
-  const bottomItems = [...links]
+  const bottomSource: NavItem[] =
+    role === "student" ? studentBottomLinks : role === "parent" ? parentBottomLinks : links;
+  const needsMore = bottomSource.length > BOTTOM_NAV_MAX;
+  const bottomItems = [...bottomSource]
     .sort((a, b) => rank(a.to) - rank(b.to))
     .slice(0, needsMore ? BOTTOM_NAV_MAX - 1 : BOTTOM_NAV_MAX);
-  const isHomeRoute = (to: string) => ["/admin", "/instructor", "/student", "/parent"].includes(to);
-  const isActiveRoute = (to: string) =>
-    location.pathname === to || (!isHomeRoute(to) && location.pathname.startsWith(to + "/"));
+  const isHomeRoute = (path: string) => ["/admin", "/instructor", "/student", "/parent"].includes(path);
+  const currentTab = new URLSearchParams(location.search).get("tab");
+  const isActiveRoute = (to: string) => {
+    const [path, query = ""] = to.split("?");
+    const tab = new URLSearchParams(query).get("tab");
+    if (tab) return location.pathname === path && currentTab === tab;          // a dashboard tab
+    if (isHomeRoute(path)) {                                                    // dashboard home
+      return location.pathname === path && (!currentTab || currentTab === "announcements");
+    }
+    return location.pathname === path || location.pathname.startsWith(path + "/");
+  };
   const moreActive = needsMore && !bottomItems.some((l) => isActiveRoute(l.to));
+  // A bar with a single button is pointless (e.g. an instructor with no permissions yet).
+  const showBottomBar = bottomItems.length + (needsMore ? 1 : 0) > 1;
 
   const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
@@ -328,7 +358,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {/* Mobile bottom app bar — a normal flex child (not position:fixed), so it
             never overlaps page content and stays stable when mobile browser bars
             show/hide. Hidden on desktop where the sidebar is always visible. */}
-        {bottomItems.length > 0 && (
+        {showBottomBar && (
           <nav
             aria-label="Primary"
             className="lg:hidden shrink-0 border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
