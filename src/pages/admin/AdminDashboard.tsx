@@ -1,5 +1,6 @@
 // src/pages/admin/AdminDashboard.tsx
 import { useEffect, useState } from "react";
+import { useProfileName } from "@/hooks/useProfileName";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Link } from "react-router-dom";
@@ -9,10 +10,10 @@ import {
   Megaphone, BarChart3, ExternalLink,
 } from "lucide-react";
 import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
-import { getFirstName } from "@/lib/utils";
 
 export default function AdminDashboard() {
   const { user, schoolId } = useAuth();
+  const { firstName: displayFirstName } = useProfileName();
   const { cbtLink } = useSchoolCbtLink();
   const [stats, setStats] = useState({ students: 0, subjects: 0, instructors: 0, parents: 0, classes: 0 });
   const [feeStats, setFeeStats] = useState({ total_expected: 0, total_collected: 0, total_outstanding: 0, non_payers: 0 });
@@ -113,7 +114,7 @@ export default function AdminDashboard() {
       <div className="rounded-2xl bg-gradient-to-br from-violet-600 via-blue-600 to-cyan-600 p-6 text-white shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, {getFirstName(user)}</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, {displayFirstName}</h1>
             <p className="text-white/70 text-sm mt-1">Manage your school from one place</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
