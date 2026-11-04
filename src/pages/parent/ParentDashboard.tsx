@@ -4,6 +4,7 @@
 // state, report card fetch, and the new tab are added.
 
 import { useEffect, useState } from "react";
+import { useProfileName } from "@/hooks/useProfileName";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -14,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getFirstName } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Loader2, CheckCircle2, XCircle, Clock, DollarSign,
@@ -37,6 +37,7 @@ const PARENT_TABS = ["announcements", "results", "attendance", "grades", "fees",
 
 export default function ParentDashboard() {
   const { user, schoolId } = useAuth();
+  const { firstName: displayFirstName } = useProfileName();
   // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") || "";
@@ -293,7 +294,7 @@ export default function ParentDashboard() {
   if (children.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Welcome, {getFirstName(user)}</h1>
+        <h1 className="text-3xl font-bold">Welcome, {displayFirstName}</h1>
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <Users className="mx-auto mb-3 h-10 w-10 opacity-40" />
@@ -311,7 +312,7 @@ export default function ParentDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold">Welcome, {getFirstName(user)}</h1>
+        <h1 className="text-3xl font-bold">Welcome, {displayFirstName}</h1>
         {children.length > 1 && (
           <Select value={selectedChild} onValueChange={v => { setSelectedChild(v); setSelectedTerm(""); }}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Select child" /></SelectTrigger>
