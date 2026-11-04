@@ -1,5 +1,6 @@
 // src/pages/student/StudentDashboard.tsx
 import { useEffect, useState } from "react";
+import { useProfileName } from "@/hooks/useProfileName";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -10,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, ExternalLink } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
 import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
-import { getFirstName } from "@/lib/utils";
 
 interface AttendanceRecord { date: string; status: string; }
 interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
@@ -21,6 +21,7 @@ const STUDENT_TABS = ["announcements", "attendance", "grades", "fees"];
 
 export default function StudentDashboard() {
   const { user, schoolId } = useAuth();
+  const { firstName: displayFirstName } = useProfileName();
   // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") || "";
@@ -98,7 +99,7 @@ export default function StudentDashboard() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Welcome, {getFirstName(user)}!</h1>
+          <h1 className="text-3xl font-bold">Welcome, {displayFirstName}!</h1>
           <p className="text-sm text-muted-foreground mt-1">Here's what's happening with your studies</p>
         </div>
         {/* CBT Portal button — only shown if school has configured an external CBT link */}
