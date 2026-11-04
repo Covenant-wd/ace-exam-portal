@@ -32,6 +32,7 @@ const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const Subjects = lazy(() => import("./pages/admin/Subjects"));
 const Results = lazy(() => import("./pages/admin/Results"));
 const Students = lazy(() => import("./pages/admin/Students"));
+const InstructorStudents = lazy(() => import("./pages/instructor/InstructorStudents"));
 const Settings = lazy(() => import("./pages/admin/Settings"));
 const Sessions = lazy(() => import("./pages/admin/Sessions"));
 const Classes = lazy(() => import("./pages/admin/Classes"));
@@ -162,7 +163,7 @@ function AppRoutes() {
         <Route path="/instructor" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><InstructorDashboard /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/subjects" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Subjects /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/results" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Results /></DashboardLayout></ProtectedRoute>} />
-        <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Students /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/students" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><InstructorStudents /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/attendance" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Attendance /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/grades" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Grades /></DashboardLayout></ProtectedRoute>} />
         <Route path="/instructor/timetable" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Timetable /></DashboardLayout></ProtectedRoute>} />
