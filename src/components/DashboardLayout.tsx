@@ -186,6 +186,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const bottomBarPending = role === "instructor" && instrLoading;
   // A bar with a single button is pointless (e.g. an instructor with no permissions yet).
   const showBottomBar = !bottomBarPending && bottomItems.length + (needsMore ? 1 : 0) > 1;
+  const reserveBottomBar = bottomBarPending || showBottomBar;
 
   const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
@@ -353,7 +354,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </span>
         </header>
 
-        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6">
+        <main
+          className={cn(
+            "flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6",
+            // 58px bar + device safe-area + the normal 1rem gap; desktop has no bar
+            reserveBottomBar && "pb-[calc(58px+env(safe-area-inset-bottom,0px)+1rem)] lg:pb-6"
+          )}
+        >
           <SubscriptionGuard>
             <SubscriptionBanner />
             {/* Local Suspense: while a lazily-loaded page downloads, only this content
@@ -370,24 +377,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </Suspense>
           </SubscriptionGuard>
         </main>
+      </div>
 
-        {/* Mobile bottom app bar — a normal flex child (not position:fixed), so it
-            never overlaps page content and stays stable when mobile browser bars
-            show/hide. Hidden on desktop where the sidebar is always visible. */}
-        {bottomBarPending && (
-          <div
-            aria-hidden="true"
-            className="lg:hidden shrink-0 min-h-[58px] border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
-            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-          />
-        )}
-        {showBottomBar && (
-          <nav
-            aria-label="Primary"
-            className="lg:hidden shrink-0 border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
-            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-          >
-            <ul className="flex items-stretch">
+      {/* ── Mobile bottom app bar ───────────────────────────────────────────
+          position:fixed to the bottom of the PHONE SCREEN, so it stays put no
+          matter how long the page is or how far the user has scrolled. The
+          content area reserves matching bottom padding (see <main>) so nothing
+          is ever hidden behind it. Dialogs/drawer (z-40/50) correctly cover it.
+          Hidden on desktop where the sidebar is always visible. */}
+      {(bottomBarPending || showBottomBar) && (
+        <nav
+          aria-label="Primary"
+          className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          {showBottomBar ? (
+            <ul className="flex h-[58px] items-stretch">
               {bottomItems.map((link) => {
                 const active = isActiveRoute(link.to);
                 const Icon = link.icon;
@@ -397,7 +402,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       to={link.to}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex min-h-[58px] flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                        "flex h-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
                         active ? "text-primary" : "text-muted-foreground"
                       )}
                     >
@@ -418,7 +423,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     onClick={() => setSidebarOpen(true)}
                     aria-label="Open full menu"
                     className={cn(
-                      "flex min-h-[58px] w-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                      "flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
                       moreActive ? "text-primary" : "text-muted-foreground"
                     )}
                   >
@@ -430,9 +435,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </li>
               )}
             </ul>
-          </nav>
-        )}
-      </div>
+          ) : (
+            <div className="h-[58px]" aria-hidden="true" />
+          )}
+        </nav>
+      )}
     </div>
   );
 }
