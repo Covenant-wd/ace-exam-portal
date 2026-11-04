@@ -205,6 +205,13 @@ export default function InstructorStudents() {
           _phone_number: form.phone_number.trim() || null,
         } as any);
         if (error) throw new Error(error.message);
+
+        // Re-read the saved record so we never report success for a change that didn't stick.
+        const { data: fresh } = await supabase
+          .from("profiles").select("first_name, last_name").eq("user_id", editing.user_id).single();
+        if (!fresh || (fresh as any).first_name !== form.first_name.trim() || (fresh as any).last_name !== form.last_name.trim()) {
+          throw new Error("The changes were not saved. Please try again or contact your school admin.");
+        }
         toast.success("Student updated");
       } else {
         const { data: newUserId, error } = await (supabase as any).rpc("instructor_create_student", {
