@@ -3,13 +3,14 @@ import { ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
+import { useProfileName } from "@/hooks/useProfileName";
 import {
   GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
   CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
   ExternalLink, Loader2,
 } from "lucide-react";
-import { cn, getFullName, isPlaceholderEmail } from "@/lib/utils";
+import { cn, isPlaceholderEmail } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import SubscriptionGuard from "@/components/SubscriptionGuard";
@@ -98,6 +99,7 @@ const roleBadgeColors: Record<string, string> = {
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { role, signOut, user, schoolId, schoolSlug } = useAuth();
+  const { fullName: displayName } = useProfileName();
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
   const { cbtLink } = useSchoolCbtLink();
@@ -307,10 +309,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="border-t border-white/5 p-3">
           <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-1">
             <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white", gradientClass)}>
-              {(getFullName(user) || user?.email || "?").charAt(0).toUpperCase()}
+              {(displayName || user?.email || "?").charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-white/80 font-medium truncate">{getFullName(user) || "My Account"}</p>
+              <p className="text-xs text-white/80 font-medium truncate">{displayName || "My Account"}</p>
               {user?.email && !isPlaceholderEmail(user.email) && (
                 <p className="text-[11px] text-white/50 truncate">{user.email}</p>
               )}
