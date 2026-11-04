@@ -1,5 +1,5 @@
 // src/components/DashboardLayout.tsx
-import { ReactNode, Suspense, useState } from "react";
+import { ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
@@ -112,6 +112,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     loading: instrLoading,
   } = useInstructorPermissions();
 
+  // While the slide-out menu is open, stop the page behind it from scrolling.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [sidebarOpen]);
+
   const instructorLinks: NavItem[] = (() => {
     if (role !== "instructor") return [];
     const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
@@ -192,7 +200,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="app-shell flex overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="app-shell flex overflow-x-clip lg:overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
       {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
@@ -319,10 +327,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden">
+      <div className="flex flex-1 flex-col min-w-0 lg:min-h-0 lg:overflow-hidden">
 
         {/* Top bar */}
-        <header className="shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6">
+        <header
+          className="sticky top-0 lg:static shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
+        >
           <button
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
             onClick={() => setSidebarOpen(true)}
@@ -356,7 +367,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         <main
           className={cn(
-            "flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6",
+            "flex-1 p-4 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-6",
             // 58px bar + device safe-area + the normal 1rem gap; desktop has no bar
             reserveBottomBar && "pb-[calc(58px+env(safe-area-inset-bottom,0px)+1rem)] lg:pb-6"
           )}
