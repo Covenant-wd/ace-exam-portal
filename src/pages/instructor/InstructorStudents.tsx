@@ -181,7 +181,8 @@ export default function InstructorStudents() {
 
     setSaving(true);
     const subjects = form.subjects_offered.split(",").map((s) => s.trim()).filter(Boolean);
-    const fullName = `${form.first_name} ${form.last_name}`.trim();
+    const fullName = [form.first_name, form.middle_name, form.last_name]
+      .map((p) => (p || "").trim()).filter(Boolean).join(" ");
 
     try {
       if (editing) {
