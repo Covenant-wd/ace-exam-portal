@@ -162,7 +162,8 @@ export default function Students() {
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
     setSaving(true);
     const subjects = form.subjects_offered.split(",").map((s: string) => s.trim()).filter(Boolean);
-    const fullName = `${form.first_name} ${form.last_name}`.trim();
+    const fullName = [form.first_name, form.middle_name, form.last_name]
+      .map((p) => (p || "").trim()).filter(Boolean).join(" ");
 
     try {
       if (editing) {
@@ -198,7 +199,7 @@ export default function Students() {
         // update any profile under RLS).
         const { error: phoneError } = await supabase
           .from("profiles")
-          .update({ phone_number: form.phone_number.trim() || null } as any)
+          .update({ phone_number: form.phone_number.trim() || null, full_name: fullName } as any)
           .eq("user_id", editing.user_id);
         if (phoneError) throw new Error(phoneError.message);
 
@@ -235,6 +236,7 @@ export default function Students() {
         if (!newUserId) throw new Error("Failed to create student account.");
 
         await supabase.from("profiles").update({
+          full_name:        fullName,
           first_name:       form.first_name,
           middle_name:      form.middle_name || "",
           last_name:        form.last_name,
