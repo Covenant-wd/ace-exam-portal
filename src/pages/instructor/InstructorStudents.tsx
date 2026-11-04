@@ -177,6 +177,7 @@ export default function InstructorStudents() {
     if (!form.first_name.trim() || !form.last_name.trim()) { toast.error("First name and last name are required"); return; }
     if (!form.email.trim() && !form.username.trim()) { toast.error("Provide an email or a username so the student can sign in"); return; }
     if (!form.class_id) { toast.error("Please choose a class"); return; }
+    if (!editing && !form.gender) { toast.error("Please select the student's gender"); return; }
     if (!editing && !form.password) { toast.error("Password is required for new students"); return; }
 
     setSaving(true);
@@ -446,7 +447,7 @@ export default function InstructorStudents() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Gender</Label>
+              <Label>Gender{!editing && " *"}</Label>
               <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                 <SelectContent>
