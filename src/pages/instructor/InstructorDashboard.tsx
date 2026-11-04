@@ -177,11 +177,11 @@ export default function InstructorDashboard() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Attendance",    icon: CheckSquare, to: "/instructor/attendance",    color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400" },
-              { label: "Announcements", icon: Megaphone,   to: "/instructor/announcements", color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400" },
-              { label: "Students",      icon: Users,       to: "/instructor/students",      color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
-              { label: "Performance",   icon: BarChart3,   to: "/instructor/results",       color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
-            ].map((item) => {
+              { perm: "can_mark_attendance", label: "Attendance",    icon: CheckSquare, to: "/instructor/attendance",    color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400" },
+              { perm: "can_post_announcements", label: "Announcements", icon: Megaphone,   to: "/instructor/announcements", color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400" },
+              { perm: "can_manage_students", label: "Students",      icon: Users,       to: "/instructor/students",      color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
+              { perm: null,        label: "Performance",   icon: BarChart3,   to: "/instructor/results",       color: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400" },
+            ].filter((item) => !item.perm || !!(permissions as any)?.[item.perm]).map((item) => {
               const Icon = item.icon;
               return (
                 <Link key={item.label} to={item.to} className="flex items-center gap-3 bg-white dark:bg-white/5 rounded-xl p-3 border border-black/5 dark:border-white/5 hover:shadow-md hover:-translate-y-0.5 transition-[box-shadow,transform] duration-150">
