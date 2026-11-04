@@ -1,5 +1,6 @@
 // src/pages/student/StudentDashboard.tsx
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +17,14 @@ interface GradeRecord { subject_name: string; category_name: string; category_ma
 interface FeeRecord { fee_name: string; amount: number; amount_paid: number; payment_date: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
+const STUDENT_TABS = ["announcements", "attendance", "grades", "fees"];
+
 export default function StudentDashboard() {
   const { user, schoolId } = useAuth();
+  // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") || "";
+  const activeTab = STUDENT_TABS.includes(tabParam) ? tabParam : "announcements";
   const { cbtLink } = useSchoolCbtLink();
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -154,7 +161,7 @@ export default function StudentDashboard() {
         </Card>
       </div>
 
-      <Tabs defaultValue="announcements">
+      <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
         <TabsList className="flex-wrap h-auto w-full justify-start">
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
