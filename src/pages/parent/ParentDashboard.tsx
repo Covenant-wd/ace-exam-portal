@@ -9,6 +9,8 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
+import { FeeReceiptDialog, type ReceiptData } from "@/components/FeeReceipt";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Loader2, CheckCircle2, XCircle, Clock, DollarSign,
-  Megaphone, BarChart3, Users, FileText,
+  Megaphone, BarChart3, Users, FileText, Printer,
 } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
 import type { RawGrade, PsychomotorData, AffectiveData } from "@/components/ReportCard";
@@ -26,7 +28,7 @@ import type { RawGrade, PsychomotorData, AffectiveData } from "@/components/Repo
 interface Child         { student_id: string; full_name: string; }
 interface AttendanceRecord { date: string; status: string; }
 interface GradeRecord   { subject_name: string; category_name: string; category_max_score: number; score: number; }
-interface FeeRecord     { fee_name: string; amount_paid: number; payment_date: string; }
+interface FeeRecord     { fee_name: string; amount_paid: number; payment_date: string; receipt_ref?: string; payment_method?: string; receipt_number?: string; notes?: string; }
 interface FeeOverviewItem { fee_type_id: string; fee_name: string; fee_amount: number; amount_paid: number; balance: number; }
 interface ExamResult    { exam_title: string; score: number; total_questions: number; submitted_at: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
@@ -44,6 +46,8 @@ export default function ParentDashboard() {
   const activeTab = PARENT_TABS.includes(tabParam) ? tabParam : "announcements";
   const { schoolName } = useSchoolName();
   const { logoUrl }    = useSchoolLogo();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   // ── Existing state ────────────────────────────────────────────
   const [children,       setChildren]       = useState<Child[]>([]);
@@ -143,7 +147,7 @@ export default function ParentDashboard() {
             .select("score, max_score, subjects:subject_id(name), grade_categories:category_id(name, max_score)")
             .eq("student_id", selectedChild).order("created_at", { ascending: false }),
           supabase.from("fee_payments")
-            .select("amount_paid, payment_date, fee_type_id, fee_types:fee_type_id(name, amount)")
+            .select("*, fee_types:fee_type_id(name, amount)")
             .eq("student_id", selectedChild).order("created_at", { ascending: false }),
           supabase.from("exam_attempts")
             .select("score, total_questions, submitted_at, exams:exam_id(title)")
@@ -179,7 +183,10 @@ export default function ParentDashboard() {
         })));
 
         const payments = (feesRes.data || []) as any[];
-        setFees(payments.map((f: any) => ({ fee_name: f.fee_types?.name || "—", amount_paid: f.amount_paid, payment_date: f.payment_date })));
+        setFees(payments.map((f: any) => ({
+          fee_name: f.fee_types?.name || "—", amount_paid: f.amount_paid, payment_date: f.payment_date,
+          receipt_ref: f.receipt_ref, payment_method: f.payment_method, receipt_number: f.receipt_number, notes: f.notes,
+        })));
 
         const childClassId = (childProfileRes.data as any)?.class_id || null;
         const applicableTypes = ((feeTypesRes.data || []) as any[]).filter(t => (!t.class_id || t.class_id === childClassId));
@@ -519,6 +526,56 @@ export default function ParentDashboard() {
                         </Table>
                       </CardContent>
                     </Card>
+
+                    {/* ── Payment receipts (printable) ── */}
+                    <Card>
+                      <CardContent className="p-0 overflow-x-auto">
+                        <div className="border-b px-4 py-3 font-semibold">Payment receipts</div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Fee</TableHead>
+                              <TableHead className="text-right">Paid</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead className="text-right">Receipt</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {fees.length === 0 ? (
+                              <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No payments yet</TableCell></TableRow>
+                            ) : fees.map((f, i) => (
+                              <TableRow key={f.receipt_ref || i}>
+                                <TableCell className="font-medium">{f.fee_name}</TableCell>
+                                <TableCell className="text-right">₦{Number(f.amount_paid).toLocaleString()}</TableCell>
+                                <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost" size="sm" title="View / print receipt" disabled={!f.receipt_ref}
+                                    onClick={() => {
+                                      setReceiptData({
+                                        reference: f.receipt_ref || "",
+                                        schoolName: schoolName || document.title || "School",
+                                        logoUrl: logoUrl || undefined,
+                                        studentName: children.find(c => c.student_id === selectedChild)?.full_name || "Student",
+                                        feeName: f.fee_name,
+                                        amount: Number(f.amount_paid),
+                                        paymentMethod: f.payment_method,
+                                        paymentDate: f.payment_date,
+                                        tellerNumber: f.receipt_number || undefined,
+                                        notes: f.notes || undefined,
+                                      });
+                                      setReceiptOpen(true);
+                                    }}
+                                  >
+                                    <Printer className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
                   </>
                 );
               })()}
@@ -580,6 +637,8 @@ export default function ParentDashboard() {
           </Tabs>
         </>
       )}
+
+      <FeeReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} data={receiptData} />
     </div>
   );
 }
