@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { sendFeePaymentEmail, isNotificationEnabled } from "@/lib/email";
 import { useSubscription } from "@/hooks/useSubscription";
-import { useSchoolName } from "@/hooks/useSchoolSettings";
+import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
+import { FeeReceiptDialog, type ReceiptData } from "@/components/FeeReceipt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,17 +15,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit, Lock } from "lucide-react";
+import { Loader2, Plus, DollarSign, Receipt, Trash2, Edit, Lock, Printer } from "lucide-react";
 
 interface FeeType { id: string; name: string; amount: number; term_id: string | null; class_id: string | null; description: string; is_active: boolean; }
-interface FeePayment { id: string; student_id: string; fee_type_id: string; amount_paid: number; payment_date: string; payment_method: string; receipt_number: string; notes: string; }
+interface FeePayment { id: string; student_id: string; fee_type_id: string; amount_paid: number; payment_date: string; payment_method: string; receipt_number: string; receipt_ref?: string; notes: string; }
 interface ClassItem { id: string; name: string; }
 interface Term { id: string; name: string; }
-interface StudentProfile { user_id: string; full_name: string; }
+interface StudentProfile { user_id: string; full_name: string; class_id?: string | null; }
 
 export default function Fees() {
   const { user, schoolId } = useAuth();
   const { schoolName } = useSchoolName();
+  const { logoUrl } = useSchoolLogo();
   const { canWrite, isRestricted, isSuspended } = useSubscription();
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
   const [payments, setPayments] = useState<FeePayment[]>([]);
@@ -51,6 +53,11 @@ export default function Fees() {
   const [payNotes, setPayNotes] = useState("");
   const [paySaving, setPaySaving] = useState(false);
 
+  // Printable receipt
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [receiptTitle, setReceiptTitle] = useState("Payment Receipt");
+
   // Pre-fill payment dialog when navigated from debtors page (?student=<id>)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -76,6 +83,7 @@ export default function Fees() {
       setStudents(((studentRes.data as any[]) || []).map((s: any) => ({
         user_id: s.user_id,
         full_name: s.full_name,
+        class_id: s.class_id ?? null,
       })));
       await loadFeeTypes(schoolId);
       await loadPayments(schoolId);
@@ -133,13 +141,14 @@ export default function Fees() {
     if (!payStudent || !payFeeType || !payAmount || !schoolId || !user) { toast.error("All fields required"); return; }
     setPaySaving(true);
     try {
-      const { error } = await supabase.from("fee_payments").insert({
+      const { data: inserted, error } = await supabase.from("fee_payments").insert({
         student_id: payStudent, fee_type_id: payFeeType, school_id: schoolId,
         amount_paid: parseFloat(payAmount), payment_method: payMethod,
         receipt_number: payReceipt, notes: payNotes, recorded_by: user.id,
-      } as any);
+      } as any).select("*").single();
       if (error) throw error;
       toast.success("Payment recorded");
+      const newPayment = inserted as unknown as FeePayment;
       // Send fee payment email (if enabled)
       try {
         const notifEnabled = await isNotificationEnabled(schoolId!, "notify_fee_payment");
@@ -164,7 +173,7 @@ export default function Fees() {
             feeName,
             amountPaid: parseFloat(payAmount),
             paymentDate: new Date().toISOString(),
-            receiptNumber: payReceipt,
+            receiptNumber: newPayment?.receipt_ref || payReceipt,
             loginUrl: window.location.origin,
           });
         }
@@ -172,8 +181,29 @@ export default function Fees() {
       setPayDialog(false);
       setPayStudent(""); setPayFeeType(""); setPayAmount(""); setPayReceipt(""); setPayNotes("");
       await loadPayments(schoolId);
+      // Show the printable receipt straight away
+      if (newPayment?.receipt_ref) openReceipt(newPayment, "Payment recorded — receipt");
     } catch (err: any) { toast.error(err.message); }
     setPaySaving(false);
+  };
+
+  const openReceipt = (p: FeePayment, title = "Payment Receipt") => {
+    const student = students.find((s) => s.user_id === p.student_id);
+    setReceiptData({
+      reference: p.receipt_ref || "",
+      schoolName: schoolName || document.title || "School",
+      logoUrl: logoUrl || undefined,
+      studentName: student?.full_name || p.student_id.slice(0, 8),
+      className: classes.find((c) => c.id === student?.class_id)?.name,
+      feeName: feeTypes.find((f) => f.id === p.fee_type_id)?.name || "—",
+      amount: Number(p.amount_paid),
+      paymentMethod: p.payment_method,
+      paymentDate: p.payment_date,
+      tellerNumber: p.receipt_number || undefined,
+      notes: p.notes || undefined,
+    });
+    setReceiptTitle(title);
+    setReceiptOpen(true);
   };
 
   const getStudentName = (id: string) => students.find((s) => s.user_id === id)?.full_name || id.slice(0, 8);
@@ -235,10 +265,10 @@ export default function Fees() {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Fee</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Date</TableHead><TableHead>Receipt</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Student</TableHead><TableHead>Fee</TableHead><TableHead>Amount</TableHead><TableHead>Method</TableHead><TableHead>Date</TableHead><TableHead>Receipt No.</TableHead><TableHead className="text-right">Print</TableHead></TableRow></TableHeader>
             <TableBody>
               {payments.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">No payments recorded</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">No payments recorded</TableCell></TableRow>
               ) : (
                 payments.map((p) => (
                   <TableRow key={p.id}>
@@ -247,7 +277,15 @@ export default function Fees() {
                     <TableCell>₦{Number(p.amount_paid).toLocaleString()}</TableCell>
                     <TableCell><Badge variant="secondary">{p.payment_method}</Badge></TableCell>
                     <TableCell className="text-muted-foreground">{new Date(p.payment_date).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.receipt_number || "—"}</TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs font-semibold">{p.receipt_ref || "—"}</span>
+                      {p.receipt_number ? <span className="block text-xs text-muted-foreground">Ref: {p.receipt_number}</span> : null}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" title="View / print receipt" disabled={!p.receipt_ref} onClick={() => openReceipt(p)}>
+                        <Printer className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -321,11 +359,13 @@ export default function Fees() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Receipt Number</Label><Input value={payReceipt} onChange={(e) => setPayReceipt(e.target.value)} placeholder="Optional" /></div>
+            <div className="space-y-2"><Label>Teller / Payment Reference</Label><Input value={payReceipt} onChange={(e) => setPayReceipt(e.target.value)} placeholder="Optional — printed on the receipt" /></div>
             <Button onClick={handleRecordPayment} disabled={paySaving} className="w-full">{paySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record Payment"}</Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <FeeReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} data={receiptData} title={receiptTitle} />
     </div>
   );
 }
