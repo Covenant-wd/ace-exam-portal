@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 // Lazy-loaded pages for faster initial load
 const Index = lazy(() => import("./pages/Index"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const VerifyReceipt = lazy(() => import("./pages/VerifyReceipt"));
 const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
 const SuperAdminLayout = lazy(() => import("./components/SuperAdminLayout"));
 const OutreachOfficerLayout = lazy(() => import("./components/OutreachOfficerLayout"));
@@ -110,6 +111,9 @@ function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/" element={<Index />} />
+
+        {/* Public receipt check — opened by the QR code on a printed fee receipt */}
+        <Route path="/verify-receipt/:ref" element={<VerifyReceipt />} />
 
         {/* Public legal pages (must stay above the /:slug catch-all) */}
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
