@@ -1,6 +1,9 @@
 // src/pages/student/StudentDashboard.tsx
 import { useEffect, useState } from "react";
 import { useProfileName } from "@/hooks/useProfileName";
+import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
+import { FeeReceiptDialog, type ReceiptData } from "@/components/FeeReceipt";
+import { Button } from "@/components/ui/button";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -8,20 +11,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, ExternalLink } from "lucide-react";
+import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, ExternalLink, Printer } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
 import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
 interface AttendanceRecord { date: string; status: string; }
 interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
-interface FeeRecord { fee_name: string; amount: number; amount_paid: number; payment_date: string; }
+interface FeeRecord { fee_name: string; amount: number; amount_paid: number; payment_date: string; receipt_ref?: string; payment_method?: string; receipt_number?: string; notes?: string; }
 interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
 const STUDENT_TABS = ["announcements", "attendance", "grades", "fees"];
 
 export default function StudentDashboard() {
   const { user, schoolId } = useAuth();
-  const { firstName: displayFirstName } = useProfileName();
+  const { firstName: displayFirstName, fullName: studentFullName } = useProfileName();
+  const { schoolName } = useSchoolName();
+  const { logoUrl } = useSchoolLogo();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") || "";
@@ -71,7 +78,7 @@ export default function StudentDashboard() {
       })));
 
       const { data: feeData } = await supabase.from("fee_payments").select(`
-        amount_paid, payment_date,
+        *,
         fee_types:fee_type_id(name, amount)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
@@ -80,6 +87,10 @@ export default function StudentDashboard() {
         amount: f.fee_types?.amount || 0,
         amount_paid: f.amount_paid,
         payment_date: f.payment_date,
+        receipt_ref: f.receipt_ref,
+        payment_method: f.payment_method,
+        receipt_number: f.receipt_number,
+        notes: f.notes,
       })));
 
       const annQuery = supabase.from("announcements").select("id, title, content, created_at")
@@ -230,17 +241,40 @@ export default function StudentDashboard() {
                     <TableHead>Fee</TableHead>
                     <TableHead>Amount Paid</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Receipt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fees.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
                   ) : (
                     fees.map((f, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{f.fee_name}</TableCell>
                         <TableCell>₦{Number(f.amount_paid).toLocaleString()}</TableCell>
                         <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost" size="sm" title="View / print receipt" disabled={!f.receipt_ref}
+                            onClick={() => {
+                              setReceiptData({
+                                reference: f.receipt_ref || "",
+                                schoolName: schoolName || document.title || "School",
+                                logoUrl: logoUrl || undefined,
+                                studentName: studentFullName || "Student",
+                                feeName: f.fee_name,
+                                amount: Number(f.amount_paid),
+                                paymentMethod: f.payment_method,
+                                paymentDate: f.payment_date,
+                                tellerNumber: f.receipt_number || undefined,
+                                notes: f.notes || undefined,
+                              });
+                              setReceiptOpen(true);
+                            }}
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -250,6 +284,8 @@ export default function StudentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <FeeReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} data={receiptData} />
     </div>
   );
 }
