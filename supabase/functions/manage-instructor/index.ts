@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "create") {
-      const { email, password, full_name } = body;
+      const { email, password, full_name, phone_number } = body;
 
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email, password, email_confirm: true,
@@ -41,6 +41,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("profiles").update({
         full_name, first_name: full_name.split(" ")[0] || "",
         last_name: full_name.split(" ").slice(1).join(" ") || "",
+        phone_number: phone_number || null,
         school_id: callerSchoolId,
       }).eq("user_id", newUser.user!.id);
 
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, email, password, full_name } = body;
+      const { user_id, email, password, full_name, phone_number } = body;
 
       // Verify instructor belongs to caller's school
       const { data: instrRole } = await supabaseAdmin.from("user_roles").select("school_id").eq("user_id", user_id).single();
@@ -72,11 +73,15 @@ Deno.serve(async (req) => {
         if (error) throw error;
       }
 
+      const profileUpdate: Record<string, any> = {};
       if (full_name) {
-        await supabaseAdmin.from("profiles").update({
-          full_name, first_name: full_name.split(" ")[0] || "",
-          last_name: full_name.split(" ").slice(1).join(" ") || "",
-        }).eq("user_id", user_id);
+        profileUpdate.full_name = full_name;
+        profileUpdate.first_name = full_name.split(" ")[0] || "";
+        profileUpdate.last_name = full_name.split(" ").slice(1).join(" ") || "";
+      }
+      if (phone_number !== undefined) profileUpdate.phone_number = phone_number || null;
+      if (Object.keys(profileUpdate).length > 0) {
+        await supabaseAdmin.from("profiles").update(profileUpdate).eq("user_id", user_id);
       }
 
       return new Response(JSON.stringify({ success: true }), {
@@ -106,7 +111,7 @@ Deno.serve(async (req) => {
       const userIds = roles.map(r => r.user_id);
       const { data: profiles } = await supabaseAdmin.from("profiles").select("*").in("user_id", userIds);
       const { data: permissions } = await supabaseAdmin.from("instructor_permissions").select("*").in("instructor_id", userIds);
-      const { data: classes } = await supabaseAdmin.from("instructor_classes").select("*").in("instructor_id", userIds);
+      const { data: classes } = await supabaseAdmin.from("class_instructors").select("instructor_id, class_id").in("instructor_id", userIds);
 
       const instructors = await Promise.all((profiles || []).map(async (p) => {
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(p.user_id);
@@ -141,22 +146,6 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }, { onConflict: "instructor_id" });
       if (error) throw error;
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (action === "assign_classes") {
-      const { instructor_id, class_ids } = body;
-
-      await supabaseAdmin.from("instructor_classes").delete().eq("instructor_id", instructor_id);
-
-      if (class_ids && class_ids.length > 0) {
-        const rows = class_ids.map((class_id: string) => ({ instructor_id, class_id, school_id: callerSchoolId }));
-        const { error } = await supabaseAdmin.from("instructor_classes").insert(rows);
-        if (error) throw error;
-      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Plus, Briefcase, Trash2, Link2 } from "lucide-react";
+import { sendOutreachOfficerWelcomeEmail } from "@/lib/email";
 
 interface Officer {
   user_id: string;
@@ -58,21 +59,24 @@ export default function OutreachOfficers() {
   }, []);
 
   const loadData = async () => {
-    // Load officers (users with outreach_officer role)
-    const { data: usersData } = await supabase.rpc("get_all_school_users");
-    const allUsers = (usersData as any[]) || [];
-    const officerList = allUsers.filter((u: any) => u.role === "outreach_officer");
-    setOfficers(officerList);
+    try {
+      // Load officers using dedicated function (they have NULL school_id so get_all_school_users misses them)
+      const { data: officersData, error: officersError } = await supabase.rpc("get_outreach_officers");
+      if (officersError) console.error("Officers error:", officersError);
+      setOfficers((officersData as any[]) || []);
 
-    // Load schools
-    const { data: schoolData } = await supabase.from("schools").select("id, name").order("name");
-    setSchools((schoolData as SchoolItem[]) || []);
+      // Load schools
+      const { data: schoolData } = await supabase.from("schools").select("id, name").order("name");
+      setSchools((schoolData as SchoolItem[]) || []);
 
-    // Load all referrals
-    const { data: refData } = await supabase.from("school_referrals").select("*, schools(name)").order("created_at", { ascending: false });
-    setReferrals((refData as any[]) || []);
-
-    setLoading(false);
+      // Load all referrals
+      const { data: refData } = await supabase.from("school_referrals").select("*, schools(name)").order("created_at", { ascending: false });
+      setReferrals((refData as any[]) || []);
+    } catch (err: any) {
+      console.error("loadData error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateOfficer = async () => {
@@ -85,9 +89,17 @@ export default function OutreachOfficers() {
         _password: password,
         _full_name: fullName,
         _role: "outreach_officer",
-        _school_id: "00000000-0000-0000-0000-000000000000",
-      });
+        _school_id: null,
+      } as any);
       if (error) throw error;
+      // Send welcome email
+      try {
+        await sendOutreachOfficerWelcomeEmail({
+          to: email, officerName: fullName,
+          loginUrl: `${window.location.origin}/outreach/login`,
+          password,
+        });
+      } catch (e) { console.error("Welcome email failed:", e); }
       toast.success("Outreach officer created");
       setCreateDialog(false);
       setFullName(""); setEmail(""); setPassword("");

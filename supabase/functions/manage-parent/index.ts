@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "create") {
-      const { email, password, full_name, username, child_ids } = body;
+      const { email, password, full_name, username, child_ids, phone_number } = body;
 
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email, password, email_confirm: true,
@@ -43,6 +43,7 @@ Deno.serve(async (req) => {
         first_name: full_name.split(" ")[0] || "",
         last_name: full_name.split(" ").slice(1).join(" ") || "",
         username: username || null,
+        phone_number: phone_number || null,
         school_id: callerSchoolId,
       }).eq("user_id", newUser.user!.id);
 
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, email, password, full_name, username, child_ids } = body;
+      const { user_id, email, password, full_name, username, child_ids, phone_number } = body;
 
       const { data: parentRole } = await supabaseAdmin.from("user_roles").select("school_id").eq("user_id", user_id).single();
       if (parentRole?.school_id !== callerSchoolId) {
@@ -87,6 +88,7 @@ Deno.serve(async (req) => {
         profileUpdate.last_name = full_name.split(" ").slice(1).join(" ") || "";
       }
       if (username !== undefined) profileUpdate.username = username || null;
+      if (phone_number !== undefined) profileUpdate.phone_number = phone_number || null;
       if (Object.keys(profileUpdate).length > 0) {
         await supabaseAdmin.from("profiles").update(profileUpdate).eq("user_id", user_id);
       }

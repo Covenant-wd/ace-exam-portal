@@ -3,7 +3,7 @@ import { Navigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { GraduationCap, Loader2, Eye, EyeOff, BookOpen, Users, Shield, Heart, ChevronRight, Zap } from "lucide-react";
+import { GraduationCap, Loader2, Eye, EyeOff, BookOpen, Users, Shield, Heart, ChevronRight, Zap, Monitor, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface School {
@@ -11,6 +11,7 @@ interface School {
   name: string;
   slug: string;
   logo_url: string;
+  cbt_link: string | null;
 }
 
 type LoginRole = "student" | "parent" | "instructor" | "admin";
@@ -26,6 +27,7 @@ export default function SchoolLogin() {
   const { slug } = useParams<{ slug: string }>();
   const { user, role, loading: authLoading, signIn } = useAuth();
   const [school, setSchool] = useState<School | null>(null);
+  const [schoolLogo, setSchoolLogo] = useState<string>("");
   const [loadingSchool, setLoadingSchool] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [activeRole, setActiveRole] = useState<LoginRole>("student");
@@ -37,7 +39,18 @@ export default function SchoolLogin() {
   useEffect(() => {
     const fetchSchool = async () => {
       const { data, error } = await supabase.from("schools").select("*").eq("slug", slug).single();
-      if (error || !data) { setNotFound(true); } else { setSchool(data as School); }
+      if (error || !data) { setNotFound(true); setLoadingSchool(false); return; }
+      setSchool(data as School);
+
+      // Fetch logo from school_settings
+      const { data: logoSetting } = await supabase
+        .from("school_settings")
+        .select("value")
+        .eq("school_id", data.id)
+        .eq("key", "school_logo_url")
+        .maybeSingle();
+      if (logoSetting?.value) setSchoolLogo(logoSetting.value);
+
       setLoadingSchool(false);
     };
     if (slug) fetchSchool();
@@ -46,7 +59,7 @@ export default function SchoolLogin() {
   // Reset fields when role changes
   useEffect(() => { setIdentifier(""); setPassword(""); }, [activeRole]);
 
-  if (loadingSchool || authLoading) {
+  if (loadingSchool || authLoading || (user && !role)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0f0f14]">
         <div className="flex flex-col items-center gap-4">
@@ -76,10 +89,12 @@ export default function SchoolLogin() {
 
   if (user) {
     if (role === "super_admin") return <Navigate to="/super-admin" replace />;
+    if (role === "outreach_officer") return <Navigate to="/outreach" replace />;
     if (role === "admin") return <Navigate to="/admin" replace />;
     if (role === "instructor") return <Navigate to="/instructor" replace />;
     if (role === "parent") return <Navigate to="/parent" replace />;
-    return <Navigate to="/student" replace />;
+    if (role === "student") return <Navigate to="/student" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,20 +102,23 @@ export default function SchoolLogin() {
     setSubmitting(true);
     try {
       if (activeRole === "student" || activeRole === "parent") {
-        const { data: emailData, error: emailError } = await supabase.rpc("get_email_by_username", {
+        // Use a single generic error for both "username not found" and "wrong
+        // password" — separate messages would let an attacker enumerate valid
+        // usernames just by reading (or timing) the response.
+        const { data: emailData } = await supabase.rpc("get_email_by_username", {
           _username: identifier.trim(),
           _school_id: school!.id,
         });
-        if (emailError || !emailData) {
-          toast.error("Username not found. Please check and try again.");
+        if (!emailData) {
+          toast.error("Invalid username or password. Please try again.");
           setSubmitting(false);
           return;
         }
         const { error } = await signIn(emailData, password);
-        if (error) toast.error("Incorrect password. Please try again.");
+        if (error) toast.error("Invalid username or password. Please try again.");
       } else {
         const { error } = await signIn(identifier, password);
-        if (error) toast.error(error.message);
+        if (error) toast.error("Invalid email or password. Please try again.");
       }
     } catch {
       toast.error("Login failed. Please try again.");
@@ -140,8 +158,8 @@ export default function SchoolLogin() {
             transition={{ duration: 0.5 }}
           >
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/5 border border-white/10 overflow-hidden shadow-xl">
-              {school?.logo_url ? (
-                <img src={school.logo_url} alt="School logo" className="h-full w-full object-contain" />
+              {schoolLogo ? (
+                <img src={schoolLogo} alt="School logo" className="h-full w-full object-contain" />
               ) : (
                 <GraduationCap className="h-10 w-10 text-white/40" />
               )}
@@ -184,6 +202,28 @@ export default function SchoolLogin() {
               );
             })}
           </div>
+
+          {/* CBT Card */}
+          {school?.cbt_link && (
+            <motion.a
+              href={school.cbt_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="mt-4 flex items-center gap-3 rounded-xl p-3 border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all group cursor-pointer"
+            >
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                <Monitor className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-emerald-400 leading-none mb-0.5">CBT</p>
+                <p className="text-xs text-white/30 leading-none">Computer Based Testing</p>
+              </div>
+              <ExternalLink className="h-3.5 w-3.5 text-emerald-500/40 group-hover:text-emerald-400 transition-colors shrink-0" />
+            </motion.a>
+          )}
         </div>
 
         {/* Footer */}
@@ -224,6 +264,28 @@ export default function SchoolLogin() {
                 );
               })}
             </div>
+
+            {/* Mobile CBT Card */}
+            {school?.cbt_link && (
+              <motion.a
+                href={school.cbt_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.15 }}
+                className="mt-3 flex items-center gap-3 rounded-xl p-3 border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all group"
+              >
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                  <Monitor className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-emerald-400 leading-none mb-0.5">CBT</p>
+                  <p className="text-xs text-white/30 leading-none">Computer Based Testing</p>
+                </div>
+                <ExternalLink className="h-3.5 w-3.5 text-emerald-500/40 group-hover:text-emerald-400 transition-colors shrink-0" />
+              </motion.a>
+            )}
           </div>
 
           {/* Form header */}

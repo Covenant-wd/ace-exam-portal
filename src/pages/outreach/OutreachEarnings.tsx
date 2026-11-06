@@ -14,13 +14,19 @@ export default function OutreachEarnings() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
-        .from("school_referrals")
-        .select("*, schools(name)")
-        .eq("officer_id", user.id)
-        .order("created_at", { ascending: false });
-      setReferrals((data as any[]) || []);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from("school_referrals")
+          .select("*, schools(name)")
+          .eq("officer_id", user.id)
+          .order("created_at", { ascending: false });
+        if (error) console.error("Earnings error:", error);
+        setReferrals((data as any[]) || []);
+      } catch (err: any) {
+        console.error("OutreachEarnings load error:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [user]);
