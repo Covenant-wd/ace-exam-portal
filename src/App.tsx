@@ -11,6 +11,12 @@ import { Loader2 } from "lucide-react";
 const Index = lazy(() => import("./pages/Index"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const VerifyReceipt = lazy(() => import("./pages/VerifyReceipt"));
+const Exams = lazy(() => import("./pages/admin/Exams"));
+const ExamQuestions = lazy(() => import("./pages/admin/ExamQuestions"));
+const AttemptReview = lazy(() => import("./pages/admin/AttemptReview"));
+const StudentExams = lazy(() => import("./pages/student/StudentExams"));
+const TakeExam = lazy(() => import("./pages/student/TakeExam"));
+const TheoryExam = lazy(() => import("./pages/student/TheoryExam"));
 const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
 const SuperAdminLayout = lazy(() => import("./components/SuperAdminLayout"));
 const OutreachOfficerLayout = lazy(() => import("./components/OutreachOfficerLayout"));
@@ -178,18 +184,23 @@ function AppRoutes() {
         <Route path="/student" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentDashboard /></DashboardLayout></ProtectedRoute>} />
         <Route path="/student/results" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentResults /></DashboardLayout></ProtectedRoute>} />
 
-        {/* Redirect old CBT exam routes to dashboard (graceful fallback) */}
-        <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
-        <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
-        <Route path="/student/theory-exam/:examId" element={<ProtectedRoute requiredRole="student"><Navigate to="/student" replace /></ProtectedRoute>} />
-        <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
-        <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
-        <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin" replace /></ProtectedRoute>} />
-        <Route path="/admin/results/:attemptId/review" element={<ProtectedRoute requiredRole="admin"><Navigate to="/admin/results" replace /></ProtectedRoute>} />
-        <Route path="/instructor/exams" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
-        <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
-        <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor" replace /></ProtectedRoute>} />
-        <Route path="/instructor/results/:attemptId/review" element={<ProtectedRoute requiredRole="instructor"><Navigate to="/instructor/results" replace /></ProtectedRoute>} />
+        {/* Built-in CBT exams.
+            Each screen checks that the school has switched the built-in CBT on (Settings →
+            Built-in CBT Exams); schools that prefer their external CBT portal are unaffected. */}
+        <Route path="/student/exams" element={<ProtectedRoute requiredRole="student"><DashboardLayout><StudentExams /></DashboardLayout></ProtectedRoute>} />
+        {/* The exam itself has no sidebar / menu bar — nothing to distract or tempt the student */}
+        <Route path="/student/exam/:examId" element={<ProtectedRoute requiredRole="student"><TakeExam /></ProtectedRoute>} />
+        <Route path="/student/theory-exam/:examId" element={<ProtectedRoute requiredRole="student"><DashboardLayout><TheoryExam /></DashboardLayout></ProtectedRoute>} />
+
+        <Route path="/admin/exams" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/exams/:examId/questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><ExamQuestions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><ExamQuestions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/admin/results/:attemptId/review" element={<ProtectedRoute requiredRole="admin"><DashboardLayout><AttemptReview /></DashboardLayout></ProtectedRoute>} />
+
+        <Route path="/instructor/exams" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><Exams /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/exams/:examId/questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><ExamQuestions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/exams/:examId/theory-questions" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><ExamQuestions /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/instructor/results/:attemptId/review" element={<ProtectedRoute requiredRole="instructor"><DashboardLayout><AttemptReview /></DashboardLayout></ProtectedRoute>} />
 
         {/* Parent routes */}
         <Route path="/parent" element={<ProtectedRoute requiredRole="parent"><DashboardLayout><ParentDashboard /></DashboardLayout></ProtectedRoute>} />
