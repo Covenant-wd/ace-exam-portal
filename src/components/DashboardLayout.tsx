@@ -1,14 +1,21 @@
-import { ReactNode, useState, useEffect } from "react";
+// src/components/DashboardLayout.tsx
+import { ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useInstructorPermissions } from "@/hooks/useInstructorPermissions";
+import { useProfileName } from "@/hooks/useProfileName";
 import {
-  GraduationCap, LayoutDashboard, BookOpen, FileText, Users, BarChart3,
+  GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
-  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight
+  CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
+  ExternalLink, Loader2, FileQuestion,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isPlaceholderEmail } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
-import { supabase } from "@/integrations/supabase/client";
+import SubscriptionBanner from "@/components/SubscriptionBanner";
+import SubscriptionGuard from "@/components/SubscriptionGuard";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
+import { useInAppCbt } from "@/hooks/useInAppCbt";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
@@ -19,18 +26,18 @@ const adminLinks = [
   { to: "/admin/students", label: "Students", icon: Users, group: "People" },
   { to: "/admin/instructors", label: "Instructors", icon: UserCheck, group: "People" },
   { to: "/admin/parents", label: "Parents", icon: Heart, group: "People" },
-  { to: "/admin/exams", label: "Exams", icon: FileText, group: "Assessment" },
   { to: "/admin/results", label: "Results", icon: BarChart3, group: "Assessment" },
   { to: "/admin/grades", label: "Grades", icon: Award, group: "Assessment" },
+  { to: "/admin/report-cards", label: "Report Cards", icon: ClipboardList, group: "Assessment" },
   { to: "/admin/attendance", label: "Attendance", icon: CheckSquare, group: "Records" },
   { to: "/admin/fees", label: "Fees", icon: DollarSign, group: "Records" },
+  { to: "/admin/debtors", label: "Defaulters", icon: AlertTriangle, group: "Records" },
   { to: "/admin/announcements", label: "Announcements", icon: Megaphone, group: "Records" },
   { to: "/admin/settings", label: "Settings", icon: Settings, group: "System" },
 ];
 
 const studentLinks = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard, group: "" },
-  { to: "/student/exams", label: "My Exams", icon: ClipboardList, group: "" },
   { to: "/student/results", label: "My Results", icon: BarChart3, group: "" },
 ];
 
@@ -39,6 +46,43 @@ const parentLinks = [
 ];
 
 interface NavItem { to: string; label: string; icon: any; group?: string; }
+
+// Students and parents only have one or two sidebar pages — their real content
+// lives in tabs on the dashboard. The mobile bottom bar links straight to those
+// tabs (?tab=...) so it is just as useful for them as it is for staff.
+const studentBottomLinks: NavItem[] = [
+  { to: "/student",                    label: "Home",       icon: LayoutDashboard },
+  { to: "/student?tab=attendance",     label: "Attendance", icon: CheckSquare },
+  { to: "/student?tab=grades",         label: "Grades",     icon: Award },
+  { to: "/student?tab=fees",           label: "Fees",       icon: DollarSign },
+  { to: "/student/results",            label: "Results",    icon: BarChart3 },
+];
+const parentBottomLinks: NavItem[] = [
+  { to: "/parent",                     label: "Home",        icon: LayoutDashboard },
+  { to: "/parent?tab=results",         label: "Results",     icon: BarChart3 },
+  { to: "/parent?tab=attendance",      label: "Attendance",  icon: CheckSquare },
+  { to: "/parent?tab=fees",            label: "Fees",        icon: DollarSign },
+  { to: "/parent?tab=reportcard",      label: "Report Card", icon: ClipboardList },
+];
+
+// ── Mobile bottom bar ─────────────────────────────────────────────
+// At most 5 slots. Items are picked in this priority order from whatever
+// the user actually has access to; if more links exist than fit, the last
+// slot becomes "More" and opens the full menu.
+const BOTTOM_NAV_MAX = 5;
+const BOTTOM_NAV_PRIORITY: Record<string, string[]> = {
+  admin: ["/admin", "/admin/students", "/admin/exams", "/admin/attendance", "/admin/results", "/admin/fees"],
+  instructor: [
+    "/instructor", "/instructor/students", "/instructor/exams", "/instructor/attendance", "/instructor/grades",
+    "/instructor/results", "/instructor/announcements", "/instructor/subjects",
+  ],
+};
+// Shorter labels so they never get cut off on narrow phones.
+const BOTTOM_NAV_SHORT_LABEL: Record<string, string> = {
+  Announcements: "Notices",
+  "Report Cards": "Reports",
+  "My Results": "Results",
+};
 
 const roleColors: Record<string, string> = {
   admin: "from-violet-600 to-blue-600",
@@ -55,41 +99,84 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { role, signOut, user } = useAuth();
+  const { role, signOut, user, schoolId, schoolSlug } = useAuth();
+  const { fullName: displayName } = useProfileName();
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
+  const { cbtLink } = useSchoolCbtLink();
+  // Built-in CBT exams: on for schools without an external CBT portal, or when an admin switches it on.
+  // (The external "CBT Portal" button above is never affected by this.)
+  const { enabled: inAppCbt } = useInAppCbt();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [instructorLinks, setInstructorLinks] = useState<NavItem[]>([]);
 
+  const {
+    permissions: instrPerms,
+    isSubjectInstructor,
+    isClassInstructor,
+    loading: instrLoading,
+  } = useInstructorPermissions();
+
+  // While the slide-out menu is open, stop the page behind it from scrolling.
   useEffect(() => {
-    if (role !== "instructor" || !user) return;
-    const loadPerms = async () => {
-      const { data } = await supabase.from("instructor_permissions").select("*").eq("instructor_id", user.id).single();
-      const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
-      if (data?.can_manage_subjects) links.push({ to: "/instructor/subjects", label: "Subjects", icon: BookOpen, group: "Academic" });
-      if (data?.can_manage_exams) links.push({ to: "/instructor/exams", label: "Exams", icon: FileText, group: "Academic" });
-      if (data?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock, group: "Academic" });
-      if (data?.can_view_results) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
-      if (data?.can_manage_grades) links.push({ to: "/instructor/grades", label: "Grades", icon: Award, group: "Assessment" });
-      if (data?.can_manage_students) links.push({ to: "/instructor/students", label: "Students", icon: Users, group: "People" });
-      if (data?.can_mark_attendance) links.push({ to: "/instructor/attendance", label: "Attendance", icon: CheckSquare, group: "Records" });
-      if (data?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
-      if (data?.can_post_announcements) links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone, group: "Records" });
-      setInstructorLinks(links);
-    };
-    loadPerms();
-  }, [role, user]);
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [sidebarOpen]);
 
-  const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
+  const instructorLinks: NavItem[] = (() => {
+    if (role !== "instructor") return [];
+    const links: NavItem[] = [{ to: "/instructor", label: "Dashboard", icon: LayoutDashboard, group: "Overview" }];
+
+    const hasSubjectAccess = isSubjectInstructor || instrPerms?.can_manage_subjects || instrPerms?.can_manage_exams || instrPerms?.can_manage_grades;
+    if (hasSubjectAccess) {
+      links.push({ to: "/instructor/subjects", label: "Subjects",  icon: BookOpen,  group: "Academic"   });
+      links.push({ to: "/instructor/grades",   label: "Grades",    icon: Award,     group: "Assessment" });
+      links.push({ to: "/instructor/results",  label: "Results",   icon: BarChart3, group: "Assessment" });
+    }
+
+    if (inAppCbt && instrPerms?.can_manage_exams && isSubjectInstructor) {
+      links.push({ to: "/instructor/exams", label: "Exams", icon: FileQuestion, group: "Assessment" });
+    }
+
+    // Each class feature needs its own explicit permission — being assigned
+    // to a class alone never unlocks attendance or announcements.
+    const canSeeStudents = !!instrPerms?.can_manage_students;
+    if (instrPerms?.can_mark_attendance) {
+      links.push({ to: "/instructor/attendance",    label: "Attendance",    icon: CheckSquare, group: "Records" });
+    }
+    if (instrPerms?.can_post_announcements) {
+      links.push({ to: "/instructor/announcements", label: "Announcements", icon: Megaphone,   group: "Records" });
+    }
+    if (canSeeStudents) {
+      links.push({ to: "/instructor/students",      label: "Students",      icon: Users,       group: "People"  });
+    }
+
+    if (instrPerms?.can_manage_timetable) links.push({ to: "/instructor/timetable", label: "Timetable", icon: Clock,      group: "Academic" });
+    if (instrPerms?.can_view_results && !hasSubjectAccess) links.push({ to: "/instructor/results", label: "Results", icon: BarChart3, group: "Assessment" });
+    if (instrPerms?.can_manage_fees) links.push({ to: "/instructor/fees", label: "Fees", icon: DollarSign, group: "Records" });
+
+    const seen = new Set<string>();
+    return links.filter(l => { if (seen.has(l.to)) return false; seen.add(l.to); return true; });
+  })();
+
+  // Add the Exams entries only when the built-in CBT is on for this school
+  const adminNav: NavItem[] = inAppCbt
+    ? adminLinks.flatMap((l) => (l.to === "/admin/results" ? [{ to: "/admin/exams", label: "Exams", icon: FileQuestion, group: "Assessment" }, l] : [l]))
+    : adminLinks;
+  const studentNav: NavItem[] = inAppCbt
+    ? [studentLinks[0], { to: "/student/exams", label: "Exams", icon: FileQuestion, group: "" }, ...studentLinks.slice(1)]
+    : studentLinks;
+  const links = role === "admin" ? adminNav : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentNav;
 
   const handleSignOut = async () => {
+    const redirectTo = schoolSlug ? `/school/${schoolSlug}` : "/";
     await signOut();
-    navigate("/");
+    navigate(redirectTo);
   };
 
-  // Group links for admin/instructor
   const grouped = links.reduce((acc, link) => {
     const g = link.group || "";
     if (!acc[g]) acc[g] = [];
@@ -97,25 +184,61 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return acc;
   }, {} as Record<string, NavItem[]>);
 
+  // Bottom bar items
+  const bottomPriority = BOTTOM_NAV_PRIORITY[role || ""] || [];
+  const rank = (to: string) => { const i = bottomPriority.indexOf(to); return i === -1 ? 999 : i; };
+  const studentBottomNav: NavItem[] = inAppCbt
+    ? studentBottomLinks.map((l) => (l.label === "Grades" ? { to: "/student/exams", label: "Exams", icon: FileQuestion } : l))
+    : studentBottomLinks;
+  const bottomSource: NavItem[] =
+    role === "student" ? studentBottomNav : role === "parent" ? parentBottomLinks : links;
+  const needsMore = bottomSource.length > BOTTOM_NAV_MAX;
+  const bottomItems = [...bottomSource]
+    .sort((a, b) => rank(a.to) - rank(b.to))
+    .slice(0, needsMore ? BOTTOM_NAV_MAX - 1 : BOTTOM_NAV_MAX);
+  const isHomeRoute = (path: string) => ["/admin", "/instructor", "/student", "/parent"].includes(path);
+  const currentTab = new URLSearchParams(location.search).get("tab");
+  const isActiveRoute = (to: string) => {
+    const [path, query = ""] = to.split("?");
+    const tab = new URLSearchParams(query).get("tab");
+    if (tab) return location.pathname === path && currentTab === tab;          // a dashboard tab
+    if (isHomeRoute(path)) {                                                    // dashboard home
+      return location.pathname === path && (!currentTab || currentTab === "announcements");
+    }
+    return location.pathname === path || location.pathname.startsWith(path + "/");
+  };
+  const moreActive = needsMore && !bottomItems.some((l) => isActiveRoute(l.to));
+  // Instructor menus depend on permissions fetched from the server. Until they have
+  // arrived we reserve the bar's space (empty) instead of building it from an empty
+  // list and re-building it a moment later — that is what made it flicker.
+  const bottomBarPending = role === "instructor" && instrLoading;
+  // A bar with a single button is pointless (e.g. an instructor with no permissions yet).
+  const showBottomBar = !bottomBarPending && bottomItems.length + (needsMore ? 1 : 0) > 1;
+  const reserveBottomBar = bottomBarPending || showBottomBar;
+
   const gradientClass = roleColors[role || ""] || "from-violet-600 to-blue-600";
   const badgeClass = roleBadgeColors[role || ""] || "bg-violet-500/20 text-violet-300";
 
   return (
-    <div className="flex min-h-screen bg-[#f5f5f7] dark:bg-[#0f0f14]">
+    <div className="app-shell flex overflow-x-clip lg:overflow-hidden bg-[#f5f5f7] dark:bg-[#0f0f14]">
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay — only mounted when open to avoid persistent compositing layer on mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — on mobile, only mounted when open (prevents idle fixed layer that
+          caused black-noise artifacts on Android Chrome). Desktop sidebar is always mounted. */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-64 flex-col transition-transform duration-300 lg:static lg:translate-x-0",
+        "z-50 flex w-64 flex-col",
+        "lg:static lg:flex lg:h-full lg:shrink-0 lg:translate-x-0",
         "bg-[#13131a] text-white",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        sidebarOpen
+          ? "fixed inset-y-0 left-0 translate-x-0 transition-transform duration-300"
+          : "hidden lg:flex"
       )}>
 
         {/* Header */}
@@ -179,16 +302,38 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </div>
           ))}
+
+          {/* External CBT Portal button — shown if school has configured a CBT link */}
+          {cbtLink && (
+            <div className="pt-2 border-t border-white/5">
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                External
+              </p>
+              <a
+                href={cbtLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/50 hover:text-white hover:bg-white/5 transition-all group"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0 text-white/40 group-hover:text-white/70 transition-colors" />
+                <span className="truncate">{schoolName || "Academia HQ"}</span>
+              </a>
+            </div>
+          )}
         </nav>
 
         {/* Footer */}
         <div className="border-t border-white/5 p-3">
           <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-1">
             <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white", gradientClass)}>
-              {user?.email?.charAt(0).toUpperCase()}
+              {(displayName || user?.email || "?").charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-white/60 truncate">{user?.email}</p>
+              <p className="text-xs text-white/80 font-medium truncate">{displayName || "My Account"}</p>
+              {user?.email && !isPlaceholderEmail(user.email) && (
+                <p className="text-[11px] text-white/50 truncate">{user.email}</p>
+              )}
             </div>
           </div>
           <button
@@ -202,10 +347,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 lg:min-h-0 lg:overflow-hidden">
 
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white/80 dark:bg-[#13131a]/80 backdrop-blur-xl px-4 py-3 lg:px-6">
+        <header
+          className="sticky top-0 lg:static shrink-0 z-30 flex items-center gap-3 border-b border-black/5 dark:border-white/5 bg-white dark:bg-[#13131a] px-4 py-3 lg:px-6"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))" }}
+        >
           <button
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg bg-black/5 dark:bg-white/5 text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-colors shrink-0"
             onClick={() => setSidebarOpen(true)}
@@ -213,23 +361,116 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Menu className="h-4 w-4" />
           </button>
 
-          {/* Page title from current route */}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">
               {links.find(l => l.to === location.pathname)?.label || "Dashboard"}
             </p>
           </div>
 
-          {/* Role badge on header */}
+          {/* External CBT launch button in header (visible on mobile when sidebar is closed) */}
+          {cbtLink && (
+            <a
+              href={cbtLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors shrink-0"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {schoolName || "Academia HQ"}
+            </a>
+          )}
+
           <span className={cn("hidden sm:inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize shrink-0", badgeClass)}>
             {role}
           </span>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
+        <main
+          className={cn(
+            "flex-1 p-4 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:p-6",
+            // 58px bar + device safe-area + the normal 1rem gap; desktop has no bar
+            reserveBottomBar && "pb-[calc(58px+env(safe-area-inset-bottom,0px)+1rem)] lg:pb-6"
+          )}
+        >
+          <SubscriptionGuard>
+            <SubscriptionBanner />
+            {/* Local Suspense: while a lazily-loaded page downloads, only this content
+                area shows a spinner — the sidebar and bottom bar stay put instead of
+                vanishing and reappearing with the app-level full-screen loader. */}
+            <Suspense
+              fallback={
+                <div className="flex min-h-[40vh] items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              }
+            >
+              {children}
+            </Suspense>
+          </SubscriptionGuard>
         </main>
       </div>
+
+      {/* ── Mobile bottom app bar ───────────────────────────────────────────
+          position:fixed to the bottom of the PHONE SCREEN, so it stays put no
+          matter how long the page is or how far the user has scrolled. The
+          content area reserves matching bottom padding (see <main>) so nothing
+          is ever hidden behind it. Dialogs/drawer (z-40/50) correctly cover it.
+          Hidden on desktop where the sidebar is always visible. */}
+      {(bottomBarPending || showBottomBar) && (
+        <nav
+          aria-label="Primary"
+          className="lg:hidden fixed inset-x-0 bottom-0 z-30 border-t border-black/5 dark:border-white/10 bg-white dark:bg-[#13131a]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          {showBottomBar ? (
+            <ul className="flex h-[58px] items-stretch">
+              {bottomItems.map((link) => {
+                const active = isActiveRoute(link.to);
+                const Icon = link.icon;
+                return (
+                  <li key={link.to} className="min-w-0 flex-1">
+                    <Link
+                      to={link.to}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "flex h-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                        active ? "text-primary" : "text-muted-foreground"
+                      )}
+                    >
+                      <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", active && "bg-primary/10")}>
+                        <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />
+                      </span>
+                      <span className={cn("w-full truncate text-center text-[10px] leading-tight", active ? "font-semibold" : "font-medium")}>
+                        {BOTTOM_NAV_SHORT_LABEL[link.label] || link.label}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+              {needsMore && (
+                <li className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(true)}
+                    aria-label="Open full menu"
+                    className={cn(
+                      "flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1.5 transition-colors active:opacity-70",
+                      moreActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    <span className={cn("flex h-7 w-12 items-center justify-center rounded-full transition-colors", moreActive && "bg-primary/10")}>
+                      <Menu className="h-[22px] w-[22px]" strokeWidth={moreActive ? 2.4 : 2} />
+                    </span>
+                    <span className={cn("text-[10px] leading-tight", moreActive ? "font-semibold" : "font-medium")}>More</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          ) : (
+            <div className="h-[58px]" aria-hidden="true" />
+          )}
+        </nav>
+      )}
     </div>
   );
 }

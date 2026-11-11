@@ -1,5 +1,17 @@
-INSERT INTO public.school_settings (key, value)
-VALUES 
-  ('school_name', 'CBT Portal'),
-  ('school_logo_url', '')
-ON CONFLICT (key) DO NOTHING;
+-- REMOVED: seed INSERTs for school_settings ('school_name', 'school_logo_url').
+--
+-- This migration originally ran before school_id was added (20260311133417),
+-- so the inserts looked safe. However on a fresh preview database all
+-- migrations run in order — and the idempotency migration (20260517000002)
+-- creates tables with their final schema before this statement executes,
+-- meaning school_settings already has a NOT NULL school_id column by the
+-- time we reach here. Inserting without a school_id therefore violates
+-- the NOT NULL constraint (SQLSTATE 23502).
+--
+-- Additionally, ON CONFLICT (key) fails with SQLSTATE 42P10 because the
+-- unique constraint on `key` alone was replaced with UNIQUE(school_id, key)
+-- in migration 20260311133417.
+--
+-- school_settings rows are provisioned per-school at school-creation time.
+-- There is no valid global seed to insert here.
+SELECT 1; -- no-op placeholder so the file is not empty
