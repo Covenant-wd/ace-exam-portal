@@ -27,8 +27,181 @@
 --   4. Result consumers (Results, student results, parent dashboard) keep
 --      reading exam_attempts exactly as before.
 --
+-- WORKS ON ANY DATABASE
+--   * Live database (exam tables exist, with data): nothing is dropped or changed
+--     in the data; only columns, rules and functions are added / replaced.
+--   * Preview branch / fresh database where the exam tables are missing (for
+--     example because an earlier migration removed them): section 0 rebuilds the
+--     five tables with their original structure first.
+--   * If something this migration depends on is missing, section 0 says exactly
+--     what, instead of failing with a cryptic error halfway through.
+--
 -- Fully idempotent. Existing exams / attempts / answers are untouched.
 -- ================================================================
+
+
+-- ────────────────────────────────────────────────────────────────
+-- 0. MAKE SURE EVERYTHING THIS MIGRATION NEEDS EXISTS
+-- ────────────────────────────────────────────────────────────────
+
+-- 0a. things that come from your earlier migrations
+DO $$
+DECLARE
+  t       text;
+  missing text[] := ARRAY[]::text[];
+BEGIN
+  FOREACH t IN ARRAY ARRAY['schools', 'classes', 'subjects', 'terms', 'profiles', 'user_roles',
+                           'instructor_permissions', 'instructor_subjects'] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN missing := missing || ('table ' || t); END IF;
+  END LOOP;
+  IF to_regprocedure('public.has_role(uuid, public.app_role)') IS NULL THEN
+    missing := missing || 'function has_role(uuid, app_role)';
+  END IF;
+  IF to_regprocedure('public.get_user_school_id(uuid)') IS NULL THEN
+    missing := missing || 'function get_user_school_id(uuid)';
+  END IF;
+
+  IF array_length(missing, 1) > 0 THEN
+    RAISE EXCEPTION 'The CBT rebuild needs these objects, which are missing from this database: %. They are created by your earlier migrations, so make sure those have run first.',
+      array_to_string(missing, ', ');
+  END IF;
+END $$;
+
+-- columns this migration relies on (already present on a normal database)
+ALTER TABLE public.instructor_permissions ADD COLUMN IF NOT EXISTS can_manage_exams boolean NOT NULL DEFAULT false;
+ALTER TABLE public.instructor_permissions ADD COLUMN IF NOT EXISTS can_view_results boolean NOT NULL DEFAULT false;
+ALTER TABLE public.subjects               ADD COLUMN IF NOT EXISTS allow_calculator boolean NOT NULL DEFAULT false;
+
+-- two small helpers (only created if they are somehow absent)
+DO $do$
+BEGIN
+  IF to_regprocedure('public.is_subject_instructor(uuid, uuid, uuid)') IS NULL THEN
+    EXECUTE $f$CREATE FUNCTION public.is_subject_instructor(_instructor_id uuid, _subject_id uuid, _class_id uuid DEFAULT NULL::uuid)
+      RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $b$
+        SELECT EXISTS (SELECT 1 FROM public.instructor_subjects ins
+          WHERE ins.instructor_id = _instructor_id AND ins.subject_id = _subject_id
+            AND (_class_id IS NULL OR ins.class_id = _class_id));
+      $b$$f$;
+  END IF;
+  IF to_regprocedure('public.update_updated_at_column()') IS NULL THEN
+    EXECUTE $f$CREATE FUNCTION public.update_updated_at_column()
+      RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public' AS $b$
+      BEGIN NEW.updated_at = now(); RETURN NEW; END;
+      $b$$f$;
+  END IF;
+END
+$do$;
+
+-- 0b. the five exam tables (no-ops when they already exist)
+CREATE TABLE IF NOT EXISTS public.exams (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_id       uuid NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+  title            text NOT NULL,
+  description      text DEFAULT '',
+  duration_minutes integer NOT NULL DEFAULT 30,
+  start_date       timestamptz,
+  end_date         timestamptz,
+  is_published     boolean NOT NULL DEFAULT false,
+  created_by       uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  term_id          uuid REFERENCES public.terms(id) ON DELETE SET NULL,
+  class_id         uuid REFERENCES public.classes(id) ON DELETE SET NULL,
+  school_id        uuid REFERENCES public.schools(id) ON DELETE CASCADE,
+  exam_type        text NOT NULL DEFAULT 'mcq',
+  instructions     text DEFAULT '',
+  allow_retake     boolean NOT NULL DEFAULT false,
+  shuffle_questions boolean NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS public.questions (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id        uuid NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  question_text  text NOT NULL,
+  option_a       text NOT NULL,
+  option_b       text NOT NULL,
+  option_c       text NOT NULL,
+  option_d       text NOT NULL,
+  correct_option text NOT NULL,
+  question_order integer NOT NULL DEFAULT 0,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.exam_attempts (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id         uuid NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  student_id      uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  score           integer,
+  total_questions integer,
+  started_at      timestamptz NOT NULL DEFAULT now(),
+  submitted_at    timestamptz,
+  is_submitted    boolean NOT NULL DEFAULT false,
+  violations      integer NOT NULL DEFAULT 0,
+  CONSTRAINT exam_attempts_exam_id_student_id_key UNIQUE (exam_id, student_id),
+  CONSTRAINT check_violations_non_negative CHECK (violations >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS public.student_answers (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_id      uuid NOT NULL REFERENCES public.exam_attempts(id) ON DELETE CASCADE,
+  question_id     uuid NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
+  selected_option text,
+  is_correct      boolean,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT student_answers_attempt_id_question_id_key UNIQUE (attempt_id, question_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.theory_questions (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id         uuid NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  question_number text NOT NULL,
+  sub_label       text DEFAULT '',
+  question_text   text NOT NULL,
+  marks           integer NOT NULL DEFAULT 1,
+  question_order  integer NOT NULL DEFAULT 0,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_exam_attempts_violations         ON public.exam_attempts (violations);
+CREATE INDEX IF NOT EXISTS idx_exam_attempts_student_submission ON public.exam_attempts (id, student_id, is_submitted);
+CREATE INDEX IF NOT EXISTS idx_student_answers_attempt_id       ON public.student_answers (attempt_id);
+CREATE INDEX IF NOT EXISTS idx_student_answers_attempt_question ON public.student_answers (attempt_id, question_id);
+
+DROP TRIGGER IF EXISTS update_exams_updated_at ON public.exams;
+CREATE TRIGGER update_exams_updated_at BEFORE UPDATE ON public.exams
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- 0c. the three read rules this migration keeps (created only if absent)
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'exam_attempts'
+                 AND policyname = 'Students can view own attempts') THEN
+    EXECUTE $p$CREATE POLICY "Students can view own attempts"
+      ON public.exam_attempts FOR SELECT USING (auth.uid() = student_id)$p$;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'student_answers'
+                 AND policyname = 'Students can view own answers') THEN
+    EXECUTE $p$CREATE POLICY "Students can view own answers"
+      ON public.student_answers FOR SELECT USING (EXISTS (
+        SELECT 1 FROM public.exam_attempts ea
+        WHERE ea.id = student_answers.attempt_id AND ea.student_id = auth.uid()))$p$;
+  END IF;
+
+  IF to_regclass('public.instructor_classes') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'exam_attempts'
+                     AND policyname = 'Instructors can view assigned class attempts') THEN
+    EXECUTE $p$CREATE POLICY "Instructors can view assigned class attempts"
+      ON public.exam_attempts FOR SELECT TO authenticated USING (EXISTS (
+        SELECT 1
+        FROM public.instructor_permissions ip
+        JOIN public.instructor_classes ic ON ic.instructor_id = ip.instructor_id
+        JOIN public.profiles p ON p.class_id = ic.class_id
+        WHERE ip.instructor_id = auth.uid() AND ip.can_view_results = true
+          AND p.user_id = exam_attempts.student_id))$p$;
+  END IF;
+END
+$do$;
 
 
 -- ────────────────────────────────────────────────────────────────
@@ -384,6 +557,19 @@ $do$;
 -- Constants kept in one place
 --   grace after the timer ends before answers are refused: 30 s
 --   violations (tab switches etc.) that trigger an automatic submit: 3
+
+-- These functions are defined here in full. Drop any older copy first so a copy with
+-- a different return type can never block the migration (they are recreated below).
+DROP FUNCTION IF EXISTS public.start_exam_attempt(uuid);
+DROP FUNCTION IF EXISTS public.get_exam_intro(uuid);
+DROP FUNCTION IF EXISTS public.save_exam_answers(uuid, jsonb);
+DROP FUNCTION IF EXISTS public.submit_exam_attempt(uuid, jsonb);
+DROP FUNCTION IF EXISTS public.report_exam_violation(uuid);
+DROP FUNCTION IF EXISTS public.reset_exam_attempt(uuid, uuid);
+DROP FUNCTION IF EXISTS public.regrade_exam(uuid);
+DROP FUNCTION IF EXISTS public.get_exam_result_students(uuid);
+DROP FUNCTION IF EXISTS public._grade_exam_attempt(uuid);
+DROP FUNCTION IF EXISTS public._save_exam_answers(uuid, uuid, jsonb);
 
 -- Internal: grade an attempt from the answers saved so far.  Not callable by clients.
 CREATE OR REPLACE FUNCTION public._grade_exam_attempt(_attempt_id uuid)
