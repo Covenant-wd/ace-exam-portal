@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Loader2, Eye, ChevronDown } from "lucide-react";
 export default function Results() {
   const { schoolId } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); // ?exam=<id> opens straight on that exam (from the Exams page)
   const location = useLocation();
   const basePath = location.pathname.startsWith("/instructor") ? "/instructor" : "/admin";
 
@@ -42,7 +43,10 @@ export default function Results() {
       .neq("exam_type", "theory")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
-        setExams((data ?? []) as ExamOption[]);
+        const list = (data ?? []) as ExamOption[];
+        setExams(list);
+        const wanted = searchParams.get("exam");
+        if (wanted && list.some((e) => e.id === wanted)) setSelectedExam(wanted);
         setLoading(false);
       });
   }, [schoolId]);
@@ -75,7 +79,18 @@ export default function Results() {
       .in("user_id", studentIds)
       .eq("school_id", schoolId!);
 
-    const profileMap = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+    const profileMap = new Map<string, any>((profiles ?? []).map((p) => [p.user_id, p]));
+
+    // A teacher who is not also the class teacher cannot read student profile rows, so any
+    // names still missing are fetched through a function that only returns the students of
+    // the subject + class they teach (admins get everyone in the school).
+    if (studentIds.some((id) => !profileMap.has(id))) {
+      const { data: names } = await (supabase as any).rpc("get_exam_result_students", { _exam_id: examId });
+      ((names as any[]) ?? []).forEach((n) => {
+        if (!profileMap.has(n.user_id)) profileMap.set(n.user_id, { user_id: n.user_id, full_name: n.full_name, class_name: n.class_name });
+      });
+    }
+
     const rows: ResultRow[] = attempts.map((a) => ({
       ...a,
       profile: (profileMap.get(a.student_id) as ResultRow["profile"]) ?? null,

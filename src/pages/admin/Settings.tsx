@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, School, ImagePlus, Bell, ExternalLink } from "lucide-react";
+import { Loader2, Save, School, ImagePlus, Bell, ExternalLink, FileQuestion } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useInAppCbt, useUpdateInAppCbt } from "@/hooks/useInAppCbt";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
@@ -20,6 +21,8 @@ export default function Settings() {
   const { cbtLink } = useSchoolCbtLink();
   const updateCbtLinkMutation = useUpdateCbtLink();
   const [cbtUrl, setCbtUrl] = useState("");
+  const inAppCbt = useInAppCbt();
+  const updateInAppCbt = useUpdateInAppCbt();
 
   const [notifyAnnouncement, setNotifyAnnouncement] = useState(true);
   const [notifyFeePayment, setNotifyFeePayment] = useState(true);
@@ -264,6 +267,65 @@ export default function Settings() {
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                 <span className="text-blue-500 font-bold mt-0.5">→</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Built-in CBT Exams — sits beside the external portal; a school can use either or both */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <FileQuestion className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle>Built-in CBT Exams</CardTitle>
+              <CardDescription>
+                Let teachers set and upload exams inside the portal, and students take them here — marked automatically.
+                This works alongside the external CBT portal above; nothing about that link changes.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <label className="flex items-center justify-between gap-4 rounded-lg border p-4">
+            <span>
+              <span className="block font-medium">Enable built-in CBT exams</span>
+              <span className="block text-sm text-muted-foreground">
+                {inAppCbt.isLoading
+                  ? "Checking…"
+                  : inAppCbt.explicit === null && inAppCbt.hasExternalLink
+                    ? "Currently off, because your school uses an external CBT portal. Switch on to use the built-in exams too."
+                    : inAppCbt.enabled
+                      ? "On — Exams appears in the menu for admins, teachers with permission, and students."
+                      : "Off — the Exams menu is hidden for everyone."}
+              </span>
+            </span>
+            <Switch
+              checked={inAppCbt.enabled}
+              disabled={inAppCbt.isLoading || updateInAppCbt.isPending}
+              aria-label="Enable built-in CBT exams"
+              onCheckedChange={(v) =>
+                updateInAppCbt.mutate(v, {
+                  onSuccess: () => toast.success(v ? "Built-in CBT exams switched on" : "Built-in CBT exams switched off"),
+                  onError: (err: any) => toast.error(err?.message || "Could not save this setting"),
+                })
+              }
+            />
+          </label>
+          <div className="space-y-1.5 rounded-lg bg-muted/50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">How it works</p>
+            {[
+              "Teachers can set exams only for the subjects and classes assigned to them, and only if you enable \"Create & manage exams\" for them (Instructors page)",
+              "Admins can set exams for any class from the Exams page",
+              "Students see only the published exams of their own class",
+              "Turning this off hides the Exams pages; your exams and results are kept",
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                <span className="mt-0.5 font-bold text-emerald-500">→</span>
                 <span>{item}</span>
               </div>
             ))}
