@@ -1,13 +1,14 @@
 // src/pages/instructor/InstructorDashboard.tsx
 import { useEffect, useState } from "react";
 import { useProfileName } from "@/hooks/useProfileName";
+import { useInAppCbt } from "@/hooks/useInAppCbt";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Link } from "react-router-dom";
 import {
   BookOpen, Users, BarChart3, Calendar, Loader2,
   CheckSquare, Award, DollarSign, Megaphone, ChevronRight,
-  GraduationCap, BookMarked, ExternalLink,
+  GraduationCap, BookMarked, ExternalLink, FileQuestion,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useInstructorRoles } from "@/hooks/useInstructorRoles";
@@ -21,12 +22,14 @@ const permLabels: Record<string, { label: string; icon: any; to: string; color: 
   can_manage_grades:      { label: "Manage Grades",    icon: Award,       to: "/instructor/grades",       color: "bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400" },
   can_manage_timetable:   { label: "Timetable",        icon: Calendar,    to: "/instructor/timetable",    color: "bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-400" },
   can_manage_fees:        { label: "Manage Fees",      icon: DollarSign,  to: "/instructor/fees",         color: "bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-400" },
+  can_manage_exams:       { label: "Manage Exams",     icon: FileQuestion, to: "/instructor/exams",       color: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400" },
   can_post_announcements: { label: "Announcements",    icon: Megaphone,   to: "/instructor/announcements",color: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400" },
 };
 
 export default function InstructorDashboard() {
   const { user, schoolId } = useAuth();
   const { firstName: displayFirstName } = useProfileName();
+  const { enabled: inAppCbt } = useInAppCbt();
   const { cbtLink } = useSchoolCbtLink();
   const [permissions, setPermissions] = useState<any>(null);
   const [legacyClasses, setLegacyClasses] = useState<{ id: string; name: string }[]>([]);
@@ -65,9 +68,10 @@ export default function InstructorDashboard() {
     load();
   }, [user, schoolId]);
 
-  // Exclude can_manage_exams from instructor permissions — CBT is now external
+  // The exam permission only means something when the built-in CBT is on for the school.
+  // (Schools using an external CBT portal see no change here.)
   const activePerms = permissions
-    ? Object.entries(permLabels).filter(([key]) => permissions[key] && key !== "can_manage_exams")
+    ? Object.entries(permLabels).filter(([key]) => permissions[key] && (key !== "can_manage_exams" || inAppCbt))
     : [];
 
   if (loading || rolesLoading) {
