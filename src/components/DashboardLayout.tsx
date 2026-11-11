@@ -8,13 +8,14 @@ import {
   GraduationCap, LayoutDashboard, BookOpen, Users, BarChart3,
   LogOut, Menu, X, ClipboardList, Settings, Calendar, UserCheck,
   CheckSquare, Clock, Award, DollarSign, Megaphone, Heart, ChevronRight, AlertTriangle,
-  ExternalLink, Loader2,
+  ExternalLink, Loader2, FileQuestion,
 } from "lucide-react";
 import { cn, isPlaceholderEmail } from "@/lib/utils";
 import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import SubscriptionGuard from "@/components/SubscriptionGuard";
 import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
+import { useInAppCbt } from "@/hooks/useInAppCbt";
 
 const adminLinks = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
@@ -70,9 +71,9 @@ const parentBottomLinks: NavItem[] = [
 // slot becomes "More" and opens the full menu.
 const BOTTOM_NAV_MAX = 5;
 const BOTTOM_NAV_PRIORITY: Record<string, string[]> = {
-  admin: ["/admin", "/admin/students", "/admin/attendance", "/admin/results", "/admin/fees"],
+  admin: ["/admin", "/admin/students", "/admin/exams", "/admin/attendance", "/admin/results", "/admin/fees"],
   instructor: [
-    "/instructor", "/instructor/students", "/instructor/attendance", "/instructor/grades",
+    "/instructor", "/instructor/students", "/instructor/exams", "/instructor/attendance", "/instructor/grades",
     "/instructor/results", "/instructor/announcements", "/instructor/subjects",
   ],
 };
@@ -103,6 +104,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { schoolName } = useSchoolName();
   const { logoUrl } = useSchoolLogo();
   const { cbtLink } = useSchoolCbtLink();
+  // Built-in CBT exams: on for schools without an external CBT portal, or when an admin switches it on.
+  // (The external "CBT Portal" button above is never affected by this.)
+  const { enabled: inAppCbt } = useInAppCbt();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -133,6 +137,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       links.push({ to: "/instructor/results",  label: "Results",   icon: BarChart3, group: "Assessment" });
     }
 
+    if (inAppCbt && instrPerms?.can_manage_exams && isSubjectInstructor) {
+      links.push({ to: "/instructor/exams", label: "Exams", icon: FileQuestion, group: "Assessment" });
+    }
+
     // Each class feature needs its own explicit permission — being assigned
     // to a class alone never unlocks attendance or announcements.
     const canSeeStudents = !!instrPerms?.can_manage_students;
@@ -154,7 +162,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     return links.filter(l => { if (seen.has(l.to)) return false; seen.add(l.to); return true; });
   })();
 
-  const links = role === "admin" ? adminLinks : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentLinks;
+  // Add the Exams entries only when the built-in CBT is on for this school
+  const adminNav: NavItem[] = inAppCbt
+    ? adminLinks.flatMap((l) => (l.to === "/admin/results" ? [{ to: "/admin/exams", label: "Exams", icon: FileQuestion, group: "Assessment" }, l] : [l]))
+    : adminLinks;
+  const studentNav: NavItem[] = inAppCbt
+    ? [studentLinks[0], { to: "/student/exams", label: "Exams", icon: FileQuestion, group: "" }, ...studentLinks.slice(1)]
+    : studentLinks;
+  const links = role === "admin" ? adminNav : role === "instructor" ? instructorLinks : role === "parent" ? parentLinks : studentNav;
 
   const handleSignOut = async () => {
     const redirectTo = schoolSlug ? `/school/${schoolSlug}` : "/";
@@ -172,8 +187,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Bottom bar items
   const bottomPriority = BOTTOM_NAV_PRIORITY[role || ""] || [];
   const rank = (to: string) => { const i = bottomPriority.indexOf(to); return i === -1 ? 999 : i; };
+  const studentBottomNav: NavItem[] = inAppCbt
+    ? studentBottomLinks.map((l) => (l.label === "Grades" ? { to: "/student/exams", label: "Exams", icon: FileQuestion } : l))
+    : studentBottomLinks;
   const bottomSource: NavItem[] =
-    role === "student" ? studentBottomLinks : role === "parent" ? parentBottomLinks : links;
+    role === "student" ? studentBottomNav : role === "parent" ? parentBottomLinks : links;
   const needsMore = bottomSource.length > BOTTOM_NAV_MAX;
   const bottomItems = [...bottomSource]
     .sort((a, b) => rank(a.to) - rank(b.to))
