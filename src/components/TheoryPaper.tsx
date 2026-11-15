@@ -6,6 +6,9 @@ import { useRef } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { TheoryQuestion } from "@/lib/exams";
+import RichContentRenderer from "@/components/RichContentRenderer";
+// KaTeX's own stylesheet as text, so formulas also print correctly from the separate print window
+import katexCss from "katex/dist/katex.min.css?inline";
 
 export interface TheoryPaperData {
   title: string;
@@ -32,7 +35,8 @@ const PAPER_CSS = `
 .tp-instr{border:1px solid #9ca3af;padding:8px 12px;font-size:13px;margin-bottom:14px;white-space:pre-wrap}
 .tp-q{display:flex;gap:10px;margin:0 0 12px;font-size:15px;page-break-inside:avoid}
 .tp-no{flex:none;min-width:38px;font-weight:700}
-.tp-body{flex:1;white-space:pre-wrap;overflow-wrap:anywhere}
+.tp-body{flex:1;overflow-wrap:anywhere}
+.tp-body img{max-width:100%;height:auto;max-height:340px;display:block;margin:6px 0}
 .tp-marks{flex:none;font-size:12px;color:#374151;white-space:nowrap;padding-left:8px}
 .tp-sub{margin-left:0}
 .tp-foot{margin-top:16px;border-top:1px solid #9ca3af;padding-top:8px;text-align:center;font-size:12px;color:#4b5563}
@@ -70,7 +74,7 @@ export function TheoryPaper({ data }: { data: TheoryPaperData }) {
             <span className="tp-no">{showNumber ? `${q.question_number}.` : ""}</span>
             <span className="tp-body">
               {q.sub_label ? <b className="tp-sub">({q.sub_label}) </b> : null}
-              {q.question_text}
+              <RichContentRenderer content={q.question_text} />
             </span>
             <span className="tp-marks">[{q.marks} {Number(q.marks) === 1 ? "mark" : "marks"}]</span>
           </div>
@@ -87,7 +91,8 @@ function printPaperHtml(body: string, title: string) {
     '<script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print();},250);});<\/script>';
   const html =
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>${title.replace(/</g, "&lt;")}</title><style>${PAPER_CSS}@page{size:A4;margin:14mm}` +
+    `<base href="${window.location.origin}/">` +
+    `<title>${title.replace(/</g, "&lt;")}</title><style>${katexCss}${PAPER_CSS}@page{size:A4;margin:14mm}` +
     `html,body{margin:0;padding:12px;background:#fff}@media print{html,body{padding:0}.tp{border:none;padding:0}}</style>` +
     `</head><body>${body}${script}</body></html>`;
 

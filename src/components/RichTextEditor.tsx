@@ -12,6 +12,10 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
+  /** lets a <Label htmlFor> point at the text box */
+  id?: string;
+  /** upload diagrams into this folder of the image bucket (e.g. the school id) */
+  folder?: string;
 }
 
 const MATH_SYMBOLS = [
@@ -104,7 +108,7 @@ const LATEX_TEMPLATES = [
   { label: "Approx", insert: "$$\\approx$$" },
 ];
 
-export default function RichTextEditor({ value, onChange, placeholder, rows = 3 }: RichTextEditorProps) {
+export default function RichTextEditor({ value, onChange, placeholder, rows = 3, id, folder }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -125,14 +129,29 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 3 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
+    if (!/^image\/(png|jpe?g|webp|gif)$/i.test(file.type)) {
+      toast.error("Please choose a PNG, JPG, WEBP or GIF image");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${crypto.randomUUID()}.${ext}`;
+    const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `${folder ? `${folder}/` : ""}${crypto.randomUUID()}.${ext}`;
     const { error } = await supabase.storage.from("question-images").upload(path, file);
-    if (error) { toast.error("Upload failed"); setUploading(false); return; }
+    if (error) {
+      toast.error(/row-level security|not authorized|policy/i.test(error.message)
+        ? "You don't have permission to upload diagrams. Ask your school admin to enable \"Create & manage exams\" for you."
+        : `Upload failed: ${error.message}`);
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     const { data: urlData } = supabase.storage.from("question-images").getPublicUrl(path);
     insertAtCursor(`![diagram](${urlData.publicUrl})`);
@@ -209,10 +228,11 @@ export default function RichTextEditor({ value, onChange, placeholder, rows = 3 
           {uploading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Image className="mr-1 h-3.5 w-3.5" />}
           Diagram
         </Button>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={handleImageUpload} aria-label="Upload a diagram" />
       </div>
 
       <Textarea
+        id={id}
         ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
