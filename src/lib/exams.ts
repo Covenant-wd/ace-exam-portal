@@ -21,6 +21,8 @@ export interface ExamRow {
   is_published: boolean;
   allow_retake: boolean;
   shuffle_questions: boolean;
+  /** null = follow the subject's "Allow Calculator in Exams" setting; true / false = this exam decides */
+  allow_calculator: boolean | null;
   created_by: string | null;
   created_at: string;
   subjects?: { name: string } | null;
@@ -40,6 +42,8 @@ export interface McqQuestion {
   option_d: string;
   correct_option: string;
   question_order: number;
+  /** whole number 1–100; a student's score is the sum of the marks they earn */
+  marks: number;
 }
 
 export interface TheoryQuestion {
@@ -50,6 +54,13 @@ export interface TheoryQuestion {
   question_text: string;
   marks: number;
   question_order: number;
+}
+
+export const MAX_QUESTION_MARKS = 100;
+
+/** Total marks of a list of questions (a question without marks counts as 1). */
+export function sumMarks(qs: { marks?: number | null }[]): number {
+  return qs.reduce((a, q) => a + (Number(q.marks) || 1), 0);
 }
 
 /** The pass mark used everywhere else in the app (Results, student and parent views). */
@@ -124,6 +135,7 @@ export interface ParsedQuestion {
   option_c: string;
   option_d: string;
   correct_option: "A" | "B" | "C" | "D";
+  marks: number;
 }
 
 export interface ParseResult {
@@ -131,10 +143,11 @@ export interface ParseResult {
   errors: string[];
 }
 
+// The 7th column (marks) is optional — a question without it is worth 1 mark.
 export const CSV_TEMPLATE =
-  "question,option_a,option_b,option_c,option_d,correct\n" +
-  "What is 2 + 2?,3,4,5,6,B\n" +
-  "\"Which of these is a prime number, in the list?\",4,6,7,9,C\n";
+  "question,option_a,option_b,option_c,option_d,correct,marks\n" +
+  "What is 2 + 2?,3,4,5,6,B,1\n" +
+  "\"Which of these is a prime number, in the list?\",4,6,7,9,C,2\n";
 
 /** Split text into rows of cells. Handles "quoted, cells", doubled quotes and line breaks inside quotes. */
 function splitRows(text: string, delimiter: string): string[][] {
@@ -194,10 +207,10 @@ export function parseQuestionsCsv(raw: string): ParseResult {
     const line = i + offset;
     const c = cells.map((x) => x.trim());
     if (c.length < 6) {
-      result.errors.push(`Row ${line}: needs 6 columns (question, 4 options, correct answer) but has ${c.length}.`);
+      result.errors.push(`Row ${line}: needs at least 6 columns (question, 4 options, correct answer) but has ${c.length}.`);
       return;
     }
-    const [question, a, b, cc, d, correctRaw] = c;
+    const [question, a, b, cc, d, correctRaw, marksRaw = ""] = c;
     if (!question) { result.errors.push(`Row ${line}: the question is empty.`); return; }
     if (!a || !b || !cc || !d) { result.errors.push(`Row ${line}: all four options (A–D) must be filled in.`); return; }
 
@@ -207,9 +220,17 @@ export function parseQuestionsCsv(raw: string): ParseResult {
       result.errors.push(`Row ${line}: the correct answer must be A, B, C or D (found "${correctRaw}").`);
       return;
     }
+    let marks = 1;
+    if (marksRaw !== "") {
+      marks = Number(marksRaw);
+      if (!Number.isInteger(marks) || marks < 1 || marks > MAX_QUESTION_MARKS) {
+        result.errors.push(`Row ${line}: marks must be a whole number from 1 to ${MAX_QUESTION_MARKS} (found "${marksRaw}").`);
+        return;
+      }
+    }
     result.questions.push({
       question_text: question, option_a: a, option_b: b, option_c: cc, option_d: d,
-      correct_option: correct as "A" | "B" | "C" | "D",
+      correct_option: correct as "A" | "B" | "C" | "D", marks,
     });
   });
 
