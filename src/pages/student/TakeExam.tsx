@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { PASS_PERCENT, formatClock, friendlyExamError, percent } from "@/lib/exams";
 import ExamCalculator from "@/components/ExamCalculator";
 import InAppCbtGate from "@/components/InAppCbtGate";
+import RichContentRenderer from "@/components/RichContentRenderer";
 
 interface IntroData {
   state: "available" | "not_started" | "closed" | "no_questions" | "in_progress" | "expired" | "submitted";
@@ -33,6 +34,7 @@ interface IntroData {
     id: string; title: string; description: string | null; instructions: string | null;
     exam_type: "mcq" | "theory"; duration_minutes: number; start_date: string | null; end_date: string | null;
     allow_retake: boolean; subject_name: string | null; allow_calculator: boolean; question_count: number;
+    total_marks?: number;
   };
   attempt: {
     id: string; is_submitted: boolean; score: number | null; total_questions: number | null;
@@ -43,11 +45,12 @@ interface IntroData {
 interface RunQuestion {
   id: string; question_text: string;
   option_a: string; option_b: string; option_c: string; option_d: string;
+  marks?: number;
 }
 
 interface RunData {
   attempt_id: string; remaining_seconds: number; violations: number; max_violations: number;
-  exam: { id: string; title: string; instructions: string | null; duration_minutes: number; subject_name: string | null; allow_calculator: boolean };
+  exam: { id: string; title: string; instructions: string | null; duration_minutes: number; subject_name: string | null; allow_calculator: boolean; total_marks?: number };
   questions: RunQuestion[];
   answers: Record<string, string>;
 }
@@ -107,6 +110,7 @@ function TakeExamInner() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);   // a diagram opened full size
 
   // Values the timers / event handlers need to read without going stale
   const answersRef = useRef<Record<string, string>>({});
@@ -359,7 +363,7 @@ function TakeExamInner() {
   useEffect(() => {
     if (phase !== "running" || !run) return;
     const onKey = (e: KeyboardEvent) => {
-      if (confirmOpen || warning) return;
+      if (confirmOpen || warning || zoomSrc) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       const k = e.key.toUpperCase();
@@ -372,7 +376,7 @@ function TakeExamInner() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, run, current, confirmOpen, warning]);
+  }, [phase, run, current, confirmOpen, warning, zoomSrc]);
 
   // Clean up timers if the student leaves the page
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
@@ -432,10 +436,11 @@ function TakeExamInner() {
             <p className="text-muted-foreground">{e.subject_name || "Exam"}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
             <div className="rounded-xl bg-muted p-3"><p className="text-2xl font-bold">{e.question_count}</p><p className="text-xs text-muted-foreground">Questions</p></div>
+            <div className="rounded-xl bg-muted p-3"><p className="text-2xl font-bold">{e.total_marks ?? e.question_count}</p><p className="text-xs text-muted-foreground">Total marks</p></div>
             <div className="rounded-xl bg-muted p-3"><p className="text-2xl font-bold">{e.duration_minutes}</p><p className="text-xs text-muted-foreground">Minutes</p></div>
-            <div className="col-span-2 rounded-xl bg-muted p-3 sm:col-span-1"><p className="text-2xl font-bold">{e.allow_calculator ? "Yes" : "No"}</p><p className="text-xs text-muted-foreground">Calculator</p></div>
+            <div className="rounded-xl bg-muted p-3"><p className="text-2xl font-bold">{e.allow_calculator ? "Yes" : "No"}</p><p className="text-xs text-muted-foreground">Calculator</p></div>
           </div>
 
           {e.description && <p className="whitespace-pre-wrap text-sm">{e.description}</p>}
@@ -501,7 +506,8 @@ function TakeExamInner() {
           </div>
           <div>
             <p className="text-5xl font-extrabold" data-testid="score-line">{result.score} / {result.total_questions}</p>
-            <p className="mt-1 text-lg text-muted-foreground">{pct}%</p>
+            <p className="mt-1 text-sm text-muted-foreground">marks scored</p>
+            <p className="text-lg text-muted-foreground">{pct}%</p>
             <Badge className="mt-2" variant={pass ? "default" : "destructive"}>{pass ? "Pass" : "Fail"}</Badge>
           </div>
           {reason && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">{reason}</p>}
@@ -584,8 +590,8 @@ function TakeExamInner() {
             <Clock className="h-4 w-4" />{formatClock(remaining)}
           </div>
           {run.exam.allow_calculator && (
-            <Button variant="outline" size="icon" onClick={() => setCalcOpen((v) => !v)} aria-label="Calculator" title="Calculator">
-              <Calculator className="h-4 w-4" />
+            <Button variant={calcOpen ? "default" : "outline"} size="sm" onClick={() => setCalcOpen((v) => !v)} aria-label="Calculator" title="Calculator">
+              <Calculator className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Calculator</span>
             </Button>
           )}
           <Button onClick={() => setConfirmOpen(true)} data-testid="submit-button">
@@ -600,7 +606,10 @@ function TakeExamInner() {
         <Card className="border-0 shadow-md">
           <CardContent className="space-y-5 p-5 sm:p-6">
             <div className="flex items-center justify-between">
-              <Badge variant="secondary">Question {current + 1} of {total}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Question {current + 1} of {total}</Badge>
+                <Badge variant="outline" data-testid="question-marks">{q.marks ?? 1} {(q.marks ?? 1) === 1 ? "mark" : "marks"}</Badge>
+              </div>
               <button
                 type="button"
                 onClick={() => toggleFlag(q.id)}
@@ -611,9 +620,14 @@ function TakeExamInner() {
               </button>
             </div>
 
-            <p className="select-none whitespace-pre-wrap break-words text-lg font-medium leading-relaxed" data-testid="question-text">
-              {q.question_text}
-            </p>
+            {/* rich text: symbols, formulas and diagrams. Tap a diagram to see it full size. */}
+            <div
+              className="select-none break-words text-lg font-medium leading-relaxed"
+              data-testid="question-text"
+              onClick={(e) => { const t = e.target as HTMLElement; if (t instanceof HTMLImageElement) setZoomSrc(t.src); }}
+            >
+              <RichContentRenderer content={q.question_text} />
+            </div>
 
             <div className="space-y-2.5" role="radiogroup" aria-label="Answer options">
               {LETTERS.map((l) => {
@@ -633,7 +647,7 @@ function TakeExamInner() {
                   >
                     <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold",
                       selected && "border-primary bg-primary text-primary-foreground")}>{l}</span>
-                    <span className="whitespace-pre-wrap break-words pt-1">{q[optionKey(l)]}</span>
+                    <span className="break-words pt-1"><RichContentRenderer content={q[optionKey(l)]} /></span>
                   </button>
                 );
               })}
@@ -711,6 +725,17 @@ function TakeExamInner() {
               <Send className="mr-2 h-4 w-4" />Yes, submit
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diagram, full size */}
+      <Dialog open={!!zoomSrc} onOpenChange={(o) => { if (!o) setZoomSrc(null); }}>
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-auto">
+          <DialogHeader>
+            <DialogTitle>Diagram</DialogTitle>
+            <DialogDescription>Close this window to go back to the question.</DialogDescription>
+          </DialogHeader>
+          {zoomSrc && <img src={zoomSrc} alt="Diagram" className="mx-auto h-auto max-w-full" />}
         </DialogContent>
       </Dialog>
 

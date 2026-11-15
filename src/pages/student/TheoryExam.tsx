@@ -2,19 +2,20 @@
 // A theory exam is answered on paper: the student reads (and can print) the question paper here.
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Calculator, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSchoolLogo, useSchoolName } from "@/hooks/useSchoolSettings";
 import InAppCbtGate from "@/components/InAppCbtGate";
+import ExamCalculator from "@/components/ExamCalculator";
 import { TheoryPaperView } from "@/components/TheoryPaper";
 import { type TheoryQuestion, friendlyExamError } from "@/lib/exams";
 
 interface Intro {
   state: string;
   exam: { id: string; title: string; instructions: string | null; exam_type: string; duration_minutes: number;
-          start_date: string | null; end_date: string | null; subject_name: string | null };
+          start_date: string | null; end_date: string | null; subject_name: string | null; allow_calculator?: boolean };
 }
 
 export default function TheoryExam() {
@@ -34,6 +35,7 @@ function TheoryExamInner() {
   const [error, setError] = useState("");
   const [intro, setIntro] = useState<Intro | null>(null);
   const [questions, setQuestions] = useState<TheoryQuestion[]>([]);
+  const [calcOpen, setCalcOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -94,9 +96,17 @@ function TheoryExamInner() {
   return (
     <div className="space-y-3">
       {back}
-      <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100">
-        This is a theory exam. Read the questions below and write your answers on paper as your teacher instructs.
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="flex-1 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-500/10 dark:text-blue-100">
+          This is a theory exam. Read the questions below and write your answers on paper as your teacher instructs.
+        </p>
+        {e.allow_calculator && (
+          <Button variant={calcOpen ? "default" : "outline"} onClick={() => setCalcOpen((v) => !v)} aria-label="Calculator">
+            <Calculator className="mr-2 h-4 w-4" />Calculator
+          </Button>
+        )}
+      </div>
+      {e.allow_calculator && calcOpen && <ExamCalculator onClose={() => setCalcOpen(false)} />}
       {questions.length === 0 ? (
         <Card><CardContent className="py-12 text-center text-muted-foreground">No questions have been added to this paper yet.</CardContent></Card>
       ) : (
