@@ -22,16 +22,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import InAppCbtGate from "@/components/InAppCbtGate";
+import RichTextEditor from "@/components/RichTextEditor";
+import RichContentRenderer from "@/components/RichContentRenderer";
 import { TheoryPaperView } from "@/components/TheoryPaper";
 import {
   CSV_TEMPLATE, type ExamRow, type McqQuestion, type ParsedQuestion, type TheoryQuestion,
-  embeddedCount, examStatus, friendlyExamError, parseQuestionsCsv, STATUS_LABEL,
+  MAX_QUESTION_MARKS, embeddedCount, examStatus, friendlyExamError, parseQuestionsCsv, STATUS_LABEL, sumMarks,
 } from "@/lib/exams";
 
 const LETTERS = ["A", "B", "C", "D"] as const;
 const optKey = (l: string) => `option_${l.toLowerCase()}` as "option_a" | "option_b" | "option_c" | "option_d";
 
-const emptyMcq = { question_text: "", option_a: "", option_b: "", option_c: "", option_d: "", correct_option: "A" };
+const emptyMcq = { question_text: "", option_a: "", option_b: "", option_c: "", option_d: "", correct_option: "A", marks: "1" };
 const emptyTheory = { question_number: "", sub_label: "", question_text: "", marks: "5" };
 
 export default function ExamQuestions() {
@@ -44,7 +46,7 @@ export default function ExamQuestions() {
 
 function ExamQuestionsInner() {
   const { examId = "" } = useParams<{ examId: string }>();
-  const { role } = useAuth();
+  const { role, schoolId } = useAuth();
   const navigate = useNavigate();
   const base = role === "instructor" ? "/instructor" : "/admin";
   const { canCreateExam } = useSubscription();
@@ -109,6 +111,7 @@ function ExamQuestionsInner() {
     setMcqForm({
       question_text: q.question_text, option_a: q.option_a, option_b: q.option_b,
       option_c: q.option_c, option_d: q.option_d, correct_option: (q.correct_option || "A").toUpperCase(),
+      marks: String(q.marks ?? 1),
     });
     setMcqDialog(true);
   };
@@ -119,10 +122,15 @@ function ExamQuestionsInner() {
     const f = mcqForm;
     if (!f.question_text.trim()) { toast.error("Please type the question"); return; }
     if (![f.option_a, f.option_b, f.option_c, f.option_d].every((o) => o.trim())) { toast.error("Fill in all four options (A–D)"); return; }
+    const marks = Number(f.marks);
+    if (!Number.isInteger(marks) || marks < 1 || marks > MAX_QUESTION_MARKS) {
+      toast.error(`Marks must be a whole number from 1 to ${MAX_QUESTION_MARKS}`);
+      return;
+    }
     setBusy(true);
     const row = {
       question_text: f.question_text.trim(), option_a: f.option_a.trim(), option_b: f.option_b.trim(),
-      option_c: f.option_c.trim(), option_d: f.option_d.trim(), correct_option: f.correct_option,
+      option_c: f.option_c.trim(), option_d: f.option_d.trim(), correct_option: f.correct_option, marks,
     };
     const { error } = editingMcq
       ? await db.from("questions").update(row).eq("id", editingMcq.id)
@@ -208,10 +216,10 @@ function ExamQuestionsInner() {
     ev.preventDefault();
     if (!canCreateExam()) return;
     const f = theoryForm;
-    const marks = parseFloat(f.marks);
+    const marks = Number(f.marks);
     if (!f.question_number.trim()) { toast.error("Enter the question number"); return; }
     if (!f.question_text.trim()) { toast.error("Please type the question"); return; }
-    if (isNaN(marks) || marks < 0) { toast.error("Enter the marks (0 or more)"); return; }
+    if (!Number.isInteger(marks) || marks < 0 || marks > 1000) { toast.error("Marks must be a whole number (0 or more)"); return; }
     setBusy(true);
     const row = {
       question_number: f.question_number.trim(), sub_label: f.sub_label.trim() || null,
@@ -271,7 +279,7 @@ function ExamQuestionsInner() {
   }
 
   const count = isTheory ? theory.length : mcq.length;
-  const totalMarks = theory.reduce((a, q) => a + (Number(q.marks) || 0), 0);
+  const totalMarks = isTheory ? theory.reduce((a, q) => a + (Number(q.marks) || 0), 0) : sumMarks(mcq);
   const status = examStatus(exam);
 
   return (
@@ -319,7 +327,7 @@ function ExamQuestionsInner() {
           </>
         )}
         <span className="ml-auto text-sm text-muted-foreground">
-          {count} question{count === 1 ? "" : "s"}{isTheory ? ` · ${totalMarks} marks` : ""}
+          {count} question{count === 1 ? "" : "s"} · {totalMarks} mark{totalMarks === 1 ? "" : "s"}
         </span>
       </div>
 
@@ -335,7 +343,7 @@ function ExamQuestionsInner() {
             <Card key={q.id} className="border-0 shadow-sm">
               <CardContent className="flex items-start gap-3 p-4">
                 <div className="min-w-[44px] pt-0.5 font-bold">{q.question_number}{q.sub_label ? `(${q.sub_label})` : ""}</div>
-                <p className="flex-1 whitespace-pre-wrap break-words text-sm">{q.question_text}</p>
+                <div className="min-w-0 flex-1 break-words text-sm"><RichContentRenderer content={q.question_text} /></div>
                 <Badge variant="secondary" className="shrink-0">{q.marks} mk</Badge>
                 <div className="flex shrink-0 flex-col gap-0.5 sm:flex-row">
                   <Button size="icon" variant="ghost" className="h-8 w-8" disabled={i === 0} onClick={() => void moveTheory(i, -1)} aria-label="Move up"><ArrowUp className="h-4 w-4" /></Button>
@@ -354,7 +362,8 @@ function ExamQuestionsInner() {
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start gap-3">
                   <Badge variant="secondary" className="mt-0.5 shrink-0">{i + 1}</Badge>
-                  <p className="flex-1 whitespace-pre-wrap break-words font-medium">{q.question_text}</p>
+                  <div className="min-w-0 flex-1 break-words font-medium"><RichContentRenderer content={q.question_text} /></div>
+                  <Badge variant="outline" className="mt-0.5 shrink-0">{q.marks ?? 1} {(q.marks ?? 1) === 1 ? "mark" : "marks"}</Badge>
                   <div className="flex shrink-0 gap-0.5">
                     <Button size="icon" variant="ghost" className="h-8 w-8" disabled={i === 0} onClick={() => void moveMcq(i, -1)} aria-label="Move up"><ArrowUp className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" className="h-8 w-8" disabled={i === mcq.length - 1} onClick={() => void moveMcq(i, 1)} aria-label="Move down"><ArrowDown className="h-4 w-4" /></Button>
@@ -369,7 +378,7 @@ function ExamQuestionsInner() {
                       <div key={l} className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-sm",
                         correct && "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10")}>
                         <span className="font-bold">{l}.</span>
-                        <span className="flex-1 break-words">{q[optKey(l)]}</span>
+                        <span className="flex-1 break-words"><RichContentRenderer content={q[optKey(l)]} /></span>
                         {correct && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-label="Correct answer" />}
                       </div>
                     );
@@ -388,7 +397,15 @@ function ExamQuestionsInner() {
           <form onSubmit={saveMcq} className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="mcq-question">Question *</Label>
-              <Textarea id="mcq-question" rows={3} value={mcqForm.question_text} onChange={(e) => setMcqForm({ ...mcqForm, question_text: e.target.value })} required />
+              {/* symbols, formulas and the Diagram button (upload a picture into the question) */}
+              <RichTextEditor
+                id="mcq-question"
+                rows={4}
+                folder={schoolId || undefined}
+                value={mcqForm.question_text}
+                onChange={(v) => setMcqForm({ ...mcqForm, question_text: v })}
+                placeholder="Type the question. Use the Diagram button to add a picture."
+              />
             </div>
             {LETTERS.map((l) => (
               <div key={l} className="flex items-center gap-2">
@@ -406,6 +423,14 @@ function ExamQuestionsInner() {
               </div>
             ))}
             <p className="text-xs text-muted-foreground">Tap a letter to mark it as the correct answer (currently <b>{mcqForm.correct_option}</b>).</p>
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <Label htmlFor="mcq-marks" className="shrink-0">Marks for this question</Label>
+              <Input
+                id="mcq-marks" type="number" min={1} max={MAX_QUESTION_MARKS} step={1} className="w-24"
+                value={mcqForm.marks} onChange={(e) => setMcqForm({ ...mcqForm, marks: e.target.value })}
+              />
+              <span className="text-xs text-muted-foreground">A student who answers correctly earns these marks.</span>
+            </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setMcqDialog(false)}>Cancel</Button>
               <Button type="submit" disabled={busy}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingMcq ? "Save" : "Add question"}</Button>
@@ -420,8 +445,9 @@ function ExamQuestionsInner() {
           <DialogHeader>
             <DialogTitle>Upload questions</DialogTitle>
             <DialogDescription>
-              One question per row with 6 columns: <b>question, option A, option B, option C, option D, correct answer (A–D)</b>.
-              Choose a CSV file, or paste rows copied from Excel / Google Sheets.
+              One question per row: <b>question, option A, option B, option C, option D, correct answer (A–D)</b>, and
+              optionally <b>marks</b> as a 7th column (a question without it is worth 1 mark).
+              Choose a CSV file, or paste rows copied from Excel / Google Sheets. Add diagrams afterwards by editing a question.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -434,7 +460,7 @@ function ExamQuestionsInner() {
               rows={8}
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder={"What is 2 + 2?\t3\t4\t5\t6\tB\nCapital of Nigeria?\tLagos\tAbuja\tKano\tIbadan\tB"}
+              placeholder={"What is 2 + 2?\t3\t4\t5\t6\tB\t1\nCapital of Nigeria?\tLagos\tAbuja\tKano\tIbadan\tB\t2"}
               className="font-mono text-xs"
               aria-label="Questions to upload"
             />
@@ -482,12 +508,19 @@ function ExamQuestionsInner() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="th-marks">Marks *</Label>
-                <Input id="th-marks" type="number" min={0} step="0.5" value={theoryForm.marks} onChange={(e) => setTheoryForm({ ...theoryForm, marks: e.target.value })} required />
+                <Input id="th-marks" type="number" min={0} step={1} value={theoryForm.marks} onChange={(e) => setTheoryForm({ ...theoryForm, marks: e.target.value })} required />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="th-question">Question *</Label>
-              <Textarea id="th-question" rows={5} value={theoryForm.question_text} onChange={(e) => setTheoryForm({ ...theoryForm, question_text: e.target.value })} required />
+              <RichTextEditor
+                id="th-question"
+                rows={5}
+                folder={schoolId || undefined}
+                value={theoryForm.question_text}
+                onChange={(v) => setTheoryForm({ ...theoryForm, question_text: v })}
+                placeholder="Type the question. Use the Diagram button to add a picture."
+              />
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={() => setTheoryDialog(false)}>Cancel</Button>

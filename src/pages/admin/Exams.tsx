@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  BarChart3, CalendarClock, Clock, FileQuestion, ListChecks, Loader2, Lock, Pencil, Plus, RotateCcw, Search, Trash2, Users,
+  BarChart3, Calculator, CalendarClock, Clock, FileQuestion, ListChecks, Loader2, Lock, Pencil, Plus, RotateCcw, Search, Trash2, Users,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -28,7 +28,7 @@ import {
   friendlyExamError, fromLocalInput, toLocalInput,
 } from "@/lib/exams";
 
-interface Option { id: string; name: string }
+interface Option { id: string; name: string; allow_calculator?: boolean }
 
 const STATUS_STYLE: Record<ExamStatus, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -41,6 +41,7 @@ const emptyForm = {
   title: "", description: "", instructions: "", exam_type: "mcq" as "mcq" | "theory",
   class_id: "", subject_id: "", term_id: "none", duration: "30", start: "", end: "",
   allow_retake: false, shuffle: false,
+  calculator: "subject" as "subject" | "on" | "off",   // subject = follow the subject's setting
 };
 
 export default function Exams() {
@@ -103,7 +104,7 @@ function ExamsInner() {
         .eq("school_id", schoolId)
         .order("created_at", { ascending: false }),
       db.from("classes").select("id, name").eq("school_id", schoolId).order("name"),
-      db.from("subjects").select("id, name").eq("school_id", schoolId).order("name"),
+      db.from("subjects").select("id, name, allow_calculator").eq("school_id", schoolId).order("name"),
       db.from("terms").select("id, name").eq("school_id", schoolId).order("name"),
     ]);
     if (examRes.error) toast.error(friendlyExamError(examRes.error.message));
@@ -115,6 +116,14 @@ function ExamsInner() {
   }, [schoolId]);
 
   useEffect(() => { if (!permLoading && canManage) void load(); else if (!permLoading) setLoading(false); }, [permLoading, canManage, load]);
+
+  // what each subject currently allows (Subjects → "Allow Calculator in Exams")
+  const subjectAllowsCalc = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    subjects.forEach((s) => { m[s.id] = !!s.allow_calculator; });
+    return m;
+  }, [subjects]);
+  const calcAllowed = (e: ExamRow) => (e.allow_calculator ?? subjectAllowsCalc[e.subject_id]) === true;
 
   const questionCount = (e: ExamRow) => embeddedCount(e.exam_type === "theory" ? e.theory_questions : e.questions);
   const attemptCount = (e: ExamRow) => embeddedCount(e.exam_attempts);
@@ -143,6 +152,7 @@ function ExamsInner() {
       term_id: e.term_id || "none", duration: String(e.duration_minutes),
       start: toLocalInput(e.start_date), end: toLocalInput(e.end_date),
       allow_retake: !!e.allow_retake, shuffle: !!e.shuffle_questions,
+      calculator: e.allow_calculator === true ? "on" : e.allow_calculator === false ? "off" : "subject",
     });
     setDialog(true);
   };
@@ -175,6 +185,7 @@ function ExamsInner() {
       end_date: end,
       allow_retake: form.exam_type === "mcq" ? form.allow_retake : false,
       shuffle_questions: form.exam_type === "mcq" ? form.shuffle : false,
+      allow_calculator: form.calculator === "on" ? true : form.calculator === "off" ? false : null,
     };
 
     setSaving(true);
@@ -323,6 +334,7 @@ function ExamsInner() {
                     <span className="flex items-center gap-1"><ListChecks className="h-4 w-4" />{qc} question{qc === 1 ? "" : "s"}</span>
                     <span className="flex items-center gap-1"><Clock className="h-4 w-4" />{e.duration_minutes} min</span>
                     {e.exam_type === "mcq" && <span className="flex items-center gap-1"><Users className="h-4 w-4" />{ac} taken</span>}
+                    {calcAllowed(e) && <span className="flex items-center gap-1"><Calculator className="h-4 w-4" />Calculator allowed</span>}
                     {(e.start_date || e.end_date) && (
                       <span className="flex items-center gap-1">
                         <CalendarClock className="h-4 w-4" />{formatDateTime(e.start_date)} → {formatDateTime(e.end_date)}
@@ -425,7 +437,24 @@ function ExamsInner() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="hidden sm:block" />
+            <div className="space-y-1.5">
+              <Label>Calculator</Label>
+              <Select value={form.calculator} onValueChange={(v) => setForm({ ...form, calculator: v as "subject" | "on" | "off" })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="subject">Follow the subject's setting</SelectItem>
+                  <SelectItem value="on">Allow a calculator</SelectItem>
+                  <SelectItem value="off">No calculator</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.calculator === "on" ? "Students get a calculator in this exam."
+                  : form.calculator === "off" ? "Students get no calculator in this exam."
+                  : form.subject_id
+                    ? `This subject currently ${subjectAllowsCalc[form.subject_id] ? "allows" : "does not allow"} a calculator.`
+                    : "Choose a subject to see its setting."}
+              </p>
+            </div>
 
             <div className="space-y-1.5">
               <Label>Opens <span className="font-normal text-muted-foreground">(optional)</span></Label>

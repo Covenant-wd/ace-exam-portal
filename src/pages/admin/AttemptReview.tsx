@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import RichContentRenderer from "@/components/RichContentRenderer";
 import { PASS_PERCENT, type McqQuestion, formatDateTime, friendlyExamError, percent } from "@/lib/exams";
 
 const LETTERS = ["A", "B", "C", "D"] as const;
@@ -137,7 +138,13 @@ export default function AttemptReview() {
                   {state === "right" && <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-label="Correct" />}
                   {state === "wrong" && <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-label="Wrong" />}
                   {state === "blank" && <MinusCircle className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-label="Not answered" />}
-                  <p className="flex-1 whitespace-pre-wrap break-words font-medium"><span className="mr-1 text-muted-foreground">{i + 1}.</span>{q.question_text}</p>
+                  <div className="min-w-0 flex-1 break-words font-medium">
+                    <span className="mr-1 text-muted-foreground">{i + 1}.</span>
+                    <RichContentRenderer content={q.question_text} />
+                  </div>
+                  <Badge variant={state === "right" ? "default" : "outline"} className="shrink-0">
+                    {state === "right" ? q.marks ?? 1 : 0}/{q.marks ?? 1} {(q.marks ?? 1) === 1 ? "mark" : "marks"}
+                  </Badge>
                 </div>
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {LETTERS.map((l) => {
@@ -148,7 +155,7 @@ export default function AttemptReview() {
                         isCorrect && "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10",
                         isChosen && !isCorrect && "border-red-500 bg-red-50 dark:bg-red-500/10")}>
                         <span className="font-bold">{l}.</span>
-                        <span className="flex-1 break-words">{q[optKey(l)]}</span>
+                        <span className="flex-1 break-words"><RichContentRenderer content={q[optKey(l)]} /></span>
                         {isChosen && <span className="text-xs font-semibold text-muted-foreground">Student's answer</span>}
                         {isCorrect && !isChosen && <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Correct answer</span>}
                       </div>
