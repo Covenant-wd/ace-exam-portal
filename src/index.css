@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {
@@ -118,4 +118,59 @@
 /* Hide Lovable badge */
 a[href*="lovable.dev"] {
   display: none !important;
+}
+
+/* ── Mobile rendering fixes ────────────────────────────────────────────────
+   Prevents GPU compositing layer conflicts (black static/noise artifacts)
+   on Android Chrome when fixed/sticky elements overlap scroll containers.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* Smooth momentum scrolling on iOS.
+   (We deliberately do NOT set overscroll-behavior: contain here any more — on
+   phones it swallowed swipes at the end of every scrollable area, which felt
+   "sticky".) */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* App shell height.
+   `100vh` on phones is TALLER than the visible area while the browser's address
+   bar / toolbar is showing, which pushed the mobile bottom bar off-screen until
+   the toolbar collapsed. `100dvh` always equals the visible height; the 100vh line
+   is only a fallback for very old browsers that don't understand dvh. */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+@media (min-width: 1024px) {
+  .app-shell {
+    min-height: 0;
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+/* Prevent layout paint bleed from fixed sidebar into adjacent scroll areas */
+#root {
+  isolation: isolate;
+}
+
+/* Avoid creating unnecessary compositing layers on mobile */
+@media (max-width: 1023px) {
+  .transition-\[box-shadow\,transform\] {
+    will-change: auto;
+  }
+}
+
+/* Safety net: on touch-only devices, disable :hover transforms project-wide.
+   Sticky :hover after tap was promoting many cards to GPU layers at once,
+   producing black-noise artifacts on Android Chrome while scrolling. */
+@media (hover: none) {
+  a:hover,
+  button:hover,
+  .group:hover,
+  [class*="hover:-translate"]:hover,
+  [class*="hover:translate"]:hover {
+    transform: none !important;
+  }
 }

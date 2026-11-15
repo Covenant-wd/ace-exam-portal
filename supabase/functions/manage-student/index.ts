@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "create") {
-      const { email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender } = body;
+      const { email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender, phone_number } = body;
 
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email, password, email_confirm: true,
@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
         class_id: class_id || null, date_of_birth: date_of_birth || null,
         address: address || "", parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [], gender: gender || "",
+        phone_number: phone_number || null,
         school_id: callerSchoolId,
       }).eq("user_id", newUser.user!.id);
       if (profileError) throw profileError;
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update") {
-      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender } = body;
+      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender, phone_number } = body;
 
       // Verify student belongs to caller's school
       const { data: studentRole } = await supabaseAdmin.from("user_roles").select("school_id").eq("user_id", user_id).single();
@@ -89,6 +90,7 @@ Deno.serve(async (req) => {
         class_id: class_id || null, date_of_birth: date_of_birth || null,
         address: address || "", parent_name: parent_name || "", nationality: nationality || "",
         subjects_offered: subjects_offered || [], gender: gender || "",
+        phone_number: phone_number || null,
       }).eq("user_id", user_id);
       if (profileError) throw profileError;
 

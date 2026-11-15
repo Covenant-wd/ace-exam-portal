@@ -1,0 +1,192 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const authHeader = req.headers.get("Authorization")!;
+  const token = authHeader.replace("Bearer ", "");
+  const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
+  if (!caller) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  // Get caller's school_id
+  const { data: callerRole } = await supabaseAdmin.from("user_roles").select("role, school_id").eq("user_id", caller.id).single();
+  if (!callerRole) return new Response(JSON.stringify({ error: "No role found" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  const callerSchoolId = callerRole.school_id;
+
+  const { data: isAdmin } = await supabaseAdmin.rpc("has_role", { _user_id: caller.id, _role: "admin" });
+  let isAuthorized = !!isAdmin;
+  let isInstructorCaller = false;
+  if (!isAuthorized) {
+    const { data: isInstructor } = await supabaseAdmin.rpc("has_role", { _user_id: caller.id, _role: "instructor" });
+    if (isInstructor) {
+      const { data: perms } = await supabaseAdmin.from("instructor_permissions").select("can_manage_students").eq("instructor_id", caller.id).maybeSingle();
+      if (perms?.can_manage_students) { isAuthorized = true; isInstructorCaller = true; }
+    }
+  }
+  if (!isAuthorized) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  const body = await req.json();
+  const { action } = body;
+
+  const json = (obj: unknown, status = 200) =>
+    new Response(JSON.stringify(obj), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  // ── Instructor scoping ─────────────────────────────────────────
+  // An instructor may only touch students of the classes assigned to them.
+  let managedClassIds: string[] = [];
+  if (isInstructorCaller) {
+    const [legacy, modern] = await Promise.all([
+      supabaseAdmin.from("instructor_classes").select("class_id").eq("instructor_id", caller.id),
+      supabaseAdmin.from("class_instructors").select("class_id").eq("instructor_id", caller.id),
+    ]);
+    managedClassIds = Array.from(new Set([
+      ...(legacy.data || []).map((r: any) => r.class_id),
+      ...(modern.data || []).map((r: any) => r.class_id),
+    ].filter(Boolean)));
+
+    if (action === "create_parent") return json({ error: "Forbidden" }, 403);
+    if (managedClassIds.length === 0) return json({ error: "You are not assigned to any class" }, 403);
+  }
+  const instructorMayUseClass = (classId?: string | null) =>
+    !isInstructorCaller || (!!classId && managedClassIds.includes(classId));
+
+  try {
+    if (action === "create") {
+      const { email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender, phone_number } = body;
+      if (!instructorMayUseClass(class_id)) return json({ error: "You can only add students to classes assigned to you" }, 403);
+
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email, password, email_confirm: true,
+        user_metadata: { full_name: `${first_name} ${last_name}`, school_id: callerSchoolId },
+      });
+      if (createError) throw createError;
+
+      const { error: profileError } = await supabaseAdmin.from("profiles").update({
+        first_name, middle_name: middle_name || "", last_name, username: username || null,
+        full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
+        class_id: class_id || null, date_of_birth: date_of_birth || null,
+        address: address || "", parent_name: parent_name || "", nationality: nationality || "",
+        subjects_offered: subjects_offered || [], gender: gender || "",
+        phone_number: phone_number || null,
+        school_id: callerSchoolId,
+      }).eq("user_id", newUser.user!.id);
+      if (profileError) throw profileError;
+
+      // Ensure user_roles has correct school_id
+      await supabaseAdmin.from("user_roles").update({ school_id: callerSchoolId }).eq("user_id", newUser.user!.id);
+
+      return new Response(JSON.stringify({ success: true, user_id: newUser.user!.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update") {
+      const { user_id, email, password, first_name, middle_name, last_name, username, class_id, date_of_birth, address, parent_name, nationality, subjects_offered, gender, phone_number } = body;
+
+      // Verify student belongs to caller's school
+      const { data: studentRole } = await supabaseAdmin.from("user_roles").select("school_id").eq("user_id", user_id).single();
+      if (studentRole?.school_id !== callerSchoolId) {
+        return new Response(JSON.stringify({ error: "Student does not belong to your school" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (isInstructorCaller) {
+        const { data: current } = await supabaseAdmin.from("profiles").select("class_id").eq("user_id", user_id).maybeSingle();
+        if (!instructorMayUseClass(current?.class_id) || !instructorMayUseClass(class_id)) {
+          return json({ error: "You can only manage students in the classes assigned to you" }, 403);
+        }
+      }
+
+      const authUpdate: Record<string, any> = {};
+      if (email) authUpdate.email = email;
+      if (password) authUpdate.password = password;
+      if (Object.keys(authUpdate).length > 0) {
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(user_id, authUpdate);
+        if (error) throw error;
+      }
+
+      const { error: profileError } = await supabaseAdmin.from("profiles").update({
+        first_name, middle_name: middle_name || "", last_name, username: username || null,
+        full_name: `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`,
+        class_id: class_id || null, date_of_birth: date_of_birth || null,
+        address: address || "", parent_name: parent_name || "", nationality: nationality || "",
+        subjects_offered: subjects_offered || [], gender: gender || "",
+        phone_number: phone_number || null,
+      }).eq("user_id", user_id);
+      if (profileError) throw profileError;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "list") {
+      // Only list students from caller's school
+      const { data: roles } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "student").eq("school_id", callerSchoolId);
+      if (!roles || roles.length === 0) return new Response(JSON.stringify({ students: [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+      const userIds = roles.map(r => r.user_id);
+      let profilesQuery = supabaseAdmin.from("profiles").select("*").in("user_id", userIds);
+      if (isInstructorCaller) profilesQuery = profilesQuery.in("class_id", managedClassIds);
+      const { data: profiles } = await profilesQuery;
+
+      const students = await Promise.all((profiles || []).map(async (p) => {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(p.user_id);
+        return { ...p, email: user?.email || "" };
+      }));
+
+      return new Response(JSON.stringify({ students }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "create_parent") {
+      const { email, password, full_name, username, child_ids } = body;
+
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email, password, email_confirm: true,
+        user_metadata: { full_name, school_id: callerSchoolId },
+      });
+      if (createError) throw createError;
+
+      await supabaseAdmin.from("profiles").update({
+        full_name,
+        first_name: full_name.split(" ")[0] || "",
+        last_name: full_name.split(" ").slice(1).join(" ") || "",
+        username: username || null,
+        school_id: callerSchoolId,
+      }).eq("user_id", newUser.user!.id);
+
+      await supabaseAdmin.from("user_roles").update({
+        role: "parent",
+        school_id: callerSchoolId,
+      }).eq("user_id", newUser.user!.id);
+
+      if (child_ids && child_ids.length > 0) {
+        const rows = child_ids.map((student_id: string) => ({
+          parent_id: newUser.user!.id,
+          student_id,
+          school_id: callerSchoolId,
+        }));
+        await supabaseAdmin.from("parent_students").insert(rows);
+      }
+
+      return new Response(JSON.stringify({ success: true, user_id: newUser.user!.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+});

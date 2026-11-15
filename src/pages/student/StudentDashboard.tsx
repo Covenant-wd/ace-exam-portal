@@ -1,41 +1,39 @@
+// src/pages/student/StudentDashboard.tsx
 import { useEffect, useState } from "react";
+import { useProfileName } from "@/hooks/useProfileName";
+import { useSchoolName, useSchoolLogo } from "@/hooks/useSchoolSettings";
+import { FeeReceiptDialog, type ReceiptData } from "@/components/FeeReceipt";
+import { Button } from "@/components/ui/button";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3 } from "lucide-react";
+import { Loader2, BookOpen, CheckCircle2, XCircle, Clock, DollarSign, Megaphone, BarChart3, ExternalLink, Printer } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
+import { useSchoolCbtLink } from "@/hooks/useSchoolSettings";
 
-interface AttendanceRecord {
-  date: string;
-  status: string;
-}
+interface AttendanceRecord { date: string; status: string; }
+interface GradeRecord { subject_name: string; category_name: string; category_max_score: number; score: number; }
+interface FeeRecord { fee_name: string; amount: number; amount_paid: number; payment_date: string; receipt_ref?: string; payment_method?: string; receipt_number?: string; notes?: string; }
+interface AnnouncementItem { id: string; title: string; content: string; created_at: string; }
 
-interface GradeRecord {
-  subject_name: string;
-  category_name: string;
-  category_max_score: number;
-  score: number;
-}
-
-interface FeeRecord {
-  fee_name: string;
-  amount: number;
-  amount_paid: number;
-  payment_date: string;
-}
-
-interface AnnouncementItem {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-}
+const STUDENT_TABS = ["announcements", "attendance", "grades", "fees"];
 
 export default function StudentDashboard() {
   const { user, schoolId } = useAuth();
+  const { firstName: displayFirstName, fullName: studentFullName } = useProfileName();
+  const { schoolName } = useSchoolName();
+  const { logoUrl } = useSchoolLogo();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  // The active tab lives in the URL (?tab=...) so the mobile bottom bar can link straight to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") || "";
+  const activeTab = STUDENT_TABS.includes(tabParam) ? tabParam : "announcements";
+  const { cbtLink } = useSchoolCbtLink();
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
@@ -48,26 +46,13 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      // Load active session & term for this school
       if (schoolId) {
-        const { data: sessData } = await supabase
-          .from("sessions")
-          .select("name")
-          .eq("school_id", schoolId)
-          .eq("is_active", true)
-          .single();
+        const { data: sessData } = await supabase.from("sessions").select("name").eq("school_id", schoolId).eq("is_active", true).single();
         if (sessData) setActiveSession(sessData.name);
-
-        const { data: termData } = await supabase
-          .from("terms")
-          .select("name")
-          .eq("school_id", schoolId)
-          .eq("is_active", true)
-          .single();
+        const { data: termData } = await supabase.from("terms").select("name").eq("school_id", schoolId).eq("is_active", true).single();
         if (termData) setActiveTerm(termData.name);
       }
 
-      // Load attendance
       const { data: attData } = await supabase.from("attendance").select("date, status")
         .eq("student_id", user.id).order("date", { ascending: false }).limit(50);
       const attRecords = (attData || []) as AttendanceRecord[];
@@ -79,38 +64,39 @@ export default function StudentDashboard() {
         late: attRecords.filter((a) => a.status === "late").length,
       });
 
-      // Load grades with subject and category names
       const { data: gradeData } = await supabase.from("grades").select(`
         score, max_score,
         subjects:subject_id(name),
         grade_categories:category_id(name, max_score)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
-      const gradeRecords = (gradeData || []).map((g: any) => ({
+      setGrades((gradeData || []).map((g: any) => ({
         subject_name: g.subjects?.name || "—",
         category_name: g.grade_categories?.name || "—",
         category_max_score: g.grade_categories?.max_score ?? g.max_score,
         score: g.score,
-      }));
-      setGrades(gradeRecords);
+      })));
 
-      // Load fee payments
       const { data: feeData } = await supabase.from("fee_payments").select(`
-        amount_paid, payment_date,
+        *,
         fee_types:fee_type_id(name, amount)
       `).eq("student_id", user.id).order("created_at", { ascending: false });
 
-      const feeRecords = (feeData || []).map((f: any) => ({
+      setFees((feeData || []).map((f: any) => ({
         fee_name: f.fee_types?.name || "—",
         amount: f.fee_types?.amount || 0,
         amount_paid: f.amount_paid,
         payment_date: f.payment_date,
-      }));
-      setFees(feeRecords);
+        receipt_ref: f.receipt_ref,
+        payment_method: f.payment_method,
+        receipt_number: f.receipt_number,
+        notes: f.notes,
+      })));
 
-      // Load announcements
-      const { data: annData } = await supabase.from("announcements").select("id, title, content, created_at")
+      const annQuery = supabase.from("announcements").select("id, title, content, created_at")
         .eq("is_active", true).order("created_at", { ascending: false }).limit(10);
+      if (schoolId) annQuery.eq("school_id", schoolId);
+      const { data: annData } = await annQuery;
       setAnnouncements((annData as AnnouncementItem[]) || []);
 
       setLoading(false);
@@ -122,32 +108,41 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">My Dashboard</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Welcome, {displayFirstName}!</h1>
+          <p className="text-sm text-muted-foreground mt-1">Here's what's happening with your studies</p>
+        </div>
+        {/* CBT Portal button — only shown if school has configured an external CBT link */}
+        {cbtLink && (
+          <a
+            href={cbtLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <ExternalLink className="h-4 w-4 shrink-0" />
+            Take Exam (CBT Portal)
+          </a>
+        )}
+      </div>
 
       {/* Active Session & Term Banner */}
       {(activeSession || activeTerm) && (
         <Card className="border-0 bg-primary/5">
           <CardContent className="flex flex-wrap items-center gap-3 py-3 px-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4 text-primary" />
+              <Clock className="h-4 w-4 text-primary shrink-0" />
               <span>Current Period:</span>
             </div>
-            {activeSession && (
-              <Badge variant="outline" className="text-sm font-medium">
-                {activeSession}
-              </Badge>
-            )}
-            {activeTerm && (
-              <Badge className="text-sm font-medium">
-                {activeTerm}
-              </Badge>
-            )}
+            {activeSession && <Badge variant="outline" className="text-sm font-medium">{activeSession}</Badge>}
+            {activeTerm && <Badge className="text-sm font-medium">{activeTerm}</Badge>}
           </CardContent>
         </Card>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Quick Stats — Fixed for balanced mobile layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-emerald-600" />
@@ -178,8 +173,8 @@ export default function StudentDashboard() {
         </Card>
       </div>
 
-      <Tabs defaultValue="announcements">
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
+        <TabsList className="flex-wrap h-auto w-full justify-start">
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="grades">Grades</TabsTrigger>
@@ -204,7 +199,7 @@ export default function StudentDashboard() {
 
         <TabsContent value="attendance">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -234,33 +229,52 @@ export default function StudentDashboard() {
         </TabsContent>
 
         <TabsContent value="grades">
-          <ReportCard
-            grades={grades}
-            term={activeTerm}
-            session={activeSession}
-          />
+          <ReportCard grades={grades} term={activeTerm} session={activeSession} />
         </TabsContent>
 
         <TabsContent value="fees">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fee</TableHead>
                     <TableHead>Amount Paid</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Receipt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {fees.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">No payment records</TableCell></TableRow>
                   ) : (
                     fees.map((f, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{f.fee_name}</TableCell>
                         <TableCell>₦{Number(f.amount_paid).toLocaleString()}</TableCell>
                         <TableCell className="text-muted-foreground">{new Date(f.payment_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost" size="sm" title="View / print receipt" disabled={!f.receipt_ref}
+                            onClick={() => {
+                              setReceiptData({
+                                reference: f.receipt_ref || "",
+                                schoolName: schoolName || document.title || "School",
+                                logoUrl: logoUrl || undefined,
+                                studentName: studentFullName || "Student",
+                                feeName: f.fee_name,
+                                amount: Number(f.amount_paid),
+                                paymentMethod: f.payment_method,
+                                paymentDate: f.payment_date,
+                                tellerNumber: f.receipt_number || undefined,
+                                notes: f.notes || undefined,
+                              });
+                              setReceiptOpen(true);
+                            }}
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -270,6 +284,8 @@ export default function StudentDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <FeeReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} data={receiptData} />
     </div>
   );
 }

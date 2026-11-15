@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Search, Users, ArrowRightLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-
+import { sendStudentWelcomeEmail } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 
 interface Student {
   user_id: string;
@@ -42,6 +43,7 @@ const emptyForm = {
 
 export default function Students() {
   const { schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -142,21 +144,27 @@ export default function Students() {
 
     try {
       if (editing) {
-        const { error } = await supabase.from("profiles").update({
-          first_name: form.first_name,
-          middle_name: form.middle_name || "",
-          last_name: form.last_name,
-          full_name: fullName,
-          username: form.username || null,
-          class_id: form.class_id || null,
-          date_of_birth: form.date_of_birth || null,
-          address: form.address || "",
-          parent_name: form.parent_name || "",
-          nationality: form.nationality || "",
-          gender: form.gender || "",
-          subjects_offered: subjects,
-        }).eq("user_id", editing.user_id);
+        const { data, error } = await supabase.functions.invoke("manage-student", {
+          body: {
+            action: "update",
+            user_id: editing.user_id,
+            email: form.email,
+            password: form.password || undefined,
+            first_name: form.first_name,
+            middle_name: form.middle_name || "",
+            last_name: form.last_name,
+            username: form.username || null,
+            class_id: form.class_id || null,
+            date_of_birth: form.date_of_birth || null,
+            address: form.address || "",
+            parent_name: form.parent_name || "",
+            nationality: form.nationality || "",
+            gender: form.gender || "",
+            subjects_offered: subjects,
+          },
+        });
         if (error) throw error;
+        if (data?.error) throw new Error(data.error);
         toast.success("Student updated");
       } else {
         // Create user via SQL function — no edge function, no email confirmation issues
@@ -184,6 +192,18 @@ export default function Students() {
           gender:           form.gender || "",
           subjects_offered: subjects,
         }).eq("user_id", newUserId);
+
+        // Send welcome email
+        try {
+          await sendStudentWelcomeEmail({
+            to: form.email.trim(),
+            studentName: fullName,
+            schoolName: schoolName || "School",
+            loginUrl: `${window.location.origin}/student/login`,
+            password: form.password,
+            username: form.username || undefined,
+          });
+        } catch (e) { console.error("Student welcome email failed:", e); }
 
         toast.success("Student created");
       }

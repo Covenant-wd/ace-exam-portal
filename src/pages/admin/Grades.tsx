@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { sendGradesPublishedEmail, isNotificationEnabled } from "@/lib/email";
+import { useSchoolName } from "@/hooks/useSchoolSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,8 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Save, Trash2, Award, Pencil, Eye } from "lucide-react";
+import { Loader2, Plus, Save, Trash2, Award, Pencil, Eye, Lock } from "lucide-react";
 import ReportCard from "@/components/ReportCard";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface GradeCategory { id: string; name: string; weight: number; max_score: number; term_id: string | null; }
 interface ClassItem { id: string; name: string; }
@@ -22,6 +25,8 @@ interface StudentProfile { user_id: string; full_name: string; class_id: string 
 
 export default function Grades() {
   const { user, schoolId } = useAuth();
+  const { schoolName } = useSchoolName();
+  const { canPublishResults, isRestricted, isSuspended } = useSubscription();
   const [classes, setClasses]     = useState<ClassItem[]>([]);
   const [subjects, setSubjects]   = useState<Subject[]>([]);
   const [terms, setTerms]         = useState<Term[]>([]);
@@ -127,6 +132,7 @@ export default function Grades() {
   };
 
   const handleSaveGrades = async () => {
+    if (!canPublishResults()) return;
     if (!schoolId || !user) return;
     const invalid = students.find(s => (grades.get(s.user_id) ?? 0) > activeCategoryMaxScore);
     if (invalid) { toast.error(`Score cannot exceed the obtainable mark of ${activeCategoryMaxScore}`); return; }
@@ -144,6 +150,52 @@ export default function Grades() {
       );
       if (error) throw error;
       toast.success("Grades saved successfully");
+      // Send email notification to students and parents
+      try {
+        const enabled = await isNotificationEnabled(schoolId, "notify_grades_published");
+        if (enabled) {
+          const userIds = students.map(s => s.user_id);
+          const subjectName = subjects.find(s => s.id === selectedSubject)?.name || "—";
+          const categoryName = categories.find(c => c.id === selectedCategory)?.name || "—";
+          const className = classes.find(c => c.id === selectedClass)?.name || "—";
+          const sName = schoolName || "School";
+
+          if (userIds.length > 0) {
+            // Notify students
+            const { data: studentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: userIds });
+            const studentEmailList = (studentEmails || []).map((e: any) => e.email).filter(Boolean);
+            if (studentEmailList.length > 0) {
+              await sendGradesPublishedEmail({
+                to: studentEmailList, recipientName: "Student",
+                schoolName: sName, subjectName, categoryName, className,
+                loginUrl: `${window.location.origin}/student/results`,
+              });
+            }
+
+            // Notify parents (separate toggle)
+            const parentEnabled = await isNotificationEnabled(schoolId, "notify_grades_parent");
+            if (parentEnabled) {
+              const { data: parentLinks } = await supabase
+                .from("parent_students")
+                .select("parent_id")
+                .in("student_id", userIds)
+                .eq("school_id", schoolId);
+              const parentIds = [...new Set((parentLinks || []).map((p: any) => p.parent_id))];
+              if (parentIds.length > 0) {
+                const { data: parentEmails } = await supabase.rpc("get_user_emails_by_ids", { _user_ids: parentIds });
+                const parentEmailList = (parentEmails || []).map((e: any) => e.email).filter(Boolean);
+                if (parentEmailList.length > 0) {
+                  await sendGradesPublishedEmail({
+                    to: parentEmailList, recipientName: "Parent",
+                    schoolName: sName, subjectName, categoryName, className,
+                    loginUrl: `${window.location.origin}/parent/dashboard`,
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (e) { console.error("Grades email failed:", e); }
     } catch (err: any) { toast.error(err.message); }
     setSaving(false);
   };
@@ -162,6 +214,7 @@ export default function Grades() {
     setCategories((data as GradeCategory[]) || []);
   };
   const handleSaveCategory = async () => {
+    if (!canPublishResults()) return;
     if (!catName.trim() || !schoolId) { toast.error("Name required"); return; }
     const maxScore = parseFloat(catMaxScore);
     const weight = parseFloat(catWeight);
@@ -335,8 +388,8 @@ export default function Grades() {
                     </TableBody>
                   </Table>
                   {students.length > 0 && (
-                    <Button onClick={handleSaveGrades} disabled={saving}>
-                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    <Button onClick={handleSaveGrades} disabled={saving || isRestricted || isSuspended}>
+                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isRestricted || isSuspended ? <Lock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Grades
                     </Button>
                   )}

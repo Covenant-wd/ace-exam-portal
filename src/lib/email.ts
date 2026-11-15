@@ -1,8 +1,5 @@
-// Academia HQ Email Utility — powered by Resend
-// Sender: onboarding@resend.dev (Resend test sender)
-
-const RESEND_API_KEY = "re_J6HRzeeH_DWiTLFQscLNA4JwXZkYTW3pk";
-const FROM = "Academia HQ <onboarding@resend.dev>";
+// Academia HQ Email Utility — sends via secure edge function
+import { supabase } from "@/integrations/supabase/client";
 
 interface SendEmailParams {
   to: string | string[];
@@ -11,23 +8,50 @@ interface SendEmailParams {
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<boolean> {
+  const recipients = Array.from(new Set((Array.isArray(to) ? to : [to]).map((email) => email.trim().toLowerCase()).filter(Boolean)));
+  if (recipients.length === 0) return true;
+
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-      }),
-    });
-    return res.ok;
-  } catch {
+    const batchSize = 45;
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize);
+      const { data, error } = await supabase.functions.invoke("send-email", {
+        body: { to: batch, subject, html },
+      });
+      if (error) {
+        // FIX: Log the full Supabase FunctionsHttpError detail so it's visible
+        // in the browser console. Previously only "error" was logged which
+        // truncated the Resend error message (e.g. "API key invalid").
+        console.error("[sendEmail] Edge function invocation error:", error?.message, error);
+        return false;
+      }
+      if (data?.success !== true) {
+        // FIX: Log the actual Resend error body returned by the edge function
+        console.error("[sendEmail] Edge function returned failure:", JSON.stringify(data));
+        return false;
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("[sendEmail] Unexpected exception:", err);
     return false;
+  }
+}
+
+// Helper to check if a notification type is enabled for a school
+export async function isNotificationEnabled(schoolId: string, key: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("school_settings")
+      .select("value")
+      .eq("school_id", schoolId)
+      .eq("key", key)
+      .maybeSingle();
+    // Default to true if no setting exists
+    if (!data) return true;
+    return data.value === "true";
+  } catch {
+    return true; // Default to enabled
   }
 }
 
@@ -259,4 +283,206 @@ export async function sendAbsentNotificationEmail({
   `, schoolName);
 
   return sendEmail({ to, subject: `${schoolName} — Absence Alert: ${studentName}`, html });
+}
+
+// ─────────────────────────────────────────────
+// 8. Welcome — New Student
+// ─────────────────────────────────────────────
+export async function sendStudentWelcomeEmail({
+  to, studentName, schoolName, loginUrl, password, username,
+}: { to: string; studentName: string; schoolName: string; loginUrl: string; password: string; username?: string }) {
+  const html = baseTemplate(`
+    ${heading(`Welcome to ${schoolName}! 🎓`)}
+    ${para(`Hi ${studentName}, your student account has been created on <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Role", value: "Student" },
+      { label: "Email", value: to },
+      ...(username ? [{ label: "Username", value: username }] : []),
+      { label: "Password", value: password },
+      { label: "School", value: schoolName },
+    ])}
+    ${para("Use the button below to log in and access your exams, grades, and timetable.")}
+    ${btn("Log In to Student Portal", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">Please change your password after your first login.</span>`)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `Welcome to ${schoolName} — Student Account Created`, html });
+}
+
+// ─────────────────────────────────────────────
+// 9. Exam Published — Notify Students
+// ─────────────────────────────────────────────
+export async function sendExamPublishedEmail({
+  to, schoolName, examTitle, subjectName, durationMinutes, loginUrl,
+}: { to: string[]; schoolName: string; examTitle: string; subjectName: string; durationMinutes: number; loginUrl: string }) {
+  if (to.length === 0) return true;
+  const html = baseTemplate(`
+    ${heading(`New Exam Available 📝`)}
+    ${para(`A new exam has been published on <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Exam", value: examTitle },
+      { label: "Subject", value: subjectName },
+      { label: "Duration", value: `${durationMinutes} minutes` },
+    ])}
+    ${para("Log in to your student portal to view and take the exam.")}
+    ${btn("View Exams", loginUrl)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `${schoolName} — New Exam: ${examTitle}`, html });
+}
+
+// ─────────────────────────────────────────────
+// 10. Grades Published — Notify Students/Parents
+// ─────────────────────────────────────────────
+export async function sendGradesPublishedEmail({
+  to, recipientName, schoolName, subjectName, categoryName, className, loginUrl,
+}: { to: string[]; recipientName: string; schoolName: string; subjectName: string; categoryName: string; className: string; loginUrl: string }) {
+  if (to.length === 0) return true;
+  const html = baseTemplate(`
+    ${heading(`Grades Updated 📊`)}
+    ${para(`Hi ${recipientName}, grades have been published for <strong>${schoolName}</strong>.`)}
+    ${infoBox([
+      { label: "Subject", value: subjectName },
+      { label: "Category", value: categoryName },
+      { label: "Class", value: className },
+    ])}
+    ${para("Log in to view the detailed scores and report card.")}
+    ${btn("View Grades", loginUrl)}
+  `, schoolName);
+
+  return sendEmail({ to, subject: `${schoolName} — Grades Published: ${subjectName}`, html });
+}
+
+// ─────────────────────────────────────────────
+// 11. Welcome — New Outreach Officer
+// ─────────────────────────────────────────────
+export async function sendOutreachOfficerWelcomeEmail({
+  to, officerName, loginUrl, password,
+}: { to: string; officerName: string; loginUrl: string; password: string }) {
+  const html = baseTemplate(`
+    ${heading(`Welcome to Academia HQ! 🤝`)}
+    ${para(`Hi ${officerName}, you've been added as an <strong>Outreach Officer</strong> on Academia HQ.`)}
+    ${infoBox([
+      { label: "Role", value: "Outreach Officer" },
+      { label: "Email", value: to },
+      { label: "Password", value: password },
+    ])}
+    ${para("You can now manage school referrals, track your earnings, and communicate with schools.")}
+    ${btn("Log In to Outreach Portal", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">Please change your password after your first login.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({ to, subject: `Welcome to Academia HQ — Outreach Officer Account Created`, html });
+}
+
+// ─────────────────────────────────────────────
+// 12. Implementation / Demo Request — Super Admin notification
+// ─────────────────────────────────────────────
+export async function sendImplementationRequestEmail({
+  to,
+  schoolName,
+  contactName,
+  phone,
+  email,
+  schoolType,
+  studentCount,
+  location,
+  servicesNeeded,
+  message,
+  bookVisit,
+}: {
+  to: string | string[];
+  schoolName: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  schoolType: string;
+  studentCount: string;
+  location: string;
+  servicesNeeded: string[];
+  message?: string;
+  bookVisit?: boolean;
+}) {
+  const html = baseTemplate(`
+    ${heading("📋 New Implementation Request")}
+    ${para(`A school has submitted an implementation / demo request on <strong>Academia HQ</strong>.`)}
+    ${infoBox([
+      { label: "School Name",    value: schoolName    },
+      { label: "Contact Person", value: contactName   },
+      { label: "Phone",          value: phone         },
+      { label: "Email",          value: email         },
+      { label: "School Type",    value: schoolType    },
+      { label: "No. of Students",value: studentCount  },
+      { label: "Location",       value: location      },
+      { label: "Services Needed",value: servicesNeeded.join(", ") || "Not specified" },
+      { label: "Book Visit",     value: bookVisit ? "Yes" : "No" },
+    ])}
+    ${message ? `<div style="background:#f8f8fc;border-radius:10px;padding:16px 20px;margin:12px 0;"><p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Message</p><p style="margin:0;font-size:14px;color:#333;line-height:1.6;">${message}</p></div>` : ""}
+    ${btn("View All Requests", `${typeof window !== "undefined" ? window.location.origin : ""}/super-admin/implementation-requests`)}
+    ${para(`<span style="color:#999;font-size:13px;">Log in to the Super Admin panel to manage this request.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({
+    to,
+    subject: `New Implementation Request — ${schoolName}`,
+    html,
+  });
+}
+
+// ─────────────────────────────────────────────
+// 13. Implementation / Demo Request — Confirmation to school
+// ─────────────────────────────────────────────
+export async function sendImplementationConfirmationEmail({
+  to,
+  contactName,
+  schoolName,
+  servicesNeeded,
+}: {
+  to: string;
+  contactName: string;
+  schoolName: string;
+  servicesNeeded: string[];
+}) {
+  const html = baseTemplate(`
+    ${heading("Thank You for Reaching Out! 🎉")}
+    ${para(`Hi <strong>${contactName}</strong>, we've received your implementation request for <strong>${schoolName}</strong>.`)}
+    ${para("The Academia HQ team will review your request and reach out to you shortly to discuss next steps, scheduling, and how we can best support your school.")}
+    ${infoBox([
+      { label: "School",          value: schoolName },
+      { label: "Services",        value: servicesNeeded.join(", ") || "Not specified" },
+      { label: "Expected Response", value: "Within 24 – 48 hours" },
+    ])}
+    ${para("While you wait, feel free to reach us directly via WhatsApp for faster assistance.")}
+    ${btn("Chat on WhatsApp", "https://wa.me/2349039580317")}
+    ${para(`<span style="color:#999;font-size:13px;">If you did not submit this request, please disregard this email.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({
+    to,
+    subject: `We Received Your Request — Academia HQ`,
+    html,
+  });
+}
+
+// ─────────────────────────────────────────────
+// 14. Super Admin — Platform Broadcast (targeted user or all users)
+// ─────────────────────────────────────────────
+export async function sendPlatformBroadcastEmail({
+  to, subject, message, loginUrl,
+}: { to: string | string[]; subject: string; message: string; loginUrl: string }) {
+  // Preserve line breaks/paragraphs from the admin's plain-text message
+  const bodyHtml = message
+    .trim()
+    .split(/\n{2,}/)
+    .map((block) => para(block.replace(/\n/g, "<br/>")))
+    .join("");
+
+  const html = baseTemplate(`
+    ${heading(subject)}
+    ${bodyHtml}
+    ${btn("Log In to Academia HQ", loginUrl)}
+    ${para(`<span style="color:#999;font-size:13px;">This message was sent to you by the Academia HQ team.</span>`)}
+  `, "Academia HQ");
+
+  return sendEmail({ to, subject, html });
 }
